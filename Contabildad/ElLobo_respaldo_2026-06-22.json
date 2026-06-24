@@ -1,0 +1,56 @@
+{
+  "ingresos": [
+    {
+      "id": 1782150671105,
+      "fecha": "2026-06-22",
+      "hora": "12:50",
+      "turno": "almuerzo",
+      "pedido": "completo",
+      "sopa": "Sopa de Hueso",
+      "arroz": "Arroz de Frijol",
+      "proteina": "Pollo en salsa de tomate",
+      "acomp": "Tajada madura",
+      "detalle": "Sopa de Hueso · Arroz de Frijol · Pollo en salsa de tomate · Tajada madura",
+      "metodo": "transferencia",
+      "cantidad": 1,
+      "montoUnit": 14000,
+      "monto": 14000
+    },
+    {
+      "id": 1782150646888,
+      "fecha": "2026-06-22",
+      "hora": "12:50",
+      "turno": "almuerzo",
+      "pedido": "asado200",
+      "sopa": "",
+      "arroz": "",
+      "proteina": "",
+      "acomp": "Patacones",
+      "detalle": "Patacones",
+      "metodo": "efectivo",
+      "cantidad": 1,
+      "montoUnit": 20000,
+      "monto": 20000
+    },
+    {
+      "id": 1782150635980,
+      "fecha": "2026-06-22",
+      "hora": "12:50",
+      "turno": "almuerzo",
+      "pedido": "seco",
+      "sopa": "",
+      "arroz": "Arroz Blanco",
+      "proteina": "Pollo Guisado en zumo de coco",
+      "acomp": "Patacones",
+      "detalle": "Arroz Blanco · Pollo Guisado en zumo de coco · Patacones",
+      "metodo": "efectivo",
+      "cantidad": 1,
+      "montoUnit": 12000,
+      "monto": 12000
+    }
+  ],
+  "egresos": [],
+  "inventario": [],
+  "consumos": [],
+  "gastosDia": []
+}
