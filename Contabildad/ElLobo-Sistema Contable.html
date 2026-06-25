@@ -473,7 +473,6 @@
             <label>Método de pago</label>
             <select id="ing-metodo">
               <option value="efectivo">Efectivo</option>
-              <option value="datafono">Datáfono</option>
               <option value="transferencia">Transferencia</option>
             </select>
           </div>
@@ -522,7 +521,6 @@
         <div class="panel-header"><div class="panel-title">Ingresos acumulados</div></div>
         <div class="panel-body" style="padding:16px;">
           <div class="report-line"><span>Efectivo hoy</span><strong id="ing-ef">$0</strong></div>
-          <div class="report-line"><span>Datáfono hoy</span><strong id="ing-dat">$0</strong></div>
           <div class="report-line"><span>Transferencia hoy</span><strong id="ing-trans">$0</strong></div>
           <div class="divider" style="margin:8px 0;"></div>
           <div class="report-line"><span><strong>Hoy</strong></span><strong class="amount-pos" id="ing-hoy">$0</strong></div>
@@ -698,7 +696,6 @@
     <div class="report-block">
       <div class="report-block-title">💰 Ingresos por método</div>
       <div class="report-line"><span>Efectivo</span><strong id="rp-ef" class="amount-pos">$0</strong></div>
-      <div class="report-line"><span>Datáfono</span><strong id="rp-dat" class="amount-pos">$0</strong></div>
       <div class="report-line"><span>Transferencia</span><strong id="rp-trans" class="amount-pos">$0</strong></div>
       <div class="report-line"><span>🌙 Comidas rápidas</span><strong id="rp-tcr" class="amount-pos">$0</strong></div>
       <div class="report-line"><span><strong>Total ingresos</strong></span><strong id="rp-ting" class="amount-pos">$0</strong></div>
@@ -759,10 +756,9 @@
     </div>
   </div>
   <div class="kpi-grid">
-    <div class="kpi-card green"><div class="kpi-label">Total vendido</div><div class="kpi-value" id="dd-total">$0</div><div class="kpi-sub" id="dd-turno-label">Almuerzos del día seleccionado</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Total vendido</div><div class="kpi-value" id="dd-total">$0</div><div class="kpi-sub" id="dd-turno-label">Efectivo + Transferencia</div></div>
     <div class="kpi-card blue"><div class="kpi-label">Efectivo</div><div class="kpi-value" id="dd-efectivo">$0</div><div class="kpi-sub">Dinero físico recibido</div></div>
-    <div class="kpi-card purple"><div class="kpi-label">Datáfono</div><div class="kpi-value" id="dd-datafono">$0</div><div class="kpi-sub">No queda como efectivo</div></div>
-    <div class="kpi-card accent"><div class="kpi-label">Transferencia</div><div class="kpi-value" id="dd-transferencia">$0</div><div class="kpi-sub">No queda como efectivo</div></div>
+    <div class="kpi-card accent"><div class="kpi-label">Transferencia</div><div class="kpi-value" id="dd-transferencia">$0</div><div class="kpi-sub">Pago digital recibido</div></div>
   </div>
   <div class="two-col" style="margin-bottom:20px;">
     <div class="panel">
@@ -781,18 +777,28 @@
       <div class="panel-header"><div class="panel-title">Resultado del cierre</div></div>
       <div class="panel-body">
         <div class="report-line"><span>Efectivo recibido</span><strong class="amount-pos" id="dd-res-efectivo">$0</strong></div>
+        <div class="report-line"><span>Transferencia recibida</span><strong class="amount-pos" id="dd-res-transferencia">$0</strong></div>
         <div class="report-line"><span>Total gastos extra</span><strong class="amount-neg" id="dd-res-gastos">$0</strong></div>
         <div class="divider"></div>
         <div class="monto-display">
           <div class="monto-val" id="dd-resultado">$0</div>
-          <div class="monto-label">Efectivo que debe quedar en caja</div>
+          <div class="monto-label">Resultado (efectivo + transf. − gastos)</div>
         </div>
+        <button class="btn btn-primary" onclick="guardarCierre()" style="width:100%;margin-top:14px;">💾 Guardar cierre del día</button>
       </div>
     </div>
   </div>
   <div class="panel">
-    <div class="panel-header"><div class="panel-title">Historial de cierres con gastos registrados</div></div>
-    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Gastos registrados</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
+    <div class="panel-header">
+      <div class="panel-title">Historial de cierres</div>
+      <div class="filter-bar" style="margin-bottom:0;" id="dd-historial-filters">
+        <button class="filter-btn active" onclick="setFDD('hoy',this)">Hoy</button>
+        <button class="filter-btn" onclick="setFDD('semana',this)">Semana</button>
+        <button class="filter-btn" onclick="setFDD('mes',this)">Mes</button>
+        <button class="filter-btn" onclick="setFDD('todo',this)">Todo</button>
+      </div>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th>Gastos</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
   </div>
 </section>
 
@@ -887,7 +893,8 @@ let ST = {
   inventario: [],
   consumos:   [],
   gastosDia:  [],
-  mesas:      []    // 15 filas de la tabla mesas
+  mesas:      [],   // 15 filas de la tabla mesas
+  cierresDia: []    // cierres guardados
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -919,13 +926,14 @@ function showToast(msg, tipo = 'info') {
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas] = await Promise.all([
-      sbGet('pedidos',    'order=created_at.desc'),
-      sbGet('egresos',    'order=created_at.desc'),
-      sbGet('inventario', 'order=nombre.asc'),
-      sbGet('consumos',   'order=fecha.desc'),
-      sbGet('gastos_dia', 'order=fecha.desc'),
-      sbGet('mesas',      'order=numero.asc')
+    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia] = await Promise.all([
+      sbGet('pedidos',     'order=created_at.desc'),
+      sbGet('egresos',     'order=created_at.desc'),
+      sbGet('inventario',  'order=nombre.asc'),
+      sbGet('consumos',    'order=fecha.desc'),
+      sbGet('gastos_dia',  'order=fecha.desc'),
+      sbGet('mesas',       'order=numero.asc'),
+      sbGet('cierres_dia', 'order=fecha.desc').catch(() => [])
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
@@ -935,6 +943,7 @@ async function loadState() {
     ST.consumos   = consumos;
     ST.gastosDia  = gastosDia;
     ST.mesas      = mesas;
+    ST.cierresDia = cierresDia;
 
     setSyncBadge('ok');
   } catch (e) {
@@ -967,7 +976,7 @@ function turnoFromHora(h) {
   return (m >= 540 && m < 1020) ? 'almuerzo' : 'cena';
 }
 
-const metC = m => m==='efectivo'?'badge-green':m==='datafono'?'badge-blue':'badge-accent';
+const metC = m => m==='efectivo'?'badge-green':'badge-accent';
 const catC = c => c==='ingredientes'?'badge-accent':c==='nomina'?'badge-blue':['arriendo','servicios'].includes(c)?'badge-gray':'badge-red';
 
 // ── Exportar / Importar ───────────────────────────────────────────────
@@ -1011,7 +1020,7 @@ async function importarDatos(e) {
         monto_almuerzo: i.monto || i.montoUnit || 0,
         monto_domicilio: 0,
         monto_total: i.monto || i.montoUnit || 0,
-        estado: 'pagado', ubicacion: null, mesa: null, es_para_llevar: false
+        estado: 'pagado', es_domicilio: false, mesa: null, para_llevar: false
       }).catch(() => {}));
     });
     (datos.egresos || []).forEach(eg => {
@@ -1067,23 +1076,15 @@ function renderMesasForm() {
   if (!grid) return;
   let html = '';
   for (let i = 1; i <= 15; i++) {
-    const mesa   = ST.mesas.find(m => m.numero === i);
-    const estado = mesa ? mesa.estado : 'libre';
-    const pendCnt = ST.pendientes.filter(p => p.mesa_numero === i).length;
-    const isOcupada = estado === 'ocupada';
-    const isSel  = selectedUbicacion === `mesa_${i}`;
+    const pendCnt = ST.pendientes.filter(p => p.mesa === i).length;
+    const isSel   = selectedUbicacion === `mesa_${i}`;
 
-    let cls = isOcupada ? 'ocupada' : 'libre';
-    if (isSel) cls = 'libre selected';
+    let cls = pendCnt > 0 ? 'pendiente' : 'libre';
+    if (isSel) cls += ' selected';
 
-    const click = isOcupada
-      ? ''
-      : `onclick="seleccionarUbicacion('mesa_${i}')"`;
-
-    html += `<button class="mesa-btn ${cls}" ${click} ${isOcupada ? 'disabled title="Mesa ocupada — pendiente de pago"' : ''}>
-      ${isOcupada ? '<span class="mesa-lock">🔒</span>' : ''}
+    html += `<button class="mesa-btn ${cls}" onclick="seleccionarUbicacion('mesa_${i}')">
       <span class="mesa-num">Mesa ${i}</span>
-      ${pendCnt > 0 ? `<span class="mesa-cnt">${pendCnt} pendiente(s)</span>` : ''}
+      ${pendCnt > 0 ? `<span class="mesa-cnt">${pendCnt} pedido(s)</span>` : ''}
     </button>`;
   }
   grid.innerHTML = html;
@@ -1352,17 +1353,18 @@ async function agregarIngreso() {
     fecha, hora, turno, pedido,
     sopa: sopa||'', arroz: arroz||'', proteina: proteina||'', acomp: acomp||'',
     detalle, metodo, cantidad,
-    monto_almuerzo, monto_domicilio, monto_total,
-    estado: 'pendiente', ubicacion: selectedUbicacion,
-    mesa: mesa_numero, es_para_llevar: esPL
+    monto_unit: baseAlm, monto_almuerzo, monto_domicilio, monto_total,
+    estado: 'pendiente', es_domicilio: selectedUbicacion === 'domicilio',
+    mesa: mesa_numero, para_llevar: esPL
   };
 
+  const mesaYaTienePendientes = mesa_numero !== null && ST.pendientes.some(p => p.mesa === mesa_numero);
   try {
     const [newPedido] = await sbInsert('pedidos', pedidoData);
     ST.pendientes.unshift(newPedido);
 
-    // Marcar mesa como ocupada
-    if (mesa_numero) {
+    // Marcar mesa como ocupada solo si es la primera orden pendiente
+    if (mesa_numero && !mesaYaTienePendientes) {
       await sbPatch('mesas', `numero=eq.${mesa_numero}`, { estado: 'ocupada' });
       const mesa = ST.mesas.find(m => m.numero === mesa_numero);
       if (mesa) mesa.estado = 'ocupada';
@@ -1410,7 +1412,7 @@ function renderSalonMap(containerId, clickable = false) {
   for (let i = 1; i <= 15; i++) {
     const mesa    = ST.mesas.find(m => m.numero === i);
     const estado  = mesa ? mesa.estado : 'libre';
-    const pendCnt = ST.pendientes.filter(p => p.mesa_numero === i).length;
+    const pendCnt = ST.pendientes.filter(p => p.mesa === i).length;
     let cls = pendCnt > 0 ? 'pendiente' : (estado === 'ocupada' ? 'ocupada' : 'libre');
 
     const click = clickable && pendCnt > 0
@@ -1453,13 +1455,13 @@ async function marcarMesaPagada(mesaNum) {
   const metodo   = metodoEl ? metodoEl.value : 'efectivo';
 
   try {
-    await sbPatch('pedidos', `mesa_numero=eq.${mesaNum}&estado=eq.pendiente`, { estado: 'pagado', metodo });
+    await sbPatch('pedidos', `mesa=eq.${mesaNum}&estado=eq.pendiente`, { estado: 'pagado', metodo });
     await sbPatch('mesas',   `numero=eq.${mesaNum}`, { estado: 'libre' });
 
-    const ahora = ST.pendientes.filter(p => p.mesa_numero === mesaNum);
+    const ahora = ST.pendientes.filter(p => p.mesa === mesaNum);
     ahora.forEach(p => { p.estado = 'pagado'; p.metodo = metodo; });
     ST.ingresos   = [...ahora, ...ST.ingresos];
-    ST.pendientes = ST.pendientes.filter(p => p.mesa_numero !== mesaNum);
+    ST.pendientes = ST.pendientes.filter(p => p.mesa !== mesaNum);
 
     const mesa = ST.mesas.find(m => m.numero === mesaNum);
     if (mesa) mesa.estado = 'libre';
@@ -1504,11 +1506,11 @@ async function cancelarPendiente(pedidoId) {
     ST.pendientes = ST.pendientes.filter(p => p.id !== pedidoId);
 
     // Si no quedan más pendientes para esa mesa → liberarla
-    if (ped && ped.mesa_numero) {
-      const quedan = ST.pendientes.filter(p => p.mesa_numero === ped.mesa_numero).length;
+    if (ped && ped.mesa) {
+      const quedan = ST.pendientes.filter(p => p.mesa === ped.mesa).length;
       if (quedan === 0) {
-        await sbPatch('mesas', `numero=eq.${ped.mesa_numero}`, { estado: 'libre' });
-        const mesa = ST.mesas.find(m => m.numero === ped.mesa_numero);
+        await sbPatch('mesas', `numero=eq.${ped.mesa}`, { estado: 'libre' });
+        const mesa = ST.mesas.find(m => m.numero === ped.mesa);
         if (mesa) mesa.estado = 'libre';
       }
     }
@@ -1531,10 +1533,10 @@ function renderPendientes() {
   const mesaGrupos = {};
   const domicilios = [];
   ST.pendientes.forEach(p => {
-    if (p.ubicacion === 'domicilio' || !p.mesa_numero) {
+    if (p.es_domicilio || !p.mesa) {
       domicilios.push(p);
     } else {
-      const mn = p.mesa_numero;
+      const mn = p.mesa;
       if (!mesaGrupos[mn]) mesaGrupos[mn] = [];
       mesaGrupos[mn].push(p);
     }
@@ -1554,6 +1556,7 @@ function renderPendientes() {
   mesasZone.innerHTML = mesaKeys.map(mn => {
     const orders = mesaGrupos[mn];
     const total  = orders.reduce((a,b) => a + (b.monto_total||0), 0);
+    const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
     return `
     <div class="pending-group" id="mesa-group-${mn}">
       <div class="pending-group-hdr">
@@ -1571,7 +1574,7 @@ function renderPendientes() {
               <td>${p.hora||'—'}</td>
               <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
               <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                ${p.detalle||'—'}${p.es_para_llevar ? ' <span style="color:var(--accent);">· Para llevar</span>' : ''}
+                ${p.detalle||'—'}${p.para_llevar ? ' <span style="color:var(--accent);">· Para llevar</span>' : ''}
               </td>
               <td>${p.cantidad||1}</td>
               <td class="amount-pos">${fmt(p.monto_total||0)}</td>
@@ -1582,9 +1585,8 @@ function renderPendientes() {
       </div>
       <div class="pending-pay-bar">
         <select id="metodo-mesa-${mn}">
-          <option value="efectivo">Efectivo</option>
-          <option value="datafono">Datáfono</option>
-          <option value="transferencia">Transferencia</option>
+          <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
+          <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
         </select>
         <button class="btn btn-primary" onclick="marcarMesaPagada(${mn})">✅ Marcar todo como pagado</button>
         <span style="font-size:11px;color:var(--text3);">Total: ${fmt(total)}</span>
@@ -1607,9 +1609,8 @@ function renderPendientes() {
         </div>
         <div class="pending-pay-bar">
           <select id="metodo-dom-${p.id}">
-            <option value="efectivo">Efectivo</option>
-            <option value="datafono">Datáfono</option>
-            <option value="transferencia">Transferencia</option>
+            <option value="efectivo"${(p.metodo||'efectivo')==='efectivo'?' selected':''}>Efectivo</option>
+            <option value="transferencia"${p.metodo==='transferencia'?' selected':''}>Transferencia</option>
           </select>
           <button class="btn btn-primary" onclick="marcarDomicilioPagado(${p.id})">✅ Marcar como pagado</button>
           <span class="pending-dom-detail">🍽 ${fmt(p.monto_almuerzo||0)} + 🛵 ${fmt(p.monto_domicilio||0)}</span>
@@ -1635,7 +1636,7 @@ function renderIngresos() {
         <td>${i.fecha}</td>
         <td>${i.hora||'—'}</td>
         <td><span class="badge ${i.turno==='cena'?'badge-purple':'badge-accent'}">${i.turno==='cena'?'🌙 Cena':'☀️ Alm'}</span></td>
-        <td style="font-size:11px;color:var(--text3);">${i.ubicacion==='domicilio'?'🛵 Dom':i.mesa_numero?`Mesa ${i.mesa_numero}`:'—'}</td>
+        <td style="font-size:11px;color:var(--text3);">${i.es_domicilio?'🛵 Dom':i.mesa?`Mesa ${i.mesa}`:'—'}</td>
         <td style="color:var(--text);font-size:12px;">${LABELS[i.pedido]||i.pedido}</td>
         <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.detalle||'—'}</td>
         <td><span class="badge ${metC(i.metodo)}">${i.metodo}</span></td>
@@ -1665,9 +1666,8 @@ function renderIngresos() {
   document.getElementById('ing-hoy').textContent     = fmt(sM('hoy'));
   document.getElementById('ing-semana').textContent  = fmt(sM('semana'));
   document.getElementById('ing-mes').textContent     = fmt(sM('mes'));
-  document.getElementById('ing-ef').textContent      = fmt(hoy.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0));
-  document.getElementById('ing-dat').textContent     = fmt(hoy.filter(i=>i.metodo==='datafono').reduce((a,b)=>a+(b.monto_total||0),0));
-  document.getElementById('ing-trans').textContent   = fmt(hoy.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('ing-ef').textContent    = fmt(hoy.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('ing-trans').textContent = fmt(hoy.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0));
 
   // Regenerar mesas del formulario
   renderMesasForm();
@@ -1867,7 +1867,6 @@ function renderReportes() {
   document.getElementById('rp-tal').textContent   = fmt(alm.reduce((a,b)=>a+(b.monto_total||0),0));
 
   document.getElementById('rp-ef').textContent    = fmt(ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0));
-  document.getElementById('rp-dat').textContent   = fmt(ings.filter(i=>i.metodo==='datafono').reduce((a,b)=>a+(b.monto_total||0),0));
   document.getElementById('rp-trans').textContent = fmt(ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0));
   document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(b.monto_total||0),0));
   document.getElementById('rp-ting').textContent  = fmt(tI);
@@ -1927,11 +1926,47 @@ function renderReportes() {
 }
 
 // ── DÍA A DÍA ────────────────────────────────────────────────────────
+let fDD = 'hoy';
+
 function setDDTurno(t, btn) {
   ddTurno = t;
-  document.querySelectorAll('#tab-diaadia .filter-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('dd-btn-almuerzo').classList.remove('active');
+  document.getElementById('dd-btn-cena').classList.remove('active');
   btn.classList.add('active');
   renderDiaADia();
+}
+
+function setFDD(f, btn) {
+  fDD = f;
+  document.querySelectorAll('#dd-historial-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderDiaADia();
+}
+
+async function guardarCierre() {
+  const fecha         = document.getElementById('dd-fecha').value || today();
+  const ings          = ST.ingresos.filter(i => i.fecha === fecha && i.turno === ddTurno);
+  const efectivo      = ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0);
+  const transferencia = ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0);
+  const gastos        = ST.gastosDia.filter(g=>g.fecha===fecha&&g.turno===ddTurno).reduce((a,b)=>a+b.monto,0);
+  const resultado     = efectivo + transferencia - gastos;
+
+  try {
+    const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
+    if (existing) {
+      await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${ddTurno}`, { efectivo, transferencia, gastos, resultado });
+      Object.assign(existing, { efectivo, transferencia, gastos, resultado });
+    } else {
+      const [row] = await sbInsert('cierres_dia', { fecha, turno: ddTurno, efectivo, transferencia, gastos, resultado });
+      ST.cierresDia.unshift(row);
+    }
+    setSyncBadge('ok');
+    showToast('✅ Cierre guardado', 'ok');
+    renderDiaADia();
+  } catch(e) {
+    console.error(e);
+    showToast('⚠ Error al guardar cierre: ' + e.message, 'warning');
+  }
 }
 
 async function agregarGastoDia() {
@@ -1965,17 +2000,15 @@ function renderDiaADia() {
   if (!fechaEl) return;
   const fecha = fechaEl.value || today();
 
-  // Solo ingresos PAGADOS
-  const ings = ST.ingresos.filter(i => i.fecha === fecha && i.turno === ddTurno);
-  const total         = ings.reduce((a,b) => a+(b.monto_total||0), 0);
+  // Solo ingresos PAGADOS del día y turno seleccionado
+  const ings          = ST.ingresos.filter(i => i.fecha === fecha && i.turno === ddTurno);
   const efectivo      = ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0);
-  const datafono      = ings.filter(i=>i.metodo==='datafono').reduce((a,b)=>a+(b.monto_total||0),0);
   const transferencia = ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0);
+  const total         = efectivo + transferencia;
 
-  document.getElementById('dd-total').textContent      = fmt(total);
-  document.getElementById('dd-turno-label').textContent = ddTurno==='almuerzo' ? 'Almuerzos del día seleccionado' : 'Comidas rápidas del día seleccionado';
-  document.getElementById('dd-efectivo').textContent   = fmt(efectivo);
-  document.getElementById('dd-datafono').textContent   = fmt(datafono);
+  document.getElementById('dd-total').textContent         = fmt(total);
+  document.getElementById('dd-turno-label').textContent   = ddTurno==='almuerzo' ? 'Efectivo + Transferencia almuerzo' : 'Efectivo + Transferencia comida rápida';
+  document.getElementById('dd-efectivo').textContent      = fmt(efectivo);
   document.getElementById('dd-transferencia').textContent = fmt(transferencia);
 
   const gastos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === ddTurno);
@@ -1985,30 +2018,27 @@ function renderDiaADia() {
     : `<tr><td colspan="3"><div class="empty"><div class="empty-icon">🧾</div><div class="empty-text">Sin gastos agregados</div></div></td></tr>`;
 
   const totalGastos = gastos.reduce((a,b) => a+b.monto, 0);
-  const resultado   = efectivo - totalGastos;
-  document.getElementById('dd-res-efectivo').textContent = fmt(efectivo);
-  document.getElementById('dd-res-gastos').textContent   = fmt(totalGastos);
-  document.getElementById('dd-resultado').textContent    = fmt(resultado);
-  document.getElementById('dd-resultado').style.color    = resultado >= 0 ? 'var(--accent)' : 'var(--red)';
+  const resultado   = total - totalGastos;
+  document.getElementById('dd-res-efectivo').textContent      = fmt(efectivo);
+  document.getElementById('dd-res-transferencia').textContent = fmt(transferencia);
+  document.getElementById('dd-res-gastos').textContent        = fmt(totalGastos);
+  document.getElementById('dd-resultado').textContent         = fmt(resultado);
+  document.getElementById('dd-resultado').style.color         = resultado >= 0 ? 'var(--accent)' : 'var(--red)';
 
-  // Historial agrupado
-  const grupos = {};
-  ST.gastosDia.forEach(g => {
-    const key = g.fecha + '|' + g.turno;
-    if (!grupos[key]) grupos[key] = {fecha:g.fecha, turno:g.turno, count:0, total:0};
-    grupos[key].count++;
-    grupos[key].total += g.monto;
-  });
-  const histArr  = Object.values(grupos).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  // Historial de cierres guardados
+  const histData = ST.cierresDia.filter(c => inP(c.fecha, fDD));
   const histBody = document.getElementById('dd-historial-body');
-  histBody.innerHTML = histArr.length
-    ? histArr.map(h => `<tr>
-        <td>${h.fecha}</td>
-        <td><span class="badge ${h.turno==='cena'?'badge-purple':'badge-accent'}">${h.turno==='cena'?'🌙 Cena':'☀️ Almuerzo'}</span></td>
-        <td>${h.count} gasto(s) · ${fmt(h.total)}</td>
-        <td><button class="btn btn-primary" style="padding:6px 12px;font-size:11px;" onclick="irADiaADia('${h.fecha}','${h.turno}')">Ver</button></td>
+  histBody.innerHTML = histData.length
+    ? histData.map(c => `<tr>
+        <td>${c.fecha}</td>
+        <td><span class="badge ${c.turno==='cena'?'badge-purple':'badge-accent'}">${c.turno==='cena'?'🌙 Cena':'☀️ Almuerzo'}</span></td>
+        <td class="amount-pos">${fmt(c.efectivo)}</td>
+        <td class="amount-pos">${fmt(c.transferencia)}</td>
+        <td class="amount-neg">${fmt(c.gastos)}</td>
+        <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}</td>
+        <td><button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="irADiaADia('${c.fecha}','${c.turno}')">Ver</button></td>
       </tr>`).join('')
-    : `<tr><td colspan="4" style="color:var(--text3);text-align:center;padding:20px;">Aún no hay cierres registrados</td></tr>`;
+    : `<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px;">Aún no hay cierres guardados</td></tr>`;
 }
 
 function irADiaADia(fecha, turno) {
