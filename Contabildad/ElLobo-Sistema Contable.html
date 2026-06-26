@@ -1595,11 +1595,13 @@ async function agregarIngreso() {
     try {
       [newPedido] = await sbInsert('pedidos', pedidoData);
     } catch(e) {
-      if (e.message && e.message.includes('es_fiar')) {
-        // Columna aún no existe en Supabase — reintenta sin ella
-        const { es_fiar: esFiarVal, ...pedidoSinFiar } = pedidoData;
-        [newPedido] = await sbInsert('pedidos', pedidoSinFiar);
-        newPedido.es_fiar = esFiarVal; // conservar en estado local
+      const msg = e.message || '';
+      if (msg.includes('es_fiar') || msg.includes('direccion')) {
+        // Columnas opcionales aún no existen en Supabase — reintenta sin ambas
+        const { es_fiar: esFiarVal, direccion: dirVal, ...pedidoBase } = pedidoData;
+        [newPedido] = await sbInsert('pedidos', pedidoBase);
+        newPedido.es_fiar = esFiarVal;
+        newPedido.direccion = dirVal;
       } else { throw e; }
     }
     ST.pendientes.unshift(newPedido);
