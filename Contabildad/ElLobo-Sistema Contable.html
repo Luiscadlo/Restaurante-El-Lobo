@@ -288,6 +288,29 @@
   .toast.ok      { background: rgba(76,175,125,0.15);  border: 1px solid rgba(76,175,125,0.4);  color: var(--green); }
   .toast.warning { background: rgba(224,92,92,0.15);   border: 1px solid rgba(224,92,92,0.4);   color: var(--red);   }
   .toast.info    { background: rgba(232,184,75,0.15);  border: 1px solid rgba(232,184,75,0.4);  color: var(--accent);}
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 9000; display: flex; align-items: center;
+    justify-content: center; padding: 20px;
+  }
+  .modal-box {
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: var(--radius); padding: 28px; max-width: 480px;
+    width: 100%; position: relative; max-height: 90vh; overflow-y: auto;
+  }
+  .modal-close {
+    position: absolute; top: 14px; right: 16px;
+    background: none; border: none; color: var(--text2);
+    font-size: 20px; cursor: pointer;
+  }
+  .modal-field { margin-bottom: 14px; }
+  .modal-field-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--text3); font-family: 'Syne', sans-serif; font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .modal-field-value { color: var(--text); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -417,12 +440,18 @@
         </div>
 
         <!-- Valor domicilio (solo si domicilio seleccionado) -->
-        <div id="domicilio-valor-section" style="display:none;" class="form-group mb">
-          <label>Valor del domicilio ($) <span class="req">*</span></label>
-          <input type="number" id="ing-domicilio-valor" list="domicilio-opciones" placeholder="ej: 3000" oninput="onDomicilioChange()">
-          <datalist id="domicilio-opciones">
-            <option value="2000"><option value="3000"><option value="4000"><option value="5000">
-          </datalist>
+        <div id="domicilio-valor-section" style="display:none;">
+          <div class="form-group mb">
+            <label>Valor del domicilio ($) <span class="req">*</span></label>
+            <input type="number" id="ing-domicilio-valor" list="domicilio-opciones" placeholder="ej: 3000" oninput="onDomicilioChange()">
+            <datalist id="domicilio-opciones">
+              <option value="2000"><option value="3000"><option value="4000"><option value="5000">
+            </datalist>
+          </div>
+          <div class="form-group mb">
+            <label>Dirección <span class="req">*</span></label>
+            <input type="text" id="ing-direccion" placeholder="ej: Cra 5 #23-41, Barrio Centro…">
+          </div>
         </div>
 
         <!-- Tipo de pedido (OBLIGATORIO) -->
@@ -695,6 +724,7 @@
 <!-- ===== REPORTES ===== -->
 <section class="section" id="tab-reportes">
   <div class="filter-bar">
+    <button class="filter-btn" onclick="setFR('hoy',this)">Hoy</button>
     <button class="filter-btn active" onclick="setFR('semana',this)">Esta semana</button>
     <button class="filter-btn" onclick="setFR('mes',this)">Este mes</button>
     <button class="filter-btn" onclick="setFR('todo',this)">Todo el historial</button>
@@ -740,6 +770,10 @@
     <div class="report-block">
       <div class="report-block-title">🥩 Asados más pedidos</div>
       <div id="rp-asados"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
+    </div>
+    <div class="report-block" style="grid-column: 1 / -1;">
+      <div class="report-block-title">🌙 Comidas Rápidas — Desglose por categoría</div>
+      <div id="rp-cr-categorias"></div>
     </div>
   </div>
   <div class="kpi-grid" style="margin-bottom:24px;">
@@ -819,6 +853,13 @@
   </div>
 </section>
 
+
+<div id="detalle-modal" class="modal-overlay" style="display:none;" onclick="cerrarModalDetalle(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="document.getElementById('detalle-modal').style.display='none'">✕</button>
+    <div id="detalle-modal-content"></div>
+  </div>
+</div>
 </main>
 
 <script>
@@ -1117,14 +1158,32 @@ async function importarDatos(e) {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
-document.getElementById('currentDate').textContent =
-  new Date().toLocaleDateString('es-CO', {weekday:'long',year:'numeric',month:'long',day:'numeric'});
+function actualizarReloj() {
+  const ahora = new Date();
+  const hora = ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('currentDate').textContent =
+    ahora.toLocaleDateString('es-CO', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    }) + ' · ' + hora;
+  const horaInput = document.getElementById('ing-hora');
+  if (horaInput && document.activeElement !== horaInput) {
+    const hh = String(ahora.getHours()).padStart(2, '0');
+    const mm = String(ahora.getMinutes()).padStart(2, '0');
+    const nuevaHora = `${hh}:${mm}`;
+    if (horaInput.value !== nuevaHora) {
+      horaInput.value = nuevaHora;
+      onHoraChange();
+    }
+  }
+}
+actualizarReloj();
+setInterval(actualizarReloj, 30000);
+
 ['ing-fecha','egr-fecha','venta-fecha','dd-fecha'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.value = today();
 });
 let ddTurno = 'almuerzo';
-document.getElementById('ing-hora').value = nowTime();
 
 // ── Filtros activos ───────────────────────────────────────────────────
 let fI = 'hoy', fE = 'hoy', fInv = 'todos', fR = 'semana';
@@ -1188,12 +1247,16 @@ function seleccionarUbicacion(ubicacion) {
     domSection.style.display        = 'none';
     if (fiarSection) fiarSection.style.display = 'block';
     document.getElementById('ing-domicilio-valor').value = '';
+    const dirElF = document.getElementById('ing-direccion');
+    if (dirElF) dirElF.value = '';
     chkPL.checked = false;
   } else {
     paraLlevarSection.style.display = 'flex';
     domSection.style.display        = 'none';
     if (fiarSection) fiarSection.style.display = 'none';
     document.getElementById('ing-domicilio-valor').value = '';
+    const dirElM = document.getElementById('ing-direccion');
+    if (dirElM) dirElM.value = '';
   }
 
   renderMesasForm();
@@ -1493,9 +1556,12 @@ async function agregarIngreso() {
   const bebidaItem = (bebidaSel && bebidaSel.value)
     ? PL.comidaRapida.find(p => p.c === bebidaSel.value)
     : null;
+  const direccionValue = selectedUbicacion === 'domicilio'
+    ? (document.getElementById('ing-direccion')?.value.trim() || '')
+    : '';
   const detalle = crItem
-    ? [crItem.n, bebidaItem?.n, crDesc].filter(Boolean).join(' · ')
-    : [sopa, arroz, proteina, acomp].filter(Boolean).join(' · ');
+    ? [crItem.n, bebidaItem?.n, crDesc, direccionValue ? '📍 ' + direccionValue : ''].filter(Boolean).join(' · ')
+    : [sopa, arroz, proteina, acomp, direccionValue ? '📍 ' + direccionValue : ''].filter(Boolean).join(' · ');
 
   const mesa_numero = selectedUbicacion.startsWith('mesa_')
     ? parseInt(selectedUbicacion.split('_')[1])
@@ -1508,7 +1574,8 @@ async function agregarIngreso() {
     monto_unit: montoUnit, monto_almuerzo, monto_domicilio, monto_total,
     estado: 'pendiente', es_domicilio: selectedUbicacion === 'domicilio',
     mesa: mesa_numero, para_llevar: esPL,
-    es_fiar: selectedUbicacion === 'fiar'
+    es_fiar: selectedUbicacion === 'fiar',
+    direccion: direccionValue || ''
   };
 
   const mesaYaTienePendientes = mesa_numero !== null && ST.pendientes.some(p => p.mesa === mesa_numero);
@@ -1549,6 +1616,8 @@ async function agregarIngreso() {
     if (bebidaSelR) bebidaSelR.value = '';
     document.getElementById('campo-bebida').style.display = 'none';
     document.getElementById('ing-domicilio-valor').value = '';
+    const dirResetEl = document.getElementById('ing-direccion');
+    if (dirResetEl) dirResetEl.value = '';
     document.getElementById('ing-para-llevar').checked  = false;
     document.getElementById('para-llevar-section').style.display = 'none';
     document.getElementById('domicilio-valor-section').style.display = 'none';
@@ -1560,6 +1629,53 @@ async function agregarIngreso() {
   } catch (err) {
     console.error(err);
     showToast('⚠ Error al registrar pedido: ' + err.message, 'warning');
+  }
+}
+
+// ── Modal detalle ingreso ─────────────────────────────────────────────
+function verDetalleIngreso(id) {
+  const i = ST.ingresos.find(x => x.id === id);
+  if (!i) return;
+  const crItem = PL.comidaRapida.find(p => p.c === i.pedido);
+  const esCR = !!crItem || i.turno === 'cena';
+
+  let html = `<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:var(--accent);margin-bottom:20px;">
+    ${i.turno === 'cena' ? '🌙' : '☀️'} ${LABELS[i.pedido] || i.pedido}
+  </div>`;
+
+  const campos = [
+    ['Fecha',       i.fecha],
+    ['Hora',        i.hora || '—'],
+    ['Turno',       i.turno === 'cena' ? 'Comida Rápida' : 'Almuerzo'],
+    ['Ubicación',   i.es_fiar ? '📒 Fiado' : i.es_domicilio ? '🛵 Domicilio' : i.mesa ? `Mesa ${i.mesa}` : '—'],
+    i.es_domicilio && i.direccion ? ['Dirección', '📍 ' + i.direccion] : null,
+    ['Método',      i.metodo],
+    ['Cantidad',    i.cantidad || 1],
+    !esCR && i.sopa     ? ['Sopa',           i.sopa]     : null,
+    !esCR && i.arroz    ? ['Arroz',          i.arroz]    : null,
+    !esCR && i.proteina ? ['Proteína',       i.proteina] : null,
+    !esCR && i.acomp    ? ['Acompañamiento', i.acomp]    : null,
+    i.detalle           ? ['Detalle',        i.detalle]  : null,
+    i.para_llevar       ? ['Para llevar',    '✓ Sí (+$1.000)'] : null,
+    i.monto_almuerzo && i.es_domicilio ? ['Valor comida',    fmt(i.monto_almuerzo)] : null,
+    i.monto_domicilio && i.es_domicilio ? ['Valor domicilio', fmt(i.monto_domicilio)] : null,
+    ['Total', `<span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(i.monto_total || 0)}</span>`],
+  ].filter(Boolean);
+
+  html += campos.map(([label, val]) =>
+    `<div class="modal-field">
+      <div class="modal-field-label">${label}</div>
+      <div class="modal-field-value">${val}</div>
+    </div>`
+  ).join('');
+
+  document.getElementById('detalle-modal-content').innerHTML = html;
+  document.getElementById('detalle-modal').style.display = 'flex';
+}
+
+function cerrarModalDetalle(e) {
+  if (e.target.id === 'detalle-modal') {
+    document.getElementById('detalle-modal').style.display = 'none';
   }
 }
 
@@ -1802,6 +1918,7 @@ function renderPendientes() {
           <div>
             <div class="pending-group-title">Domicilio — ${p.hora||'—'}</div>
             <div class="pending-group-sub">${LABELS[p.pedido]||p.pedido} · ${p.detalle||'—'}</div>
+            ${p.direccion ? `<div style="font-size:11px;color:var(--blue);margin-top:2px;">📍 ${p.direccion}</div>` : ''}
           </div>
           <div class="pending-group-total">${fmt(p.monto_total||0)}</div>
         </div>
@@ -1868,7 +1985,10 @@ function renderIngresos() {
         <td><span class="badge ${metC(i.metodo)}">${i.metodo}</span></td>
         <td>${i.cantidad||1}</td>
         <td class="amount-pos">${fmt(i.monto_total||0)}</td>
-        <td><button class="btn btn-danger" onclick="eliminarIngreso(${i.id})">✕</button></td>
+        <td style="display:flex;gap:4px;">
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetalleIngreso(${i.id})">👁</button>
+          <button class="btn btn-danger" onclick="eliminarIngreso(${i.id})">✕</button>
+        </td>
       </tr>`).join('')
     : `<tr><td colspan="10"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin registros pagados en este período</div></div></td></tr>`;
 
@@ -2145,6 +2265,53 @@ function renderReportes() {
   renderTop('rp-sopas',     topCat('sopa',     5));
   renderTop('rp-arroces',   topCat('arroz',    5));
   renderTop('rp-asados',    topCat('proteina', 3).filter(([n]) => PL.asado.some(a=>a.n===n)));
+
+  // Desglose comidas rápidas por categoría
+  const crIng = ings.filter(i => i.turno === 'cena');
+  const CR_CATS = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS',
+                   'SANDWICH CUBANO','AREPAS','SUIZOS','ADICIONALES','BEBIDAS'];
+  const crPorCat = {};
+  crIng.forEach(pedido => {
+    const item = PL.comidaRapida.find(p => p.c === pedido.pedido);
+    if (!item) return;
+    const cat = item.cat;
+    if (!crPorCat[cat]) crPorCat[cat] = { count: 0, total: 0, items: {} };
+    crPorCat[cat].count += (pedido.cantidad || 1);
+    crPorCat[cat].total += (pedido.monto_total || 0);
+    crPorCat[cat].items[item.n] = (crPorCat[cat].items[item.n] || 0) + (pedido.cantidad || 1);
+  });
+  const crCatEl = document.getElementById('rp-cr-categorias');
+  if (crCatEl) {
+    const catsConData = CR_CATS.filter(c => crPorCat[c]);
+    if (!catsConData.length) {
+      crCatEl.innerHTML = '<div style="color:var(--text3);font-size:12px;">Sin datos de comidas rápidas en este período</div>';
+    } else {
+      catsConData.sort((a, b) => (crPorCat[b].total || 0) - (crPorCat[a].total || 0));
+      crCatEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:8px;">
+        ${catsConData.map(cat => {
+          const d = crPorCat[cat];
+          const topItems = Object.entries(d.items).sort((a, b) => b[1] - a[1]).slice(0, 3);
+          return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;">
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px;">${cat}</div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px;">
+              <span style="color:var(--text3);">${d.count} pedido(s)</span>
+              <span style="color:var(--green);font-weight:500;">${fmt(d.total)}</span>
+            </div>
+            ${topItems.map(([nombre, cnt], idx) =>
+              `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);">
+                <span>${idx + 1}. ${nombre}</span><span>${cnt}</span>
+              </div>`
+            ).join('')}
+          </div>`;
+        }).join('')}
+        </div>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px;">
+          <strong style="color:var(--text);">Total comidas rápidas</strong>
+          <strong style="color:var(--green);">${fmt(crIng.reduce((a, b) => a + (b.monto_total || 0), 0))}</strong>
+        </div>`;
+    }
+  }
 
   // Drivers
   const drivers = [];
