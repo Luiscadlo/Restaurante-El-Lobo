@@ -119,6 +119,8 @@
   .btn-danger:hover { border-color: var(--red); background: rgba(224,92,92,0.1); }
   .btn-outline { background: transparent; border: 1px solid var(--border2); color: var(--text2); }
   .btn-outline:hover { border-color: var(--text2); color: var(--text); }
+  .btn-edit { background: transparent; border: 1px solid var(--border2); color: var(--accent); padding: 6px 12px; font-size: 11px; }
+  .btn-edit:hover { border-color: var(--accent); background: rgba(232,184,75,0.08); }
 
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
@@ -411,17 +413,6 @@
           <label>Tipo de pedido <span class="req">*</span></label>
           <select id="ing-pedido" onchange="onPedidoChange()">
             <option value="">— Selecciona para habilitar los campos —</option>
-            <optgroup label="☀️ ALMUERZOS (9am – 4pm)">
-              <option value="completo"      data-monto="14000">Almuerzo Completo (con sopa) · $14.000</option>
-              <option value="seco"          data-monto="12000">Almuerzo Seco (sin sopa) · $12.000</option>
-              <option value="asado130"      data-monto="17000">Asado 130g · $17.000</option>
-              <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
-              <option value="porcion-sopa"  data-monto="7000">Porción de Sopa · $7.000</option>
-              <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
-            </optgroup>
-            <optgroup label="🌙 COMIDAS RÁPIDAS (5pm – 2am)">
-              <option value="cr-libre" data-monto="0">Comida Rápida (precio manual)</option>
-            </optgroup>
           </select>
         </div>
 
@@ -457,12 +448,18 @@
 
         <!-- Comida rápida -->
         <div id="campos-cena" style="display:none;">
-          <div class="form-group mb">
-            <label>Producto / Descripción</label>
-            <input type="text" id="ing-cr-desc" placeholder="ej: Hamburguesa especial…">
+          <div class="form-group mb" id="campo-bebida" style="display:none;">
+            <label>Bebida <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+            <select id="ing-bebida" onchange="onBebidaChange()">
+              <option value="" data-monto="0">— Sin bebida —</option>
+            </select>
           </div>
           <div class="form-group mb">
-            <label>Monto ($)</label>
+            <label>Descripción adicional <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+            <input type="text" id="ing-cr-desc" placeholder="ej: sin cebolla, extra salsa…">
+          </div>
+          <div class="form-group mb" id="cr-precio-manual" style="display:none;">
+            <label>Precio ($) <span style="color:var(--text3);font-weight:400;">— ajustar si es necesario</span></label>
             <input type="number" id="ing-cr-monto" placeholder="0" oninput="setCRMonto()">
           </div>
         </div>
@@ -511,10 +508,10 @@
         </div>
       </div>
       <div class="panel">
-        <div class="panel-header"><div class="panel-title">🌙 Comidas rápidas hoy</div></div>
-        <div class="panel-body" style="padding:16px;">
-          <div class="report-line"><span>Pedidos</span><strong id="rc-cr-cnt">0</strong></div>
-          <div class="report-line"><span><strong>Total</strong></span><strong class="amount-pos" id="rc-total-cr">$0</strong></div>
+        <div class="panel-header"><div class="panel-title">🌙 Comidas rápidas hoy</div><span style="font-size:10px;color:var(--text3);">solo pagados</span></div>
+        <div class="panel-body" style="padding:16px;" id="cr-resumen-body">
+          <div class="report-line"><span>Pedidos</span><strong>0</strong></div>
+          <div class="report-line"><span><strong>Total</strong></span><strong class="amount-pos">$0</strong></div>
         </div>
       </div>
       <div class="panel">
@@ -829,13 +826,64 @@ const PL = {
     {c:'PT21',n:'Mondongo Guisado'},{c:'PT22',n:'Trifasico de carne y cerdo'},
     {c:'PT23',n:'Sobrebarriga guisada'},{c:'PT24',n:'Lengua en salsa'},{c:'PT25',n:'Fricache de Pescado'}
   ],
+  comidaRapida: [
+    {c:'PE01',n:'Perro Sencillo',              precio:5000,  cat:'PERROS'},
+    {c:'PE02',n:'Perro Doble',                 precio:7000,  cat:'PERROS'},
+    {c:'PE03',n:'Perro Doble con Chorizo',     precio:8500,  cat:'PERROS'},
+    {c:'PE04',n:'Perro Choriperro Doble',      precio:9000,  cat:'PERROS'},
+    {c:'PE05',n:'Perro Suizo',                 precio:10000, cat:'PERROS'},
+    {c:'PE06',n:'Perro Especial',              precio:15000, cat:'PERROS'},
+    {c:'HB01',n:'Hamburguesa Sencillo',        precio:14000, cat:'HAMBURGUESAS'},
+    {c:'HB02',n:'Hamburguesa Lobo',            precio:20000, cat:'HAMBURGUESAS'},
+    {c:'CRA01',n:'Asado de Carne',             precio:16000, cat:'ASADOS'},
+    {c:'CRA02',n:'Asado de Pechuga',           precio:16000, cat:'ASADOS'},
+    {c:'CRA03',n:'Asado de Cerdo',             precio:16000, cat:'ASADOS'},
+    {c:'PI01',n:'Picada de Pollo',             precio:16000, cat:'PICADAS'},
+    {c:'PI02',n:'Picada de Carne',             precio:16000, cat:'PICADAS'},
+    {c:'PI03',n:'Picada de Cerdo',             precio:16000, cat:'PICADAS'},
+    {c:'PI04',n:'Picada Mixta',                precio:20000, cat:'PICADAS'},
+    {c:'PI05',n:'Picada Trifásica',            precio:30000, cat:'PICADAS'},
+    {c:'SL01',n:'Salchipapa Sencilla',         precio:12000, cat:'SALCHIPAPAS'},
+    {c:'SL02',n:'Salchipapa Especial',         precio:16000, cat:'SALCHIPAPAS'},
+    {c:'SL03',n:'Salchipapa Especial Extra',   precio:22000, cat:'SALCHIPAPAS'},
+    {c:'SL04',n:'Choripapa',                   precio:14000, cat:'SALCHIPAPAS'},
+    {c:'CU01',n:'Cubano de Pollo',             precio:6000,  cat:'SANDWICH CUBANO'},
+    {c:'CU02',n:'Cubano de Suizo',             precio:8500,  cat:'SANDWICH CUBANO'},
+    {c:'CU03',n:'Cubano de Jamón y Queso',     precio:7000,  cat:'SANDWICH CUBANO'},
+    {c:'CU04',n:'Cubano de Chorizo',           precio:7500,  cat:'SANDWICH CUBANO'},
+    {c:'ARP01',n:'Arepa de Pollo',             precio:7000,  cat:'AREPAS'},
+    {c:'ARP02',n:'Arepa de Chorizo',           precio:8000,  cat:'AREPAS'},
+    {c:'ARP03',n:'Arepa de Jamón',             precio:6500,  cat:'AREPAS'},
+    {c:'ARP04',n:'Arepa de Queso',             precio:6000,  cat:'AREPAS'},
+    {c:'ARP05',n:'Arepa de Pollo-Chorizo',     precio:9500,  cat:'AREPAS'},
+    {c:'ARP06',n:'Arepa de Suiza',             precio:8500,  cat:'AREPAS'},
+    {c:'ARP07',n:'Arepa de Hamburguesa',       precio:9000,  cat:'AREPAS'},
+    {c:'ARP08',n:'Arepa Especial',             precio:13000, cat:'AREPAS'},
+    {c:'ARP09',n:'Arepa Trifásica',            precio:14000, cat:'AREPAS'},
+    {c:'ARP10',n:'Arepa Mixta',                precio:12000, cat:'AREPAS'},
+    {c:'ARP11',n:'Arepa Pollo-Suiza',          precio:10000, cat:'AREPAS'},
+    {c:'SZ01',n:'Suizo Mini Sencillo',         precio:12000, cat:'SUIZOS'},
+    {c:'SZ02',n:'Suizo Mini Especial',         precio:17000, cat:'SUIZOS'},
+    {c:'SZ03',n:'Suizo Sencillo',              precio:16000, cat:'SUIZOS'},
+    {c:'SZ04',n:'Suizo Especial',              precio:21000, cat:'SUIZOS'},
+    {c:'SZ05',n:'Suizo Especial Extra',        precio:28000, cat:'SUIZOS'},
+    {c:'ADI01',n:'Papa Francesa',              precio:5000,  cat:'ADICIONALES'},
+    {c:'ADI02',n:'Ensalada',                   precio:3000,  cat:'ADICIONALES'},
+    {c:'ADI03',n:'Gratinado',                  precio:5000,  cat:'ADICIONALES'},
+    {c:'BEB01',n:'Gaseosa Coca-Cola 400ml',    precio:4000,  cat:'BEBIDAS'},
+    {c:'BEB02',n:'Jugo Hit 500ml',             precio:4000,  cat:'BEBIDAS'},
+    {c:'BEB03',n:'Coca-Cola 1.5 Lt',           precio:8000,  cat:'BEBIDAS'},
+    {c:'BEB04',n:'Agua en botella',            precio:2000,  cat:'BEBIDAS'},
+    {c:'BEB05',n:'Coca-Cola 237ml',            precio:2000,  cat:'BEBIDAS'},
+    {c:'BEB06',n:'Avena y Agua de Arroz Costa Azul', precio:3000, cat:'BEBIDAS'},
+  ],
 };
 
 const LABELS = {
   completo:'Almuerzo Completo', seco:'Almuerzo Seco',
   asado130:'Asado 130g', asado200:'Asado 200g',
   'porcion-sopa':'Porción de Sopa', 'porcion-arroz':'Porción de Arroz',
-  'cr-libre':'Comida Rápida'
+  ...Object.fromEntries(PL.comidaRapida.map(p => [p.c, p.n]))
 };
 
 const PRECIOS = {completo:14000,seco:12000,asado130:17000,asado200:20000,'porcion-sopa':7000,'porcion-arroz':4000};
@@ -1135,14 +1183,49 @@ function validarRegistro() {
   const domVal  = parseFloat(document.getElementById('ing-domicilio-valor').value) || 0;
   const btn = document.getElementById('btn-reg');
 
-  let ok = pedido && selectedUbicacion && montoAlm > 0;
-  if (selectedUbicacion === 'domicilio' && pedido !== 'cr-libre') {
-    // domicilio con almuerzo → ok aunque domVal sea 0 (puede ser $0 de domicilio)
-  }
+  const ok = !!(pedido && selectedUbicacion && montoAlm > 0);
   btn.disabled = !ok;
 }
 
 // ── Turno ─────────────────────────────────────────────────────────────
+function rebuildPedidoSelect() {
+  const turno = turnoFromHora(document.getElementById('ing-hora').value);
+  const sel = document.getElementById('ing-pedido');
+  if (turno === 'almuerzo') {
+    sel.innerHTML = `
+      <option value="">— Selecciona para habilitar los campos —</option>
+      <optgroup label="☀️ ALMUERZOS (9am – 4pm)">
+        <option value="completo"      data-monto="14000">Almuerzo Completo (con sopa) · $14.000</option>
+        <option value="seco"          data-monto="12000">Almuerzo Seco (sin sopa) · $12.000</option>
+        <option value="asado130"      data-monto="17000">Asado 130g · $17.000</option>
+        <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
+        <option value="porcion-sopa"  data-monto="7000">Porción de Sopa · $7.000</option>
+        <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
+      </optgroup>`;
+  } else {
+    const cats = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS','SANDWICH CUBANO','AREPAS','SUIZOS','ADICIONALES'];
+    const groups = cats.map(cat => {
+      const items = PL.comidaRapida.filter(p => p.cat === cat);
+      const opts  = items.map(p =>
+        `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`
+      ).join('');
+      return `<optgroup label="🌙 ${cat}">${opts}</optgroup>`;
+    }).join('');
+    sel.innerHTML = `<option value="">— Selecciona un producto —</option>${groups}`;
+
+    // Poblar selector de bebidas desde el catálogo
+    const bebidaSel = document.getElementById('ing-bebida');
+    if (bebidaSel) {
+      const bebidas = PL.comidaRapida.filter(p => p.cat === 'BEBIDAS');
+      bebidaSel.innerHTML = `<option value="" data-monto="0">— Sin bebida —</option>` +
+        bebidas.map(p =>
+          `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`
+        ).join('');
+    }
+  }
+  onPedidoChange();
+}
+
 function onHoraChange() {
   const t = turnoFromHora(document.getElementById('ing-hora').value);
   const hdr   = document.getElementById('turnoHeader');
@@ -1160,7 +1243,7 @@ function onHoraChange() {
     document.getElementById('turnoDesc').textContent   = '5:00 pm – 2:00 am · Comidas rápidas';
     badge.className = 'turno-badge turno-cena'; badge.textContent = '🌙 Comidas rápidas';
   }
-  // Actualizar monto (para llevar solo aplica en almuerzo)
+  rebuildPedidoSelect();
   actualizarMontoDisplay();
 }
 
@@ -1182,14 +1265,23 @@ function onPedidoChange() {
 
   if (!val) {
     document.getElementById('ing-monto-alm').value = 0;
+    document.getElementById('campo-bebida').style.display = 'none';
+    const bs = document.getElementById('ing-bebida'); if (bs) bs.value = '';
     actualizarMontoDisplay();
     validarRegistro();
     return;
   }
 
-  if (val === 'cr-libre') {
+  // Comida rápida del catálogo
+  const crItem = PL.comidaRapida.find(p => p.c === val);
+  if (crItem) {
     camposCR.style.display = 'block';
-    document.getElementById('ing-monto-alm').value = 0;
+    document.getElementById('ing-monto-alm').value = crItem.precio;
+    const esEditable = crItem.cat === 'ADICIONALES';
+    const manualDiv = document.getElementById('cr-precio-manual');
+    manualDiv.style.display = esEditable ? 'block' : 'none';
+    if (esEditable) document.getElementById('ing-cr-monto').value = crItem.precio;
+    document.getElementById('campo-bebida').style.display = 'block';
     actualizarMontoDisplay();
     validarRegistro();
     return;
@@ -1197,6 +1289,8 @@ function onPedidoChange() {
 
   // Almuerzo
   camposAlm.style.display = 'block';
+  document.getElementById('campo-bebida').style.display = 'none';
+  const bebidaReset = document.getElementById('ing-bebida'); if (bebidaReset) bebidaReset.value = '';
   const base = PRECIOS[val] || 0;
   document.getElementById('ing-monto-alm').value = base;
 
@@ -1218,6 +1312,10 @@ function onCantidadChange() {
   actualizarMontoDisplay();
 }
 
+function onBebidaChange() {
+  actualizarMontoDisplay();
+}
+
 function setCRMonto() {
   const v = parseFloat(document.getElementById('ing-cr-monto').value) || 0;
   document.getElementById('ing-monto-alm').value = v;
@@ -1227,6 +1325,12 @@ function setCRMonto() {
 
 function actualizarMontoDisplay() {
   const baseAlm  = parseFloat(document.getElementById('ing-monto-alm').value) || 0;
+  const bebidaSel = document.getElementById('ing-bebida');
+  const montoBebida = (bebidaSel && bebidaSel.value)
+    ? (parseFloat(bebidaSel.options[bebidaSel.selectedIndex]?.getAttribute('data-monto')) || 0)
+    : 0;
+  const montoUnit = baseAlm + montoBebida;
+
   const cant     = parseInt(document.getElementById('ing-cantidad').value) || 1;
   const hora     = document.getElementById('ing-hora').value;
   const turno    = turnoFromHora(hora);
@@ -1235,7 +1339,7 @@ function actualizarMontoDisplay() {
                      && chkPL && chkPL.checked
                      && turno === 'almuerzo';
 
-  const montoAlmTotal = (baseAlm + (paraLlevar ? 1000 : 0)) * cant;
+  const montoAlmTotal = (montoUnit + (paraLlevar ? 1000 : 0)) * cant;
   const domVal = selectedUbicacion === 'domicilio'
     ? (parseFloat(document.getElementById('ing-domicilio-valor').value) || 0)
     : 0;
@@ -1247,9 +1351,11 @@ function actualizarMontoDisplay() {
   if (total > 0) {
     dispEl.textContent = fmt(total);
     if (selectedUbicacion === 'domicilio' && domVal > 0) {
-      labelEl.textContent = `Almuerzo ${fmt(montoAlmTotal)} + Domicilio ${fmt(domVal)}`;
+      labelEl.textContent = `Comida ${fmt(montoAlmTotal)} + Domicilio ${fmt(domVal)}`;
     } else if (cant > 1) {
-      labelEl.textContent = `${fmt(baseAlm + (paraLlevar?1000:0))} × ${cant} pedidos`;
+      labelEl.textContent = `${fmt(montoUnit + (paraLlevar?1000:0))} × ${cant} pedidos`;
+    } else if (montoBebida > 0) {
+      labelEl.textContent = `Comida ${fmt(baseAlm)} + Bebida ${fmt(montoBebida)}`;
     } else {
       labelEl.textContent = paraLlevar ? `${fmt(baseAlm)} + $1.000 para llevar` : 'Monto total del pedido';
     }
@@ -1325,10 +1431,15 @@ async function agregarIngreso() {
   if (!pedido)     { showToast('⚠ Selecciona un tipo de pedido', 'warning'); return; }
   if (!fecha||!hora) { showToast('⚠ Completa fecha y hora', 'warning'); return; }
 
-  const baseAlm  = parseFloat(document.getElementById('ing-monto-alm').value) || 0;
+  const baseAlm    = parseFloat(document.getElementById('ing-monto-alm').value) || 0;
+  const bebidaSel  = document.getElementById('ing-bebida');
+  const montoBebida = (bebidaSel && bebidaSel.value)
+    ? (parseFloat(bebidaSel.options[bebidaSel.selectedIndex]?.getAttribute('data-monto')) || 0)
+    : 0;
+  const montoUnit  = baseAlm + montoBebida;
   const chkPL    = document.getElementById('ing-para-llevar');
   const esPL     = selectedUbicacion.startsWith('mesa_') && chkPL.checked && turno === 'almuerzo';
-  const monto_almuerzo = (baseAlm + (esPL ? 1000 : 0)) * cantidad;
+  const monto_almuerzo = (montoUnit + (esPL ? 1000 : 0)) * cantidad;
   const monto_domicilio = selectedUbicacion === 'domicilio'
     ? (parseFloat(document.getElementById('ing-domicilio-valor').value) || 0)
     : 0;
@@ -1340,9 +1451,13 @@ async function agregarIngreso() {
   const arroz   = document.getElementById('ing-arroz').value;
   const proteina= document.getElementById('ing-proteina').value;
   const acomp   = document.getElementById('ing-acomp').value;
-  const crDesc  = document.getElementById('ing-cr-desc').value;
-  const detalle = pedido === 'cr-libre'
-    ? crDesc
+  const crDesc  = document.getElementById('ing-cr-desc').value.trim();
+  const crItem  = PL.comidaRapida.find(p => p.c === pedido);
+  const bebidaItem = (bebidaSel && bebidaSel.value)
+    ? PL.comidaRapida.find(p => p.c === bebidaSel.value)
+    : null;
+  const detalle = crItem
+    ? [crItem.n, bebidaItem?.n, crDesc].filter(Boolean).join(' · ')
     : [sopa, arroz, proteina, acomp].filter(Boolean).join(' · ');
 
   const mesa_numero = selectedUbicacion.startsWith('mesa_')
@@ -1353,7 +1468,7 @@ async function agregarIngreso() {
     fecha, hora, turno, pedido,
     sopa: sopa||'', arroz: arroz||'', proteina: proteina||'', acomp: acomp||'',
     detalle, metodo, cantidad,
-    monto_unit: baseAlm, monto_almuerzo, monto_domicilio, monto_total,
+    monto_unit: montoUnit, monto_almuerzo, monto_domicilio, monto_total,
     estado: 'pendiente', es_domicilio: selectedUbicacion === 'domicilio',
     mesa: mesa_numero, para_llevar: esPL
   };
@@ -1378,8 +1493,12 @@ async function agregarIngreso() {
     document.getElementById('ing-pedido').value      = '';
     document.getElementById('ing-cantidad').value    = '1';
     document.getElementById('ing-hora').value        = nowTime();
-    document.getElementById('ing-cr-desc').value     = '';
-    document.getElementById('ing-cr-monto').value    = '';
+    document.getElementById('ing-cr-desc').value  = '';
+    document.getElementById('ing-cr-monto').value = '';
+    document.getElementById('cr-precio-manual').style.display = 'none';
+    const bebidaSelR = document.getElementById('ing-bebida');
+    if (bebidaSelR) bebidaSelR.value = '';
+    document.getElementById('campo-bebida').style.display = 'none';
     document.getElementById('ing-domicilio-valor').value = '';
     document.getElementById('ing-para-llevar').checked  = false;
     document.getElementById('para-llevar-section').style.display = 'none';
@@ -1635,7 +1754,7 @@ function renderIngresos() {
     ? list.map(i => `<tr>
         <td>${i.fecha}</td>
         <td>${i.hora||'—'}</td>
-        <td><span class="badge ${i.turno==='cena'?'badge-purple':'badge-accent'}">${i.turno==='cena'?'🌙 Cena':'☀️ Alm'}</span></td>
+        <td><span class="badge ${i.turno==='cena'?'badge-purple':'badge-accent'}">${i.turno==='cena'?'🌙 CR':'☀️ Alm'}</span></td>
         <td style="font-size:11px;color:var(--text3);">${i.es_domicilio?'🛵 Dom':i.mesa?`Mesa ${i.mesa}`:'—'}</td>
         <td style="color:var(--text);font-size:12px;">${LABELS[i.pedido]||i.pedido}</td>
         <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.detalle||'—'}</td>
@@ -1659,8 +1778,27 @@ function renderIngresos() {
   document.getElementById('rc-psopa').textContent    = cnt(alm,'porcion-sopa');
   document.getElementById('rc-parroz').textContent   = cnt(alm,'porcion-arroz');
   document.getElementById('rc-total-alm').textContent = fmt(alm.reduce((a,b)=>a+(b.monto_total||0),0));
-  document.getElementById('rc-cr-cnt').textContent   = cr.reduce((a,b)=>a+(b.cantidad||1),0);
-  document.getElementById('rc-total-cr').textContent = fmt(cr.reduce((a,b)=>a+(b.monto_total||0),0));
+
+  // CR breakdown por categoría
+  const crCats = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS','SANDWICH CUBANO','AREPAS','SUIZOS','ADICIONALES','BEBIDAS'];
+  const crCounts = {};
+  cr.forEach(i => {
+    const item = PL.comidaRapida.find(p => p.c === i.pedido);
+    if (item) crCounts[item.cat] = (crCounts[item.cat] || 0) + (i.cantidad || 1);
+  });
+  const crTotal    = cr.reduce((a,b) => a+(b.monto_total||0), 0);
+  const crTotalCnt = cr.reduce((a,b) => a+(b.cantidad||1), 0);
+  const crBody = document.getElementById('cr-resumen-body');
+  if (crBody) {
+    let html = crCats
+      .filter(cat => crCounts[cat])
+      .map(cat => `<div class="report-line"><span>${cat.charAt(0)+cat.slice(1).toLowerCase()}</span><strong>${crCounts[cat]}</strong></div>`)
+      .join('');
+    if (html) html += '<div class="divider" style="margin:6px 0;"></div>';
+    html += `<div class="report-line"><span>Total pedidos</span><strong>${crTotalCnt}</strong></div>`;
+    html += `<div class="report-line"><span><strong>Total</strong></span><strong class="amount-pos">${fmt(crTotal)}</strong></div>`;
+    crBody.innerHTML = html;
+  }
 
   const sM = f => ST.ingresos.filter(i=>inP(i.fecha,f)).reduce((a,b)=>a+(b.monto_total||0),0);
   document.getElementById('ing-hoy').textContent     = fmt(sM('hoy'));
@@ -1991,8 +2129,39 @@ async function eliminarGastoDia(id) {
   try {
     await sbDelete('gastos_dia', `id=eq.${id}`);
     ST.gastosDia = ST.gastosDia.filter(g => g.id !== id);
+    if (ddEditId === id) ddEditId = null;
     renderDiaADia();
   } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
+}
+
+let ddEditId = null;
+
+function editarGastoDia(id) {
+  ddEditId = id;
+  renderDiaADia();
+}
+
+function cancelarEdicionGastoDia() {
+  ddEditId = null;
+  renderDiaADia();
+}
+
+async function guardarEdicionGastoDia(id) {
+  const nombreEl = document.getElementById(`dd-edit-nombre-${id}`);
+  const montoEl  = document.getElementById(`dd-edit-monto-${id}`);
+  if (!nombreEl || !montoEl) return;
+  const nombre = nombreEl.value.trim();
+  const monto  = parseFloat(montoEl.value);
+  if (!nombre || !monto || monto <= 0) { showToast('⚠ Completa nombre y monto', 'warning'); return; }
+  try {
+    await sbPatch('gastos_dia', `id=eq.${id}`, { nombre, monto });
+    const g = ST.gastosDia.find(g => g.id === id);
+    if (g) { g.nombre = nombre; g.monto = monto; }
+    ddEditId = null;
+    setSyncBadge('ok');
+    renderDiaADia();
+    showToast('✅ Gasto actualizado', 'ok');
+  } catch(e) { showToast('⚠ Error al actualizar', 'warning'); }
 }
 
 function renderDiaADia() {
@@ -2014,7 +2183,26 @@ function renderDiaADia() {
   const gastos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === ddTurno);
   const tbody  = document.getElementById('dd-gastos-body');
   tbody.innerHTML = gastos.length
-    ? gastos.map(g => `<tr><td style="color:var(--text)">${g.nombre}</td><td class="amount-neg">${fmt(g.monto)}</td><td><button class="btn btn-danger" onclick="eliminarGastoDia(${g.id})">✕</button></td></tr>`).join('')
+    ? gastos.map(g => {
+        if (ddEditId === g.id) {
+          return `<tr>
+            <td><input type="text"   id="dd-edit-nombre-${g.id}" value="${g.nombre.replace(/"/g,'&quot;')}" style="width:100%;"></td>
+            <td><input type="number" id="dd-edit-monto-${g.id}"  value="${g.monto}" style="width:90px;"></td>
+            <td style="white-space:nowrap;display:flex;gap:4px;">
+              <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="guardarEdicionGastoDia(${g.id})">✓ Guardar</button>
+              <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="cancelarEdicionGastoDia()">✕ Cancelar</button>
+            </td>
+          </tr>`;
+        }
+        return `<tr>
+          <td style="color:var(--text)">${g.nombre}</td>
+          <td class="amount-neg">${fmt(g.monto)}</td>
+          <td style="white-space:nowrap;display:flex;gap:4px;">
+            <button class="btn btn-edit"   onclick="editarGastoDia(${g.id})">✏</button>
+            <button class="btn btn-danger" onclick="eliminarGastoDia(${g.id})">✕</button>
+          </td>
+        </tr>`;
+      }).join('')
     : `<tr><td colspan="3"><div class="empty"><div class="empty-icon">🧾</div><div class="empty-text">Sin gastos agregados</div></div></td></tr>`;
 
   const totalGastos = gastos.reduce((a,b) => a+b.monto, 0);
