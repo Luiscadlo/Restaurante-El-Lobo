@@ -229,6 +229,17 @@
   .btn-domicilio:hover  { background: rgba(91,155,213,0.12); }
   .btn-domicilio.selected { border-color: var(--accent); color: var(--accent); background: rgba(232,184,75,0.15); box-shadow: 0 0 0 2px rgba(232,184,75,0.3); }
 
+  .btn-fiar {
+    width: 100%; padding: 12px; border-radius: var(--radius-sm);
+    border: 2px solid var(--purple); color: var(--purple);
+    background: transparent; font-family: 'Syne', sans-serif;
+    font-weight: 700; font-size: 13px; cursor: pointer;
+    transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+  .btn-fiar:hover { background: rgba(155,127,212,0.12); }
+  .btn-fiar.selected { border-color: var(--accent); color: var(--accent); background: rgba(232,184,75,0.15); box-shadow: 0 0 0 2px rgba(232,184,75,0.3); }
+
   .para-llevar-row {
     display: flex; align-items: center; gap: 10px;
     padding: 10px 14px; border-radius: var(--radius-sm);
@@ -391,6 +402,12 @@
           <button class="btn-domicilio" id="btn-domicilio" onclick="seleccionarUbicacion('domicilio')">
             🛵 Domicilio
           </button>
+          <button class="btn-fiar" id="btn-fiar" onclick="seleccionarUbicacion('fiar')">
+            📒 Fiar
+          </button>
+          <div id="fiar-info-section" style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(155,127,212,0.08);border:1px solid rgba(155,127,212,0.3);font-size:12px;color:var(--purple);">
+            ⚠ El ingreso se registrará en la fecha en que se marque como pagado
+          </div>
         </div>
 
         <!-- Para llevar (solo si hay mesa seleccionada) -->
@@ -570,6 +587,9 @@
 
   <!-- Domicilios pendientes -->
   <div id="pendientes-domicilios-zone"></div>
+
+  <!-- Fiados pendientes -->
+  <div id="pendientes-fiados-zone"></div>
 </section>
 
 <!-- ===== EGRESOS ===== -->
@@ -1108,6 +1128,7 @@ document.getElementById('ing-hora').value = nowTime();
 
 // ── Filtros activos ───────────────────────────────────────────────────
 let fI = 'hoy', fE = 'hoy', fInv = 'todos', fR = 'semana';
+let ddEditId = null;
 
 // ── Autocomplete índices ──────────────────────────────────────────────
 let acIdx = { sopa:-1, arroz:-1, proteina:-1, acomp:-1 };
@@ -1142,23 +1163,36 @@ function renderMesasForm() {
   if (btnDom) {
     btnDom.className = 'btn-domicilio' + (selectedUbicacion === 'domicilio' ? ' selected' : '');
   }
+  // Botón fiar
+  const btnFiar = document.getElementById('btn-fiar');
+  if (btnFiar) {
+    btnFiar.className = 'btn-fiar' + (selectedUbicacion === 'fiar' ? ' selected' : '');
+  }
 }
 
 function seleccionarUbicacion(ubicacion) {
   selectedUbicacion = ubicacion;
 
-  // Mostrar/ocultar secciones condicionales
   const paraLlevarSection = document.getElementById('para-llevar-section');
   const domSection        = document.getElementById('domicilio-valor-section');
+  const fiarSection       = document.getElementById('fiar-info-section');
   const chkPL             = document.getElementById('ing-para-llevar');
 
   if (ubicacion === 'domicilio') {
     paraLlevarSection.style.display = 'none';
     domSection.style.display        = 'block';
+    if (fiarSection) fiarSection.style.display = 'none';
+    chkPL.checked = false;
+  } else if (ubicacion === 'fiar') {
+    paraLlevarSection.style.display = 'none';
+    domSection.style.display        = 'none';
+    if (fiarSection) fiarSection.style.display = 'block';
+    document.getElementById('ing-domicilio-valor').value = '';
     chkPL.checked = false;
   } else {
     paraLlevarSection.style.display = 'flex';
     domSection.style.display        = 'none';
+    if (fiarSection) fiarSection.style.display = 'none';
     document.getElementById('ing-domicilio-valor').value = '';
   }
 
@@ -1178,12 +1212,15 @@ function onDomicilioChange() {
 }
 
 function validarRegistro() {
-  const pedido  = document.getElementById('ing-pedido').value;
+  const pedido   = document.getElementById('ing-pedido').value;
   const montoAlm = parseFloat(document.getElementById('ing-monto-alm').value) || 0;
-  const domVal  = parseFloat(document.getElementById('ing-domicilio-valor').value) || 0;
+  const bebidaSel = document.getElementById('ing-bebida');
+  const montoBebida = (bebidaSel && bebidaSel.value)
+    ? (parseFloat(bebidaSel.options[bebidaSel.selectedIndex]?.getAttribute('data-monto')) || 0)
+    : 0;
   const btn = document.getElementById('btn-reg');
 
-  const ok = !!(pedido && selectedUbicacion && montoAlm > 0);
+  const ok = !!(pedido && selectedUbicacion && (montoAlm > 0 || montoBebida > 0));
   btn.disabled = !ok;
 }
 
@@ -1470,7 +1507,8 @@ async function agregarIngreso() {
     detalle, metodo, cantidad,
     monto_unit: montoUnit, monto_almuerzo, monto_domicilio, monto_total,
     estado: 'pendiente', es_domicilio: selectedUbicacion === 'domicilio',
-    mesa: mesa_numero, para_llevar: esPL
+    mesa: mesa_numero, para_llevar: esPL,
+    es_fiar: selectedUbicacion === 'fiar'
   };
 
   const mesaYaTienePendientes = mesa_numero !== null && ST.pendientes.some(p => p.mesa === mesa_numero);
@@ -1486,7 +1524,7 @@ async function agregarIngreso() {
     }
 
     setSyncBadge('ok');
-    showToast(`✅ Pedido registrado — ${selectedUbicacion === 'domicilio' ? 'Domicilio' : 'Mesa ' + mesa_numero}`, 'ok');
+    showToast(`✅ Pedido registrado — ${selectedUbicacion === 'domicilio' ? 'Domicilio' : selectedUbicacion === 'fiar' ? 'Fiado' : 'Mesa ' + mesa_numero}`, 'ok');
 
     // Reset form
     selectedUbicacion = null;
@@ -1494,7 +1532,8 @@ async function agregarIngreso() {
     document.getElementById('ing-cantidad').value    = '1';
     document.getElementById('ing-hora').value        = nowTime();
     document.getElementById('ing-cr-desc').value  = '';
-    document.getElementById('ing-cr-monto').value = '';
+    const crMontoEl = document.getElementById('ing-cr-monto');
+    if (crMontoEl) crMontoEl.value = '';
     document.getElementById('cr-precio-manual').style.display = 'none';
     const bebidaSelR = document.getElementById('ing-bebida');
     if (bebidaSelR) bebidaSelR.value = '';
@@ -1503,6 +1542,8 @@ async function agregarIngreso() {
     document.getElementById('ing-para-llevar').checked  = false;
     document.getElementById('para-llevar-section').style.display = 'none';
     document.getElementById('domicilio-valor-section').style.display = 'none';
+    const fiarInfoEl = document.getElementById('fiar-info-section');
+    if (fiarInfoEl) fiarInfoEl.style.display = 'none';
     onPedidoChange();
     onHoraChange();
     renderAll();
@@ -1616,6 +1657,29 @@ async function marcarDomicilioPagado(pedidoId) {
   }
 }
 
+// ── Marcar fiado como pagado ───────────────────────────────────────────
+async function marcarFiadoPagado(pedidoId) {
+  const metodoEl = document.getElementById(`metodo-fiar-${pedidoId}`);
+  const metodo   = metodoEl ? metodoEl.value : 'efectivo';
+  const fechaHoy = today();
+
+  try {
+    await sbPatch('pedidos', `id=eq.${pedidoId}`, { estado: 'pagado', metodo, fecha: fechaHoy });
+
+    const idx = ST.pendientes.findIndex(p => p.id === pedidoId);
+    if (idx !== -1) {
+      const [ped] = ST.pendientes.splice(idx, 1);
+      ped.estado = 'pagado'; ped.metodo = metodo; ped.fecha = fechaHoy;
+      ST.ingresos.unshift(ped);
+    }
+    setSyncBadge('ok');
+    showToast('✅ Fiado marcado como pagado', 'ok');
+    renderAll();
+  } catch (e) {
+    showToast('⚠ Error al procesar el pago', 'warning');
+  }
+}
+
 // ── Cancelar pedido pendiente ─────────────────────────────────────────
 async function cancelarPendiente(pedidoId) {
   if (!confirm('¿Cancelar este pedido pendiente?')) return;
@@ -1651,8 +1715,11 @@ function renderPendientes() {
   // Agrupar
   const mesaGrupos = {};
   const domicilios = [];
+  const fiados     = [];
   ST.pendientes.forEach(p => {
-    if (p.es_domicilio || !p.mesa) {
+    if (p.es_fiar === true) {
+      fiados.push(p);
+    } else if (p.es_domicilio || !p.mesa) {
       domicilios.push(p);
     } else {
       const mn = p.mesa;
@@ -1661,12 +1728,14 @@ function renderPendientes() {
     }
   });
 
-  const mesasZone = document.getElementById('pendientes-mesas-zone');
-  const domZone   = document.getElementById('pendientes-domicilios-zone');
+  const mesasZone  = document.getElementById('pendientes-mesas-zone');
+  const domZone    = document.getElementById('pendientes-domicilios-zone');
+  const fiadosZone = document.getElementById('pendientes-fiados-zone');
 
-  if (!Object.keys(mesaGrupos).length && !domicilios.length) {
+  if (!Object.keys(mesaGrupos).length && !domicilios.length && !fiados.length) {
     mesasZone.innerHTML = `<div class="empty"><div class="empty-icon">🍽</div><div class="empty-text">No hay pedidos pendientes</div></div>`;
     domZone.innerHTML   = '';
+    if (fiadosZone) fiadosZone.innerHTML = '';
     return;
   }
 
@@ -1738,6 +1807,34 @@ function renderPendientes() {
       </div>`).join('')}`;
   } else {
     domZone.innerHTML = '';
+  }
+
+  // Fiados
+  if (fiadosZone) {
+    if (fiados.length) {
+      fiadosZone.innerHTML = `
+        <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--purple);">📒 Fiados pendientes</span></div>
+        ${fiados.map(p => `
+        <div class="pending-group">
+          <div class="pending-group-hdr">
+            <div>
+              <div class="pending-group-title" style="color:var(--purple);">Fiado — ${p.fecha||'—'} ${p.hora||''}</div>
+              <div class="pending-group-sub">${LABELS[p.pedido]||p.pedido} · ${p.detalle||'—'}</div>
+            </div>
+            <div class="pending-group-total">${fmt(p.monto_total||0)}</div>
+          </div>
+          <div class="pending-pay-bar">
+            <select id="metodo-fiar-${p.id}">
+              <option value="efectivo"${(p.metodo||'efectivo')==='efectivo'?' selected':''}>Efectivo</option>
+              <option value="transferencia"${p.metodo==='transferencia'?' selected':''}>Transferencia</option>
+            </select>
+            <button class="btn btn-primary" onclick="marcarFiadoPagado(${p.id})">✅ Marcar como pagado</button>
+            <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕ Cancelar</button>
+          </div>
+        </div>`).join('')}`;
+    } else {
+      fiadosZone.innerHTML = '';
+    }
   }
 }
 
@@ -2134,8 +2231,6 @@ async function eliminarGastoDia(id) {
   } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
 }
 
-let ddEditId = null;
-
 function editarGastoDia(id) {
   ddEditId = id;
   renderDiaADia();
@@ -2162,6 +2257,16 @@ async function guardarEdicionGastoDia(id) {
     renderDiaADia();
     showToast('✅ Gasto actualizado', 'ok');
   } catch(e) { showToast('⚠ Error al actualizar', 'warning'); }
+}
+
+async function eliminarCierre(fecha, turno) {
+  if (!confirm(`¿Eliminar el cierre del ${fecha} (${turno})?`)) return;
+  try {
+    await sbDelete('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`);
+    ST.cierresDia = ST.cierresDia.filter(c => !(c.fecha === fecha && c.turno === turno));
+    showToast('Cierre eliminado', 'info');
+    renderDiaADia();
+  } catch(e) { showToast('⚠ Error al eliminar cierre', 'warning'); }
 }
 
 function renderDiaADia() {
@@ -2224,7 +2329,10 @@ function renderDiaADia() {
         <td class="amount-pos">${fmt(c.transferencia)}</td>
         <td class="amount-neg">${fmt(c.gastos)}</td>
         <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}</td>
-        <td><button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="irADiaADia('${c.fecha}','${c.turno}')">Ver</button></td>
+        <td style="display:flex;gap:4px;">
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="irADiaADia('${c.fecha}','${c.turno}')">Ver</button>
+          <button class="btn btn-danger" style="padding:5px 10px;font-size:11px;" onclick="eliminarCierre('${c.fecha}','${c.turno}')">🗑</button>
+        </td>
       </tr>`).join('')
     : `<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px;">Aún no hay cierres guardados</td></tr>`;
 }
@@ -2232,6 +2340,7 @@ function renderDiaADia() {
 function irADiaADia(fecha, turno) {
   document.getElementById('dd-fecha').value = fecha;
   ddTurno = turno;
+  ddEditId = null;
   document.querySelectorAll('#tab-diaadia .filter-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(turno==='almuerzo'?'dd-btn-almuerzo':'dd-btn-cena').classList.add('active');
   renderDiaADia();
