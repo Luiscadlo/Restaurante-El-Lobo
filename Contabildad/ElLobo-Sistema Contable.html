@@ -1513,7 +1513,17 @@ async function agregarIngreso() {
 
   const mesaYaTienePendientes = mesa_numero !== null && ST.pendientes.some(p => p.mesa === mesa_numero);
   try {
-    const [newPedido] = await sbInsert('pedidos', pedidoData);
+    let newPedido;
+    try {
+      [newPedido] = await sbInsert('pedidos', pedidoData);
+    } catch(e) {
+      if (e.message && e.message.includes('es_fiar')) {
+        // Columna aún no existe en Supabase — reintenta sin ella
+        const { es_fiar: esFiarVal, ...pedidoSinFiar } = pedidoData;
+        [newPedido] = await sbInsert('pedidos', pedidoSinFiar);
+        newPedido.es_fiar = esFiarVal; // conservar en estado local
+      } else { throw e; }
+    }
     ST.pendientes.unshift(newPedido);
 
     // Marcar mesa como ocupada solo si es la primera orden pendiente
