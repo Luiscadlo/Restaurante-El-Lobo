@@ -115,6 +115,9 @@
   .btn-primary { background: var(--accent); color: #0f0e0c; }
   .btn-primary:hover:not(:disabled) { background: var(--accent2); }
   .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-success { background: var(--green); color: #0f0e0c; }
+  .btn-success:hover:not(:disabled) { background: #3d9468; }
+  .btn-success:disabled { opacity: 0.35; cursor: not-allowed; }
   .btn-danger { background: transparent; border: 1px solid var(--border2); color: var(--red); padding: 6px 12px; font-size: 11px; }
   .btn-danger:hover { border-color: var(--red); background: rgba(224,92,92,0.1); }
   .btn-outline { background: transparent; border: 1px solid var(--border2); color: var(--text2); }
@@ -240,6 +243,29 @@
   .btn-fiar:hover { background: rgba(155,127,212,0.12); }
   .btn-fiar.selected { border-color: var(--accent); color: var(--accent); background: rgba(232,184,75,0.15); box-shadow: 0 0 0 2px rgba(232,184,75,0.3); }
 
+  .btn-sinmesa {
+    width: 100%; padding: 12px; border-radius: var(--radius-sm);
+    border: 2px solid var(--text2); color: var(--text2);
+    background: transparent; font-family: 'Syne', sans-serif;
+    font-weight: 700; font-size: 13px; cursor: pointer;
+    transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+  .btn-sinmesa:hover { background: rgba(160,152,128,0.12); }
+  .btn-sinmesa.selected { border-color: var(--accent); color: var(--accent); background: rgba(232,184,75,0.15); box-shadow: 0 0 0 2px rgba(232,184,75,0.3); }
+
+  .btn-abrir-turno {
+    border-radius: 20px; padding: 6px 14px; font-size: 11px; font-family: 'Syne', sans-serif; font-weight: 700;
+    border: 1px solid rgba(76,175,125,0.4); background: rgba(76,175,125,0.12); color: var(--green);
+    cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  }
+  .btn-abrir-turno:hover { background: rgba(76,175,125,0.22); }
+  .btn-abrir-turno.abierto { border-color: rgba(91,155,213,0.4); background: rgba(91,155,213,0.12); color: var(--blue); }
+  .btn-abrir-turno.abierto:hover { background: rgba(91,155,213,0.22); }
+
+  .vuelto-box { margin-top: 8px; font-size: 12px; }
+  .vuelto-inline { width: 130px; flex: 0 0 auto; }
+
   .para-llevar-row {
     display: flex; align-items: center; gap: 10px;
     padding: 10px 14px; border-radius: var(--radius-sm);
@@ -283,11 +309,18 @@
     padding: 12px 18px; border-radius: var(--radius-sm); font-size: 13px;
     font-family: 'Syne', sans-serif; font-weight: 600;
     animation: slideIn 0.3s ease;
-    max-width: 320px; pointer-events: none;
+    max-width: 340px; pointer-events: auto;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   }
   .toast.ok      { background: rgba(76,175,125,0.15);  border: 1px solid rgba(76,175,125,0.4);  color: var(--green); }
   .toast.warning { background: rgba(224,92,92,0.15);   border: 1px solid rgba(224,92,92,0.4);   color: var(--red);   }
   .toast.info    { background: rgba(232,184,75,0.15);  border: 1px solid rgba(232,184,75,0.4);  color: var(--accent);}
+  .toast-action {
+    background: none; border: 1px solid currentColor; border-radius: 6px;
+    padding: 4px 10px; color: inherit; font-family: 'Syne', sans-serif;
+    font-weight: 700; font-size: 11px; cursor: pointer; white-space: nowrap;
+  }
+  .toast-action:hover { background: rgba(255,255,255,0.1); }
 
   .modal-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.7);
@@ -327,6 +360,7 @@
   </div>
   <div class="header-right">
     <div id="syncBadge" style="border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid rgba(232,184,75,0.4);background:rgba(232,184,75,0.1);color:var(--accent);">🔄 Sincronizando…</div>
+    <button class="btn-abrir-turno" id="btn-abrir-turno-header" onclick="abrirModalTurno()" title="Registrar caja inicial del turno">🔓 Abrir turno</button>
     <button class="btn btn-outline" onclick="exportarDatos()" style="font-size:11px;padding:6px 12px;" title="Exportar respaldo JSON">⬇ Exportar</button>
     <label class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;" title="Importar respaldo JSON">⬆ Importar<input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
     <div class="turno-badge turno-almuerzo" id="turnoBadge">☀️ Almuerzo</div>
@@ -338,10 +372,14 @@
   <div class="tab active" onclick="showTab('dashboard',this)">Dashboard</div>
   <div class="tab" onclick="showTab('ingresos',this)">Ingresos</div>
   <div class="tab" onclick="showTab('pendientes',this)" id="tab-nav-pendientes">Pendientes <span id="pend-badge" style="display:none;background:var(--orange);color:#0f0e0c;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
+  <!-- Oculta temporalmente: quita este style="display:none" para reactivarla -->
+  <div class="tab" onclick="showTab('pedidos',this)" style="display:none;">Pedidos</div>
   <div class="tab" onclick="showTab('egresos',this)">Egresos</div>
   <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
   <div class="tab" onclick="showTab('reportes',this)">Reportes</div>
-  <div class="tab" onclick="showTab('diaadia',this)">Día a Día</div>
+  <div class="tab" onclick="showTab('diaadia',this)">Cierre</div>
+  <div class="tab" onclick="showTab('caja',this)">Caja</div>
+  <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría</div>
 </nav>
 
 <main>
@@ -401,7 +439,15 @@
       <div class="panel-header"><div class="panel-title">Registrar pedido</div></div>
       <div class="panel-body">
 
-        <!-- Turno detectado -->
+        <!-- Turno: selección manual (ya no se calcula solo con la hora) -->
+        <div class="form-group mb">
+          <label>Turno del pedido <span style="color:var(--text3);font-weight:400;">(elígelo manualmente)</span></label>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="filter-btn active" id="turno-manual-almuerzo" onclick="seleccionarTurnoManual('almuerzo')" style="flex:1;">☀️ Almuerzo</button>
+            <button type="button" class="filter-btn" id="turno-manual-cena" onclick="seleccionarTurnoManual('cena')" style="flex:1;">🌙 Comidas Rápidas</button>
+          </div>
+        </div>
+
         <div class="turno-header almuerzo" id="turnoHeader">
           <div class="turno-icon" id="turnoIcon">☀️</div>
           <div>
@@ -410,10 +456,22 @@
           </div>
         </div>
 
+        <!-- Aviso: no se puede registrar si el turno no ha sido abierto -->
+        <div id="ing-turno-cerrado-alert" class="alert warning" style="display:none;margin-bottom:12px;">
+          <div style="flex:1;">⚠ Debes abrir el turno antes de registrar pedidos.</div>
+          <button type="button" class="btn btn-success" style="padding:6px 12px;font-size:11px;" onclick="abrirModalTurno()">🔓 Abrir turno</button>
+        </div>
+
         <!-- Fecha y hora -->
         <div class="form-row mb">
-          <div class="form-group"><label>Fecha</label><input type="date" id="ing-fecha"></div>
-          <div class="form-group"><label>Hora del pedido</label><input type="time" id="ing-hora" oninput="onHoraChange()"></div>
+          <div class="form-group"><label>Fecha</label><input type="date" id="ing-fecha" oninput="validarRegistro()"></div>
+          <div class="form-group">
+            <label>Hora del pedido</label>
+            <div style="display:flex;gap:6px;">
+              <input type="time" id="ing-hora" oninput="onHoraChange()" style="flex:1;">
+              <button type="button" class="btn btn-outline" onclick="refrescarHoraPedido()" title="Tomar la hora actual del dispositivo" style="padding:0 12px;">🔄</button>
+            </div>
+          </div>
         </div>
 
         <!-- UBICACIÓN DEL PEDIDO (OBLIGATORIO) -->
@@ -427,6 +485,9 @@
           </button>
           <button class="btn-fiar" id="btn-fiar" onclick="seleccionarUbicacion('fiar')">
             📒 Fiar
+          </button>
+          <button class="btn-sinmesa" id="btn-sinmesa" onclick="seleccionarUbicacion('sinmesa')">
+            🧍 Sin mesa
           </button>
           <div id="fiar-info-section" style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(155,127,212,0.08);border:1px solid rgba(155,127,212,0.3);font-size:12px;color:var(--purple);">
             ⚠ El ingreso se registrará en la fecha en que se marque como pagado
@@ -443,9 +504,9 @@
         <div id="domicilio-valor-section" style="display:none;">
           <div class="form-group mb">
             <label>Valor del domicilio ($) <span class="req">*</span></label>
-            <input type="number" id="ing-domicilio-valor" list="domicilio-opciones" placeholder="ej: 3000" oninput="onDomicilioChange()">
+            <input type="text" inputmode="numeric" id="ing-domicilio-valor" list="domicilio-opciones" placeholder="ej: 3.000" oninput="formatMilesInput(this); onDomicilioChange()">
             <datalist id="domicilio-opciones">
-              <option value="2000"><option value="3000"><option value="4000"><option value="5000">
+              <option value="2.000"><option value="3.000"><option value="4.000"><option value="5.000">
             </datalist>
           </div>
           <div class="form-group mb">
@@ -506,15 +567,21 @@
           </div>
           <div class="form-group mb" id="cr-precio-manual" style="display:none;">
             <label>Precio ($) <span style="color:var(--text3);font-weight:400;">— ajustar si es necesario</span></label>
-            <input type="number" id="ing-cr-monto" placeholder="0" oninput="setCRMonto()">
+            <input type="text" inputmode="numeric" id="ing-cr-monto" placeholder="0" oninput="formatMilesInput(this); setCRMonto()">
           </div>
+        </div>
+
+        <!-- Producto extra (opcional, ej: botella de agua) -->
+        <div class="form-group mb">
+          <button type="button" class="btn btn-outline" style="width:100%;" onclick="abrirModalAgregarExtraIngreso()">+ Agregar extra</button>
+          <div id="ing-extras-lista" style="margin-top:8px;"></div>
         </div>
 
         <!-- Método y cantidad -->
         <div class="form-row mb">
           <div class="form-group">
             <label>Método de pago</label>
-            <select id="ing-metodo">
+            <select id="ing-metodo" onchange="onMetodoChange()">
               <option value="efectivo">Efectivo</option>
               <option value="transferencia">Transferencia</option>
             </select>
@@ -525,6 +592,25 @@
           </div>
         </div>
 
+        <!-- Calculadora de vuelto (solo pantalla, no se guarda; solo en efectivo) -->
+        <div id="vuelto-section" class="form-group mb">
+          <label>¿Con cuánto pagó? ($) <span style="color:var(--text3);font-weight:400;">— opcional, solo calcula el vuelto</span></label>
+          <input type="text" inputmode="numeric" id="ing-pago-con" placeholder="0" oninput="formatMilesInput(this); calcularVuelto()">
+          <div id="vuelto-resultado" style="font-size:13px;margin-top:4px;"></div>
+        </div>
+
+        <!-- Detalles libres del pedido -->
+        <div class="form-group mb">
+          <label>Detalles <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+          <input type="text" id="ing-detalles-extra" placeholder="ej: señor camiseta naranja de rayas…">
+        </div>
+
+        <!-- Agregar varios almuerzos al mismo pedido (misma mesa/domicilio/etc.) -->
+        <button type="button" class="btn btn-outline" id="btn-agregar-almuerzo" onclick="agregarAlmuerzoAlPedido()" disabled style="width:100%;">
+          + Agregar almuerzo (mismo pedido)
+        </button>
+        <div id="ing-almuerzos-cola-lista" style="margin-top:8px;margin-bottom:16px;"></div>
+
         <!-- Monto display -->
         <div class="monto-display">
           <div class="monto-val" id="monto-display">$—</div>
@@ -532,8 +618,11 @@
         </div>
         <input type="hidden" id="ing-monto-alm" value="0">
 
-        <button class="btn btn-primary" id="btn-reg" onclick="agregarIngreso()" disabled style="width:100%;">
+        <button class="btn btn-primary" id="btn-reg" onclick="agregarIngreso('pendiente')" disabled style="width:100%;">
           + Registrar pedido como pendiente
+        </button>
+        <button class="btn btn-success" id="btn-reg-pagado" onclick="agregarIngreso('pagado')" disabled style="width:100%;margin-top:10px;">
+          ✅ Pagado inmediatamente
         </button>
       </div>
     </div>
@@ -596,6 +685,10 @@
 
 <!-- ===== PENDIENTES ===== -->
 <section class="section" id="tab-pendientes">
+  <button class="btn btn-outline" onclick="abrirModalNotas()" style="margin-bottom:16px;">
+    📝 Notas del día <span id="notas-badge" style="display:none;background:var(--accent);color:#0f0e0c;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span>
+  </button>
+
   <!-- Mapa de mesas -->
   <div class="panel" style="margin-bottom:20px;">
     <div class="panel-header">
@@ -617,8 +710,27 @@
   <!-- Domicilios pendientes -->
   <div id="pendientes-domicilios-zone"></div>
 
+  <!-- Sin mesa pendientes -->
+  <div id="pendientes-sinmesa-zone"></div>
+
   <!-- Fiados pendientes -->
   <div id="pendientes-fiados-zone"></div>
+</section>
+
+<!-- ===== PEDIDOS (seguimiento de cocina) ===== -->
+<section class="section" id="tab-pedidos">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">🍽 Pedidos del turno — <span id="pedidos-turno-label">Almuerzo</span></div>
+      <div style="font-size:11px;color:var(--text3);">Marca cada plato cuando lo entregues · sopa + seco por separado solo en mesa/sin mesa; domicilio y para llevar usan un solo check</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Hora</th><th>Ubicación</th><th>Pedido</th><th>Detalle</th><th>Cant.</th><th>Pago</th><th>Entrega</th><th></th></tr></thead>
+        <tbody id="pedidos-turno-body"></tbody>
+      </table>
+    </div>
+  </div>
 </section>
 
 <!-- ===== EGRESOS ===== -->
@@ -641,7 +753,7 @@
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label>Monto ($)</label><input type="number" id="egr-monto" placeholder="0"></div>
+          <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="egr-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
           <div class="form-group"><label>Descripción</label><input type="text" id="egr-desc" placeholder="ej: Pollo, pago empleado…"></div>
         </div>
         <button class="btn btn-primary" onclick="agregarEgreso()">+ Registrar egreso</button>
@@ -690,7 +802,7 @@
           <div class="form-group"><label>Stock actual</label><input type="number" id="inv-stock" placeholder="0"></div>
           <div class="form-group"><label>Stock mínimo</label><input type="number" id="inv-minimo" placeholder="5"></div>
         </div>
-        <div class="form-group" style="margin-bottom:16px;"><label>Costo unitario ($)</label><input type="number" id="inv-costo" placeholder="0"></div>
+        <div class="form-group" style="margin-bottom:16px;"><label>Costo unitario ($)</label><input type="text" inputmode="numeric" id="inv-costo" placeholder="0" oninput="formatMilesInput(this)"></div>
         <button class="btn btn-primary" onclick="agregarProducto()">+ Guardar producto</button>
       </div>
     </div>
@@ -794,7 +906,7 @@
       <div class="form-row">
         <div class="form-group">
           <label>Fecha a cerrar</label>
-          <input type="date" id="dd-fecha" oninput="renderDiaADia()">
+          <input type="date" id="dd-fecha" oninput="onFechaCierreChange()">
         </div>
         <div class="form-group">
           <label>Turno a cerrar</label>
@@ -811,13 +923,25 @@
     <div class="kpi-card blue"><div class="kpi-label">Efectivo</div><div class="kpi-value" id="dd-efectivo">$0</div><div class="kpi-sub">Dinero físico recibido</div></div>
     <div class="kpi-card accent"><div class="kpi-label">Transferencia</div><div class="kpi-value" id="dd-transferencia">$0</div><div class="kpi-sub">Pago digital recibido</div></div>
   </div>
-  <div class="two-col" style="margin-bottom:20px;">
+
+  <div class="panel" style="margin-bottom:20px;" id="dd-notas-panel">
+    <div class="panel-header"><div class="panel-title">📝 Notas del día</div></div>
+    <div class="panel-body" id="dd-notas-body"></div>
+  </div>
+
+  <!-- Se muestra cuando este turno ya está cerrado y no se está viendo desde el historial -->
+  <div class="alert ok" id="dd-cerrado-banner" style="display:none;margin-bottom:20px;">
+    <div style="flex:1;">🔒 Este turno ya está cerrado. Los valores quedaron guardados — usa "Ver" en el historial para revisarlo, o abre un turno nuevo para seguir registrando.</div>
+    <button type="button" class="btn-abrir-turno" onclick="abrirModalTurno()">🔓 Abrir turno</button>
+  </div>
+
+  <div class="two-col" style="margin-bottom:20px;" id="dd-form-activo">
     <div class="panel">
       <div class="panel-header"><div class="panel-title">Gastos / valores extra del día</div></div>
       <div class="panel-body">
         <div class="form-row mb">
           <div class="form-group"><label>Nombre</label><input type="text" id="dd-gasto-nombre" placeholder="ej: Comida del día…"></div>
-          <div class="form-group"><label>Monto ($)</label><input type="number" id="dd-gasto-monto" placeholder="0"></div>
+          <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="dd-gasto-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
         </div>
         <button class="btn btn-primary" onclick="agregarGastoDia()">+ Agregar gasto</button>
         <div class="divider"></div>
@@ -825,15 +949,42 @@
       </div>
     </div>
     <div class="panel">
-      <div class="panel-header"><div class="panel-title">Resultado del cierre</div></div>
+      <div class="panel-header">
+        <div class="panel-title">Resultado del cierre</div>
+        <span id="dd-modo-label" style="font-size:10px;color:var(--text3);"></span>
+      </div>
       <div class="panel-body">
-        <div class="report-line"><span>Efectivo recibido</span><strong class="amount-pos" id="dd-res-efectivo">$0</strong></div>
+        <div class="report-line"><span>Caja inicial del turno</span><strong id="dd-res-caja-inicial">$0</strong></div>
+        <div class="report-line" id="dd-res-desayuno-row"><span>Venta desayuno</span><strong id="dd-res-desayuno">$0</strong></div>
+        <div class="report-line"><span>Efectivo recibido (pedidos)</span><strong class="amount-pos" id="dd-res-efectivo">$0</strong></div>
         <div class="report-line"><span>Transferencia recibida</span><strong class="amount-pos" id="dd-res-transferencia">$0</strong></div>
         <div class="report-line"><span>Total gastos extra</span><strong class="amount-neg" id="dd-res-gastos">$0</strong></div>
+        <div class="report-line" id="dd-res-ajuste-row" style="display:none;"><span>Ajuste</span><strong id="dd-res-ajuste">$0</strong></div>
+
+        <button type="button" class="btn btn-outline" style="width:100%;margin:10px 0;" onclick="toggleAjusteManual()" id="btn-toggle-ajuste">➕ Ajuste</button>
+        <div id="ajuste-manual-section" style="display:none;margin-bottom:10px;">
+          <div class="form-group mb">
+            <label>Ajuste ($) <span style="color:var(--text3);font-weight:400;">— escribe un valor negativo (ej: -5000) para restar</span></label>
+            <input type="text" inputmode="numeric" id="dd-ajuste-monto" placeholder="0" oninput="formatMilesConSigno(this); recalcularResultadoCierre()">
+          </div>
+          <div class="form-group mb">
+            <label>Explicación del ajuste <span class="req">*</span></label>
+            <input type="text" id="dd-ajuste-nota" placeholder="ej: faltante en caja sin identificar, redondeo…">
+          </div>
+        </div>
+
         <div class="divider"></div>
-        <div class="monto-display">
+        <div class="monto-display" style="background:rgba(76,175,125,0.07);border-color:rgba(76,175,125,0.25);">
+          <div class="monto-val" id="dd-total-turno" style="color:var(--green);">$0</div>
+          <div class="monto-label">Total del turno (efectivo + transferencia)</div>
+        </div>
+        <div class="monto-display" style="margin-top:10px;">
           <div class="monto-val" id="dd-resultado">$0</div>
-          <div class="monto-label">Resultado (efectivo + transf. − gastos)</div>
+          <div class="monto-label">Utilidad del turno (ingresos − gastos ± ajuste)</div>
+        </div>
+        <div class="monto-display" style="margin-top:10px;background:rgba(91,155,213,0.07);border-color:rgba(91,155,213,0.25);">
+          <div class="monto-val" id="dd-caja-esperada" style="color:var(--blue);">$0</div>
+          <div class="monto-label">Caja esperada en efectivo al cierre</div>
         </div>
         <button class="btn btn-primary" onclick="guardarCierre()" style="width:100%;margin-top:14px;">💾 Guardar cierre del día</button>
       </div>
@@ -853,11 +1004,226 @@
   </div>
 </section>
 
+<!-- ===== CAJA ===== -->
+<section class="section" id="tab-caja">
+  <div class="filter-bar">
+    <button class="filter-btn" onclick="setFCaja('hoy',this)">Hoy</button>
+    <button class="filter-btn" onclick="setFCaja('semana',this)">Semana</button>
+    <button class="filter-btn active" onclick="setFCaja('mes',this)">Mes</button>
+    <button class="filter-btn" onclick="setFCaja('todo',this)">Todo</button>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card green"><div class="kpi-label">Utilidad acumulada — Efectivo</div><div class="kpi-value" id="caja-efectivo">$0</div><div class="kpi-sub">Solo referencia — todo el histórico</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Utilidad acumulada — Transferencia</div><div class="kpi-value" id="caja-transferencia">$0</div><div class="kpi-sub">Solo referencia — todo el histórico</div></div>
+    <div class="kpi-card accent"><div class="kpi-label">Total disponible en Caja</div><div class="kpi-value" id="caja-disponible">$0</div><div class="kpi-sub">Efectivo + transferencia + aportes − gastos (una sola bolsa)</div></div>
+  </div>
+
+  <div class="two-col" style="margin-bottom:20px;">
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Registrar movimiento de caja</div></div>
+      <div class="panel-body">
+        <div class="form-group mb">
+          <label>Tipo</label>
+          <div style="display:flex;gap:8px;" id="caja-tipo-buttons">
+            <button type="button" class="filter-btn active" onclick="setTipoMovimientoCaja('gasto',this)" style="flex:1;">➖ Gasto</button>
+            <button type="button" class="filter-btn" onclick="setTipoMovimientoCaja('aporte',this)" style="flex:1;">➕ Aporte de capital</button>
+          </div>
+        </div>
+        <div class="form-row mb">
+          <div class="form-group"><label>Fecha</label><input type="date" id="caja-mov-fecha"></div>
+          <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="caja-mov-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
+        </div>
+        <div class="form-group mb">
+          <label>Detalle <span class="req">*</span></label>
+          <input type="text" id="caja-mov-descripcion" placeholder="ej: Mercado en Ara, aporte para arreglar nevera…">
+        </div>
+        <button class="btn btn-primary" onclick="agregarMovimientoCaja()" style="width:100%;">+ Registrar movimiento</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">Utilidades por día</div></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Efectivo</th><th>Transferencia</th><th>Total</th></tr></thead><tbody id="caja-historial-body"></tbody></table></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><div class="panel-title">Movimientos de caja (gastos y aportes de capital)</div></div>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Monto</th><th></th></tr></thead><tbody id="caja-movimientos-body"></tbody></table></div>
+  </div>
+</section>
+
+<!-- ===== AUDITORÍA (acceso con contraseña) ===== -->
+<section class="section" id="tab-auditoria">
+  <div id="auditoria-login" class="panel" style="max-width:400px;margin:60px auto;">
+    <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
+    <div class="panel-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Esta sección muestra todos los ajustes manuales hechos en los cierres.</div>
+      <div class="form-group mb">
+        <label>Contraseña</label>
+        <input type="password" id="auditoria-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAuditoria()">
+      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAuditoria()">Entrar</button>
+    </div>
+  </div>
+
+  <div id="auditoria-contenido" style="display:none;">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📋 Ajustes manuales registrados en cierres</div>
+        <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAuditoria()">🔒 Cerrar sesión</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Fecha</th><th>Turno</th><th>Ajuste</th><th>Explicación</th></tr></thead>
+          <tbody id="auditoria-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
 
 <div id="detalle-modal" class="modal-overlay" style="display:none;" onclick="cerrarModalDetalle(event)">
   <div class="modal-box">
     <button class="modal-close" onclick="document.getElementById('detalle-modal').style.display='none'">✕</button>
     <div id="detalle-modal-content"></div>
+  </div>
+</div>
+
+<!-- Modal: Abrir turno -->
+<div id="modal-turno" class="modal-overlay" style="display:none;" onclick="cerrarModalTurnoClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModalTurno()">✕</button>
+    <div id="apertura-modal-titulo" style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--green);margin-bottom:18px;">🔓 Abrir turno</div>
+
+    <div class="form-group mb">
+      <label>Turno a abrir</label>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="filter-btn" id="apertura-btn-almuerzo" onclick="seleccionarTurnoApertura('almuerzo')" style="flex:1;">☀️ Almuerzo</button>
+        <button type="button" class="filter-btn" id="apertura-btn-cena" onclick="seleccionarTurnoApertura('cena')" style="flex:1;">🌙 Comidas Rápidas</button>
+      </div>
+    </div>
+
+    <div class="form-group mb">
+      <label>Caja inicial ($) <span class="req">*</span></label>
+      <input type="text" inputmode="numeric" id="apertura-caja-inicial" placeholder="0" oninput="formatMilesInput(this)">
+    </div>
+
+    <div class="form-group mb" id="apertura-desayuno-wrap" style="display:none;">
+      <label>¿Cuánto se vendió en desayuno? ($)</label>
+      <input type="text" inputmode="numeric" id="apertura-venta-desayuno" placeholder="0" oninput="formatMilesInput(this)">
+    </div>
+
+    <button class="btn btn-success" id="apertura-btn-guardar" style="width:100%;" onclick="guardarAperturaTurno()">✅ Abrir turno</button>
+  </div>
+</div>
+
+<!-- Modal: Notas del día -->
+<div id="modal-notas" class="modal-overlay" style="display:none;" onclick="cerrarModalNotasClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="document.getElementById('modal-notas').style.display='none'">✕</button>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:16px;">📝 Notas del día</div>
+    <div class="form-group mb">
+      <label>Nueva nota</label>
+      <input type="text" id="nota-nueva-texto" placeholder="ej: Jose me prestó 5.000 para dar vuelto" onkeydown="if(event.key==='Enter')agregarNotaDia()">
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-bottom:16px;" onclick="agregarNotaDia()">+ Agregar nota</button>
+    <div id="notas-lista"></div>
+  </div>
+</div>
+
+<!-- Modal: Cambiar de mesa un pedido pendiente -->
+<div id="modal-cambiar-mesa" class="modal-overlay" style="display:none;" onclick="cerrarModalCambiarMesaClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModalCambiarMesa()">✕</button>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:16px;">🔄 Cambiar de mesa</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Elige la mesa a la que se reubica este pedido.</div>
+    <div class="mesa-grid" id="cambiar-mesa-grid"></div>
+    <button class="btn-sinmesa" onclick="moverPedidoASinMesa()">🧍 Sin mesa</button>
+  </div>
+</div>
+
+<!-- Modal: Agregar producto a una mesa ya registrada -->
+<div id="modal-agregar-producto" class="modal-overlay" style="display:none;" onclick="cerrarModalAgregarProductoClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModalAgregarProducto()">✕</button>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:16px;">+ Agregar producto <span id="extra-producto-mesa-label"></span></div>
+    <div class="form-group mb">
+      <label>Producto conocido <span style="color:var(--text3);font-weight:400;">(opcional, autocompleta)</span></label>
+      <select id="extra-producto-catalogo" onchange="aplicarCatalogoExtra()">
+        <option value="">— Escribir manualmente —</option>
+      </select>
+    </div>
+    <div class="form-group mb">
+      <label>Descripción <span class="req">*</span></label>
+      <input type="text" id="extra-producto-desc" placeholder="ej: Botella de agua">
+    </div>
+    <div class="form-row mb">
+      <div class="form-group">
+        <label>Valor unitario ($) <span class="req">*</span></label>
+        <input type="text" inputmode="numeric" id="extra-producto-valor" placeholder="0" oninput="formatMilesInput(this)">
+      </div>
+      <div class="form-group">
+        <label>Cantidad</label>
+        <input type="number" id="extra-producto-cantidad" value="1" min="1">
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;" onclick="guardarProductoExtra()">+ Agregar a la cuenta</button>
+  </div>
+</div>
+
+<!-- Modal: Editar un pedido ya registrado en Pendientes -->
+<div id="modal-editar-pedido" class="modal-overlay" style="display:none;" onclick="cerrarModalEditarPedidoClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModalEditarPedido()">✕</button>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:16px;">✏️ Editar pedido</div>
+
+    <div class="modal-field" style="margin-bottom:14px;">
+      <div class="modal-field-label">Detalle actual (referencia)</div>
+      <div class="modal-field-value" id="editar-ped-actual" style="color:var(--text3);font-size:12px;">—</div>
+    </div>
+
+    <div class="form-group mb">
+      <label>Tipo de pedido</label>
+      <select id="editar-ped-tipo" onchange="onEditarPedTipoChange()"></select>
+    </div>
+
+    <div id="editar-ped-campos-almuerzo" style="display:none;">
+      <div class="form-row-3">
+        <div class="form-group"><label>Sopa</label><input type="text" id="editar-ped-sopa" placeholder="Sopa de hueso…"></div>
+        <div class="form-group"><label>Arroz</label><input type="text" id="editar-ped-arroz" placeholder="Arroz blanco…"></div>
+        <div class="form-group"><label>Proteína</label><input type="text" id="editar-ped-proteina" placeholder="Pollo guisado…"></div>
+      </div>
+      <div class="form-group mb"><label>Acompañamiento</label><input type="text" id="editar-ped-acomp" placeholder="Patacones…"></div>
+    </div>
+
+    <div id="editar-ped-campos-cena" style="display:none;">
+      <div class="form-group mb">
+        <label>Bebida <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+        <select id="editar-ped-bebida" onchange="recalcularEditarPedidoMonto()"></select>
+      </div>
+      <div class="form-group mb" id="editar-ped-precio-manual" style="display:none;">
+        <label>Precio ($)</label>
+        <input type="text" inputmode="numeric" id="editar-ped-precio" oninput="formatMilesInput(this); recalcularEditarPedidoMonto()">
+      </div>
+    </div>
+
+    <div class="form-group mb">
+      <label>Cantidad</label>
+      <input type="number" id="editar-ped-cantidad" value="1" min="1" oninput="recalcularEditarPedidoMonto()">
+    </div>
+
+    <div class="form-group mb">
+      <label>Nota / detalle adicional <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+      <input type="text" id="editar-ped-nota" placeholder="ej: sin cebolla, camiseta naranja de rayas…">
+    </div>
+
+    <div class="monto-display" style="margin-bottom:16px;">
+      <div class="monto-val" id="editar-ped-monto-display">$0</div>
+      <div class="monto-label">Nuevo valor de este plato</div>
+    </div>
+
+    <button class="btn btn-primary" style="width:100%;" onclick="guardarEdicionPedido()">💾 Guardar cambios</button>
   </div>
 </div>
 </main>
@@ -944,10 +1310,47 @@ const LABELS = {
   completo:'Almuerzo Completo', seco:'Almuerzo Seco',
   asado130:'Asado 130g', asado200:'Asado 200g',
   'porcion-sopa':'Porción de Sopa', 'porcion-arroz':'Porción de Arroz',
+  'sopa-y-arroz':'Sopa y Arroz',
+  extra: 'Producto adicional',
   ...Object.fromEntries(PL.comidaRapida.map(p => [p.c, p.n]))
 };
 
-const PRECIOS = {completo:14000,seco:12000,asado130:17000,asado200:20000,'porcion-sopa':7000,'porcion-arroz':4000};
+const PRECIOS = {completo:14000,seco:12000,asado130:17000,asado200:20000,'porcion-sopa':6000,'porcion-arroz':4000,'sopa-y-arroz':11000};
+
+// Catálogo de productos extra con precio conocido — se irá ampliando.
+// Autocompleta descripción + valor unitario en el pop-up "Agregar producto";
+// igual se puede escribir cualquier otra cosa a mano que no esté aquí.
+const PRODUCTOS_EXTRA = [
+  { n: 'Botella de agua', precio: 1000 },
+  { n: 'Avena',           precio: 4000 },
+];
+
+function poblarCatalogoExtra() {
+  const sel = document.getElementById('extra-producto-catalogo');
+  if (!sel) return;
+  sel.innerHTML = `<option value="">— Escribir manualmente —</option>` +
+    PRODUCTOS_EXTRA.map((p, i) => `<option value="${i}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`).join('');
+}
+
+function aplicarCatalogoExtra() {
+  const sel = document.getElementById('extra-producto-catalogo');
+  if (!sel || sel.value === '') return;
+  const p = PRODUCTOS_EXTRA[parseInt(sel.value, 10)];
+  if (!p) return;
+  document.getElementById('extra-producto-desc').value = p.n;
+  document.getElementById('extra-producto-valor').value = p.precio.toLocaleString('es-CO');
+}
+
+// Número de mesas del salón (ajusta aquí si cambia el número real de mesas)
+const NUM_MESAS = 8;
+
+// "Para llevar" aplica a mesas y a "sin mesa" (cliente esperando de pie), no a domicilio/fiado
+function puedeParaLlevar(ubicacion) {
+  return !!ubicacion && (ubicacion.startsWith('mesa_') || ubicacion === 'sinmesa');
+}
+
+// Cargo fijo por el porta desechable de todo pedido a domicilio
+const EMPAQUE_DOMICILIO = 1000;
 
 // ── Supabase ───────────────────────────────────────────────────────────
 const SB_URL = 'https://arxyfcquvsmfoxmbifne.supabase.co';
@@ -1003,7 +1406,10 @@ let ST = {
   consumos:   [],
   gastosDia:  [],
   mesas:      [],   // 15 filas de la tabla mesas
-  cierresDia: []    // cierres guardados
+  cierresDia: [],   // cierres guardados
+  aperturasTurno: [], // aperturas de turno (caja inicial + venta desayuno)
+  notasDia:   [],   // notas/recordatorios del día
+  movimientosCaja: [] // gastos generales y aportes de capital (sección Caja)
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -1023,26 +1429,39 @@ function setSyncBadge(estado) {
 }
 
 // ── Toast notifications ───────────────────────────────────────────────
-function showToast(msg, tipo = 'info') {
+// accion opcional: { label:'↩ Deshacer', onClick: () => {...} } — muestra un botón en el toast.
+function showToast(msg, tipo = 'info', accion = null) {
   const el = document.createElement('div');
   el.className = `toast ${tipo}`;
-  el.textContent = msg;
+  const span = document.createElement('span');
+  span.textContent = msg;
+  el.appendChild(span);
+  if (accion) {
+    const btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.textContent = accion.label;
+    btn.onclick = () => { accion.onClick(); el.remove(); };
+    el.appendChild(btn);
+  }
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
+  setTimeout(() => el.remove(), accion ? 8000 : 3000);
 }
 
 // ── loadState: lee todas las tablas en paralelo ───────────────────────
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia] = await Promise.all([
+    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja] = await Promise.all([
       sbGet('pedidos',     'order=created_at.desc'),
       sbGet('egresos',     'order=created_at.desc'),
       sbGet('inventario',  'order=nombre.asc'),
       sbGet('consumos',    'order=fecha.desc'),
       sbGet('gastos_dia',  'order=fecha.desc'),
       sbGet('mesas',       'order=numero.asc'),
-      sbGet('cierres_dia', 'order=fecha.desc').catch(() => [])
+      sbGet('cierres_dia', 'order=fecha.desc').catch(() => []),
+      sbGet('aperturas_turno', 'order=created_at.desc').catch(() => []),
+      sbGet('notas_dia',   'order=created_at.desc').catch(() => []),
+      sbGet('movimientos_caja', 'order=created_at.desc').catch(() => [])
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
@@ -1053,6 +1472,9 @@ async function loadState() {
     ST.gastosDia  = gastosDia;
     ST.mesas      = mesas;
     ST.cierresDia = cierresDia;
+    ST.aperturasTurno = aperturasTurno;
+    ST.notasDia   = notasDia;
+    ST.movimientosCaja = movimientosCaja;
 
     setSyncBadge('ok');
   } catch (e) {
@@ -1068,6 +1490,43 @@ async function loadState() {
 const fmt      = n  => '$' + Math.abs(Math.round(n)).toLocaleString('es-CO');
 const today    = () => new Date().toISOString().split('T')[0];
 const nowTime  = () => { const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+
+// ── Formato de miles en campos de dinero (100000 → 100.000 mientras se escribe) ─
+function parseMiles(str) {
+  if (!str) return 0;
+  const limpio = String(str).replace(/[^\d]/g, '');
+  return limpio ? parseInt(limpio, 10) : 0;
+}
+function valMiles(id) {
+  const el = document.getElementById(id);
+  return el ? parseMiles(el.value) : 0;
+}
+function formatMilesInput(el) {
+  const limpio = String(el.value).replace(/[^\d]/g, '');
+  el.value = limpio ? parseInt(limpio, 10).toLocaleString('es-CO') : '';
+}
+// Igual que formatMilesInput pero conservando un "-" inicial (para el campo
+// "Ajuste", que puede ser positivo o negativo).
+function formatMilesConSigno(el) {
+  const raw = String(el.value);
+  const negativo = raw.trim().startsWith('-');
+  const digitos = raw.replace(/[^\d]/g, '');
+  el.value = digitos ? (negativo ? '-' : '') + parseInt(digitos, 10).toLocaleString('es-CO') : (negativo ? '-' : '');
+}
+function valMilesConSigno(id) {
+  const el = document.getElementById(id);
+  if (!el) return 0;
+  const raw = String(el.value);
+  const negativo = raw.trim().startsWith('-');
+  const digitos = raw.replace(/[^\d]/g, '');
+  const num = digitos ? parseInt(digitos, 10) : 0;
+  return negativo ? -num : num;
+}
+// Para texto libre (ej. notas del día): reformatea números sueltos de 4+ dígitos
+// con puntos de miles, dejando el resto del texto intacto.
+function formatearNumerosEnTexto(texto) {
+  return String(texto ?? '').replace(/\d{4,}/g, m => parseInt(m, 10).toLocaleString('es-CO'));
+}
 const weekStart= () => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().split('T')[0]; };
 const monthStart=()=> { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; };
 
@@ -1076,6 +1535,15 @@ function inP(fecha, p) {
   if (p === 'semana') return fecha >= weekStart();
   if (p === 'mes')    return fecha >= monthStart();
   return true;
+}
+
+// Venta de desayuno del período: no es un "pedido" (no está en la tabla
+// pedidos), solo se registra al abrir el turno de almuerzo — hay que sumarla
+// aparte en cualquier total de ingresos para que cuadre con Cierre/Caja.
+function desayunoEnPeriodo(periodo) {
+  return ST.aperturasTurno
+    .filter(a => a.turno === 'almuerzo' && inP(a.fecha, periodo))
+    .reduce((a, b) => a + (b.venta_desayuno || 0), 0);
 }
 
 function turnoFromHora(h) {
@@ -1158,6 +1626,8 @@ async function importarDatos(e) {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
+// El reloj del header es solo visual: NUNCA toca el campo "Hora del pedido",
+// así el formulario no se reinicia solo mientras el usuario está llenándolo.
 function actualizarReloj() {
   const ahora = new Date();
   const hora = ahora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
@@ -1165,16 +1635,13 @@ function actualizarReloj() {
     ahora.toLocaleDateString('es-CO', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     }) + ' · ' + hora;
-  const horaInput = document.getElementById('ing-hora');
-  if (horaInput && document.activeElement !== horaInput) {
-    const hh = String(ahora.getHours()).padStart(2, '0');
-    const mm = String(ahora.getMinutes()).padStart(2, '0');
-    const nuevaHora = `${hh}:${mm}`;
-    if (horaInput.value !== nuevaHora) {
-      horaInput.value = nuevaHora;
-      onHoraChange();
-    }
-  }
+}
+
+// Botón manual junto a "Hora del pedido": el usuario decide cuándo tomar la hora actual.
+function refrescarHoraPedido() {
+  document.getElementById('ing-hora').value = nowTime();
+  onHoraChange();
+  showToast('🕐 Hora del pedido actualizada', 'info');
 }
 
 // Solo actualizar el header al cargar (sin llamar onHoraChange todavía)
@@ -1187,7 +1654,7 @@ function actualizarReloj() {
     }) + ' · ' + hora;
 })();
 
-['ing-fecha','egr-fecha','venta-fecha','dd-fecha'].forEach(id => {
+['ing-fecha','egr-fecha','venta-fecha','dd-fecha','caja-mov-fecha'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.value = today();
 });
@@ -1208,11 +1675,119 @@ let acIdx = { sopa:-1, arroz:-1, proteina:-1, acomp:-1 };
 // ── Selección de ubicación (form Ingresos) ────────────────────────────
 let selectedUbicacion = null; // 'mesa_X' | 'domicilio' | null
 
+// Productos extra en cola mientras se arma el pedido en Ingresos — se insertan
+// junto con los almuerzos al registrar (no afectan "cantidad de pedidos", que es
+// solo la cantidad de almuerzos).
+let extrasIngresoPendientes = [];
+
+// Almuerzos en cola: "Agregar almuerzo" NO inserta nada todavía — solo guarda
+// el almuerzo actual aquí y limpia el formulario para el siguiente. Todo se
+// inserta junto (mismo grupo de pedido) cuando se hace clic en Registrar/Pagado.
+let almuerzosEnCola = [];
+
+function renderAlmuerzosEnColaLista() {
+  const el = document.getElementById('ing-almuerzos-cola-lista');
+  if (!el) return;
+  if (!almuerzosEnCola.length) { el.innerHTML = ''; return; }
+  el.innerHTML = almuerzosEnCola.map((it, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:4px;font-size:12px;">
+      <span style="color:var(--text2);">${it.cantidad} × ${LABELS[it.pedido] || it.pedido}${it.detalle ? ' — ' + it.detalle : ''}</span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <strong style="color:var(--green);">${fmt(it.monto_almuerzo)}</strong>
+        <button type="button" class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="quitarAlmuerzoDeCola(${i})">✕</button>
+      </span>
+    </div>`).join('');
+}
+
+function quitarAlmuerzoDeCola(idx) {
+  almuerzosEnCola.splice(idx, 1);
+  renderAlmuerzosEnColaLista();
+  actualizarMontoDisplay();
+  validarRegistro();
+}
+
+// Lee el almuerzo que está armado ahora mismo en el formulario. Devuelve null
+// si no hay un tipo de pedido seleccionado o el monto no es válido.
+function leerAlmuerzoActualDelFormulario() {
+  const pedido = document.getElementById('ing-pedido').value;
+  if (!pedido) return null;
+
+  const cantidad = parseInt(document.getElementById('ing-cantidad').value) || 1;
+  const baseAlm  = parseFloat(document.getElementById('ing-monto-alm').value) || 0;
+  const bebidaSel = document.getElementById('ing-bebida');
+  const montoBebida = (bebidaSel && bebidaSel.value)
+    ? (parseFloat(bebidaSel.options[bebidaSel.selectedIndex]?.getAttribute('data-monto')) || 0)
+    : 0;
+  const montoUnit = baseAlm + montoBebida;
+  const chkPL = document.getElementById('ing-para-llevar');
+  const esPL  = puedeParaLlevar(selectedUbicacion) && chkPL && chkPL.checked && turnoManual === 'almuerzo';
+  const monto_almuerzo = (montoUnit + (esPL ? 1000 : 0)) * cantidad;
+  if (monto_almuerzo <= 0) return null;
+
+  const sopa     = document.getElementById('ing-sopa').value;
+  const arroz    = document.getElementById('ing-arroz').value;
+  const proteina = document.getElementById('ing-proteina').value;
+  const acomp    = document.getElementById('ing-acomp').value;
+  const crDesc   = document.getElementById('ing-cr-desc').value.trim();
+  const crItem   = PL.comidaRapida.find(p => p.c === pedido);
+  const bebidaItem = (bebidaSel && bebidaSel.value) ? PL.comidaRapida.find(p => p.c === bebidaSel.value) : null;
+  const direccionValue = selectedUbicacion === 'domicilio'
+    ? (document.getElementById('ing-direccion')?.value.trim() || '')
+    : '';
+  const detallesExtra = document.getElementById('ing-detalles-extra').value.trim();
+  const detalleBase = crItem
+    ? [crItem.n, bebidaItem?.n, crDesc, direccionValue ? '📍 ' + direccionValue : ''].filter(Boolean).join(' · ')
+    : [sopa, arroz, proteina, acomp, direccionValue ? '📍 ' + direccionValue : ''].filter(Boolean).join(' · ');
+  const detalle = [detalleBase, detallesExtra].filter(Boolean).join(' · ');
+
+  return {
+    pedido, sopa: sopa||'', arroz: arroz||'', proteina: proteina||'', acomp: acomp||'',
+    detalle, cantidad, monto_unit: montoUnit, monto_almuerzo, para_llevar: esPL
+  };
+}
+
+// Limpia solo los campos del almuerzo actual (tipo, sopa/arroz/proteína, etc.)
+// — NO toca la ubicación (mesa/sin mesa/domicilio/fiado), que es del pedido completo.
+function limpiarCamposAlmuerzo() {
+  document.getElementById('ing-pedido').value   = '';
+  document.getElementById('ing-cantidad').value = '1';
+  document.getElementById('ing-cr-desc').value  = '';
+  document.getElementById('ing-detalles-extra').value = '';
+  const crMontoEl = document.getElementById('ing-cr-monto');
+  if (crMontoEl) crMontoEl.value = '';
+  document.getElementById('cr-precio-manual').style.display = 'none';
+  const bebidaSelR = document.getElementById('ing-bebida');
+  if (bebidaSelR) bebidaSelR.value = '';
+  document.getElementById('campo-bebida').style.display = 'none';
+  document.getElementById('ing-para-llevar').checked = false;
+  onPedidoChange(); // limpia sopa/arroz/proteína/acomp, oculta secciones y recalcula todo
+}
+
+function renderExtrasIngresoLista() {
+  const el = document.getElementById('ing-extras-lista');
+  if (!el) return;
+  if (!extrasIngresoPendientes.length) { el.innerHTML = ''; return; }
+  el.innerHTML = extrasIngresoPendientes.map((ex, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:4px;font-size:12px;">
+      <span style="color:var(--text2);">${ex.cantidad} × ${ex.descripcion}</span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <strong style="color:var(--green);">${fmt(ex.cantidad * ex.valorUnitario)}</strong>
+        <button type="button" class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="quitarExtraIngreso(${i})">✕</button>
+      </span>
+    </div>`).join('');
+}
+
+function quitarExtraIngreso(idx) {
+  extrasIngresoPendientes.splice(idx, 1);
+  renderExtrasIngresoLista();
+  actualizarMontoDisplay();
+}
+
 function renderMesasForm() {
   const grid = document.getElementById('ing-mesas-grid');
   if (!grid) return;
   let html = '';
-  for (let i = 1; i <= 15; i++) {
+  for (let i = 1; i <= NUM_MESAS; i++) {
     const pendCnt = ST.pendientes.filter(p => p.mesa === i).length;
     const isSel   = selectedUbicacion === `mesa_${i}`;
 
@@ -1236,9 +1811,23 @@ function renderMesasForm() {
   if (btnFiar) {
     btnFiar.className = 'btn-fiar' + (selectedUbicacion === 'fiar' ? ' selected' : '');
   }
+  // Botón sin mesa
+  const btnSinMesa = document.getElementById('btn-sinmesa');
+  if (btnSinMesa) {
+    btnSinMesa.className = 'btn-sinmesa' + (selectedUbicacion === 'sinmesa' ? ' selected' : '');
+  }
 }
 
 function seleccionarUbicacion(ubicacion) {
+  // Cambiar a OTRA ubicación equivale a un pedido nuevo: se descarta lo que
+  // hubiera en cola (no tendría sentido mezclarlo con otra mesa/domicilio).
+  // Si se vuelve a hacer clic en la misma ubicación ya seleccionada, no se pierde nada.
+  if (selectedUbicacion !== ubicacion && (almuerzosEnCola.length || extrasIngresoPendientes.length)) {
+    almuerzosEnCola = [];
+    extrasIngresoPendientes = [];
+    renderAlmuerzosEnColaLista();
+    renderExtrasIngresoLista();
+  }
   selectedUbicacion = ubicacion;
 
   const paraLlevarSection = document.getElementById('para-llevar-section');
@@ -1260,6 +1849,7 @@ function seleccionarUbicacion(ubicacion) {
     if (dirElF) dirElF.value = '';
     chkPL.checked = false;
   } else {
+    // mesa_X y sin mesa: ambas permiten marcar "para llevar"
     paraLlevarSection.style.display = 'flex';
     domSection.style.display        = 'none';
     if (fiarSection) fiarSection.style.display = 'none';
@@ -1283,6 +1873,26 @@ function onDomicilioChange() {
   validarRegistro();
 }
 
+// ¿Sigue abierto este turno? Necesita una apertura guardada Y que todavía no
+// se haya guardado su cierre — al cerrar (sección Cierre), el turno vuelve a
+// quedar "no abierto" y hay que abrirlo de nuevo para seguir registrando.
+// Si se elimina el cierre por error, el turno vuelve a considerarse abierto.
+function turnoAbierto(fecha, turno) {
+  const tieneApertura = ST.aperturasTurno.some(a => a.fecha === fecha && a.turno === turno);
+  if (!tieneApertura) return false;
+  const yaCerrado = ST.cierresDia.some(c => c.fecha === fecha && c.turno === turno);
+  return !yaCerrado;
+}
+
+// Refleja en el botón del header si el turno actual (hoy) ya está abierto o no.
+function actualizarBotonAbrirTurno() {
+  const btn = document.getElementById('btn-abrir-turno-header');
+  if (!btn) return;
+  const abiertoHoy = turnoAbierto(today(), turnoManual);
+  btn.textContent = abiertoHoy ? '🔒 Turno abierto — editar caja' : '🔓 Abrir turno';
+  btn.classList.toggle('abierto', abiertoHoy);
+}
+
 function validarRegistro() {
   const pedido   = document.getElementById('ing-pedido').value;
   const montoAlm = parseFloat(document.getElementById('ing-monto-alm').value) || 0;
@@ -1291,14 +1901,60 @@ function validarRegistro() {
     ? (parseFloat(bebidaSel.options[bebidaSel.selectedIndex]?.getAttribute('data-monto')) || 0)
     : 0;
   const btn = document.getElementById('btn-reg');
+  const btnPagado = document.getElementById('btn-reg-pagado');
+  const btnAgregarAlmuerzo = document.getElementById('btn-agregar-almuerzo');
 
-  const ok = !!(pedido && selectedUbicacion && (montoAlm > 0 || montoBebida > 0));
-  btn.disabled = !ok;
+  const fecha = document.getElementById('ing-fecha').value;
+  const abierto = turnoAbierto(fecha, turnoManual);
+  const alertEl = document.getElementById('ing-turno-cerrado-alert');
+  if (alertEl) alertEl.style.display = abierto ? 'none' : 'flex';
+  actualizarBotonAbrirTurno();
+
+  const actualValido = !!(pedido && (montoAlm > 0 || montoBebida > 0));
+
+  // "Agregar almuerzo" necesita un almuerzo válido en el formulario en este momento.
+  const okAgregar = !!(actualValido && selectedUbicacion && abierto);
+  if (btnAgregarAlmuerzo) btnAgregarAlmuerzo.disabled = !okAgregar;
+
+  // Registrar/Pagado inmediatamente puede ir con lo que ya está en cola,
+  // aunque el formulario actual esté vacío (por eso no exige actualValido).
+  const hayAlgoParaRegistrar = actualValido || almuerzosEnCola.length > 0;
+  const okRegistrar = !!(hayAlgoParaRegistrar && selectedUbicacion && abierto);
+  btn.disabled = !okRegistrar;
+  if (btnPagado) btnPagado.disabled = !okRegistrar;
+}
+
+// ── Método de pago → mostrar/ocultar calculadora de vuelto ─────────────
+function onMetodoChange() {
+  const metodo = document.getElementById('ing-metodo').value;
+  const sec = document.getElementById('vuelto-section');
+  if (!sec) return;
+  if (metodo === 'efectivo') {
+    sec.style.display = 'flex';
+    sec.style.flexDirection = 'column';
+  } else {
+    sec.style.display = 'none';
+    document.getElementById('ing-pago-con').value = '';
+    document.getElementById('vuelto-resultado').innerHTML = '';
+  }
+}
+onMetodoChange();
+
+function calcularVuelto() {
+  const resEl = document.getElementById('vuelto-resultado');
+  if (!resEl) return;
+  const pagoCon = valMiles('ing-pago-con');
+  if (pagoCon <= 0) { resEl.innerHTML = ''; return; }
+  const { total } = calcularTotalPedido();
+  const vuelto = pagoCon - total;
+  resEl.innerHTML = vuelto < 0
+    ? `<span style="color:var(--red);">Falta ${fmt(Math.abs(vuelto))}</span>`
+    : `<span style="color:var(--green);">Vuelto a entregar: ${fmt(vuelto)}</span>`;
 }
 
 // ── Turno ─────────────────────────────────────────────────────────────
 function rebuildPedidoSelect() {
-  const turno = turnoFromHora(document.getElementById('ing-hora').value);
+  const turno = turnoManual;
   const sel = document.getElementById('ing-pedido');
   if (turno === 'almuerzo') {
     sel.innerHTML = `
@@ -1308,8 +1964,9 @@ function rebuildPedidoSelect() {
         <option value="seco"          data-monto="12000">Almuerzo Seco (sin sopa) · $12.000</option>
         <option value="asado130"      data-monto="17000">Asado 130g · $17.000</option>
         <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
-        <option value="porcion-sopa"  data-monto="7000">Porción de Sopa · $7.000</option>
+        <option value="porcion-sopa"  data-monto="6000">Porción de Sopa · $6.000</option>
         <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
+        <option value="sopa-y-arroz"  data-monto="11000">Sopa y Arroz · $11.000</option>
       </optgroup>`;
   } else {
     const cats = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS','SANDWICH CUBANO','AREPAS','SUIZOS','ADICIONALES'];
@@ -1335,11 +1992,28 @@ function rebuildPedidoSelect() {
   onPedidoChange();
 }
 
-function onHoraChange() {
-  const t = turnoFromHora(document.getElementById('ing-hora').value);
+// El turno YA NO se calcula solo a partir de la hora — se elige manualmente
+// con los botones ☀️ Almuerzo / 🌙 Comidas Rápidas y se queda ahí hasta que
+// el usuario lo cambie. Arranca con un valor razonable según la hora actual.
+let turnoManual = turnoFromHora(nowTime());
+
+function seleccionarTurnoManual(t) {
+  turnoManual = t;
+  pintarTurnoManual();
+  rebuildPedidoSelect();
+  actualizarMontoDisplay();
+  validarRegistro();
+  renderPedidosTurno();
+}
+
+function pintarTurnoManual() {
   const hdr   = document.getElementById('turnoHeader');
   const badge = document.getElementById('turnoBadge');
-  if (t === 'almuerzo') {
+  const btnAlm  = document.getElementById('turno-manual-almuerzo');
+  const btnCena = document.getElementById('turno-manual-cena');
+  if (btnAlm)  btnAlm.classList.toggle('active', turnoManual === 'almuerzo');
+  if (btnCena) btnCena.classList.toggle('active', turnoManual === 'cena');
+  if (turnoManual === 'almuerzo') {
     hdr.className = 'turno-header almuerzo';
     document.getElementById('turnoIcon').textContent  = '☀️';
     document.getElementById('turnoNombre').textContent = 'Turno: Almuerzo';
@@ -1352,13 +2026,18 @@ function onHoraChange() {
     document.getElementById('turnoDesc').textContent   = '5:00 pm – 2:00 am · Comidas rápidas';
     badge.className = 'turno-badge turno-cena'; badge.textContent = '🌙 Comidas rápidas';
   }
-  rebuildPedidoSelect();
+}
+
+// La hora ya no cambia el turno: solo recalcula montos (para llevar, etc.)
+function onHoraChange() {
   actualizarMontoDisplay();
 }
 
-onHoraChange();
-// Arrancar reloj tras declarar todos los let (selectedUbicacion, etc.)
-setInterval(actualizarReloj, 30000);
+pintarTurnoManual();
+rebuildPedidoSelect();
+poblarCatalogoExtra();
+// Reloj del header en tiempo real (solo visual, no toca el formulario)
+setInterval(actualizarReloj, 1000);
 
 // ── Tipo de pedido ────────────────────────────────────────────────────
 function onPedidoChange() {
@@ -1391,7 +2070,7 @@ function onPedidoChange() {
     const esEditable = crItem.cat === 'ADICIONALES';
     const manualDiv = document.getElementById('cr-precio-manual');
     manualDiv.style.display = esEditable ? 'block' : 'none';
-    if (esEditable) document.getElementById('ing-cr-monto').value = crItem.precio;
+    if (esEditable) document.getElementById('ing-cr-monto').value = crItem.precio.toLocaleString('es-CO');
     document.getElementById('campo-bebida').style.display = 'block';
     actualizarMontoDisplay();
     validarRegistro();
@@ -1411,6 +2090,8 @@ function onPedidoChange() {
     document.getElementById('ing-sopa').disabled = false;
   } else if (val === 'porcion-arroz') {
     document.getElementById('ing-arroz').disabled = false;
+  } else if (val === 'sopa-y-arroz') {
+    ['sopa','arroz'].forEach(f => document.getElementById('ing-'+f).disabled = false);
   } else {
     ['sopa','arroz','proteina','acomp'].forEach(f => document.getElementById('ing-'+f).disabled = false);
   }
@@ -1428,13 +2109,16 @@ function onBebidaChange() {
 }
 
 function setCRMonto() {
-  const v = parseFloat(document.getElementById('ing-cr-monto').value) || 0;
+  const v = valMiles('ing-cr-monto');
   document.getElementById('ing-monto-alm').value = v;
   actualizarMontoDisplay();
   validarRegistro();
 }
 
-function actualizarMontoDisplay() {
+// Extraído de actualizarMontoDisplay() para poder reutilizar el total en calcularVuelto().
+// Ahora refleja el pedido COMPLETO: almuerzos ya en cola + el que está en el
+// formulario ahora mismo + extras en cola + domicilio/empaque.
+function calcularTotalPedido() {
   const baseAlm  = parseFloat(document.getElementById('ing-monto-alm').value) || 0;
   const bebidaSel = document.getElementById('ing-bebida');
   const montoBebida = (bebidaSel && bebidaSel.value)
@@ -1443,37 +2127,53 @@ function actualizarMontoDisplay() {
   const montoUnit = baseAlm + montoBebida;
 
   const cant     = parseInt(document.getElementById('ing-cantidad').value) || 1;
-  const hora     = document.getElementById('ing-hora').value;
-  const turno    = turnoFromHora(hora);
   const chkPL    = document.getElementById('ing-para-llevar');
-  const paraLlevar = selectedUbicacion && selectedUbicacion.startsWith('mesa_')
+  const paraLlevar = puedeParaLlevar(selectedUbicacion)
                      && chkPL && chkPL.checked
-                     && turno === 'almuerzo';
+                     && turnoManual === 'almuerzo';
 
-  const montoAlmTotal = (montoUnit + (paraLlevar ? 1000 : 0)) * cant;
-  const domVal = selectedUbicacion === 'domicilio'
-    ? (parseFloat(document.getElementById('ing-domicilio-valor').value) || 0)
-    : 0;
-  const total = montoAlmTotal + domVal;
+  const montoActual   = (montoUnit + (paraLlevar ? 1000 : 0)) * cant;
+  const colaTotal     = almuerzosEnCola.reduce((a, it) => a + it.monto_almuerzo, 0);
+  const montoAlmTotal = colaTotal + montoActual; // todos los almuerzos del pedido: en cola + el actual
+
+  // El envío (domicilio + empaque) se cobra una sola vez por pedido.
+  const hayAlgunAlmuerzo = almuerzosEnCola.length > 0 || montoActual > 0;
+  const cobrarEnvio = selectedUbicacion === 'domicilio' && hayAlgunAlmuerzo;
+  const empaqueDomicilio = cobrarEnvio ? EMPAQUE_DOMICILIO : 0;
+  const domValRaw = cobrarEnvio ? valMiles('ing-domicilio-valor') : 0;
+  const domVal = domValRaw + empaqueDomicilio; // valor del domicilio + empaque desechable
+
+  const extrasTotal = extrasIngresoPendientes.reduce((a, ex) => a + ex.valorUnitario * ex.cantidad, 0);
+
+  const total = montoAlmTotal + domVal + extrasTotal;
+
+  return { baseAlm, montoBebida, montoUnit, cant, paraLlevar, montoActual, colaTotal, montoAlmTotal, domValRaw, empaqueDomicilio, domVal, extrasTotal, total };
+}
+
+function actualizarMontoDisplay() {
+  const { baseAlm, montoBebida, montoUnit, cant, paraLlevar, montoActual, colaTotal, montoAlmTotal, domValRaw, empaqueDomicilio, domVal, extrasTotal, total } = calcularTotalPedido();
 
   const dispEl  = document.getElementById('monto-display');
   const labelEl = document.getElementById('monto-label');
 
   if (total > 0) {
     dispEl.textContent = fmt(total);
-    if (selectedUbicacion === 'domicilio' && domVal > 0) {
-      labelEl.textContent = `Comida ${fmt(montoAlmTotal)} + Domicilio ${fmt(domVal)}`;
-    } else if (cant > 1) {
-      labelEl.textContent = `${fmt(montoUnit + (paraLlevar?1000:0))} × ${cant} pedidos`;
-    } else if (montoBebida > 0) {
-      labelEl.textContent = `Comida ${fmt(baseAlm)} + Bebida ${fmt(montoBebida)}`;
-    } else {
-      labelEl.textContent = paraLlevar ? `${fmt(baseAlm)} + $1.000 para llevar` : 'Monto total del pedido';
+    const partes = [];
+    if (almuerzosEnCola.length > 0) partes.push(`${almuerzosEnCola.length} almuerzo(s) en cola ${fmt(colaTotal)}`);
+    if (montoActual > 0) {
+      if (cant > 1) partes.push(`Este: ${fmt(montoUnit + (paraLlevar?1000:0))} × ${cant}`);
+      else if (montoBebida > 0) partes.push(`Este: comida ${fmt(baseAlm)} + bebida ${fmt(montoBebida)}`);
+      else partes.push(`Este: ${fmt(montoActual)}${paraLlevar ? ' (+ para llevar)' : ''}`);
     }
+    if (selectedUbicacion === 'domicilio' && domVal > 0) partes.push(`Domicilio + empaque ${fmt(domVal)}`);
+    if (extrasTotal > 0) partes.push(`Extras ${fmt(extrasTotal)}`);
+    labelEl.textContent = partes.length ? partes.join(' + ') : 'Monto total del pedido';
   } else {
     dispEl.textContent  = '$—';
     labelEl.textContent = 'Monto total del pedido';
   }
+
+  calcularVuelto();
 }
 
 // ── Autocomplete ──────────────────────────────────────────────────────
@@ -1530,113 +2230,155 @@ document.addEventListener('click', e => {
 });
 
 // ── Registrar pedido ──────────────────────────────────────────────────
-async function agregarIngreso() {
-  if (!selectedUbicacion) { showToast('⚠ Selecciona una mesa o domicilio', 'warning'); return; }
-  const fecha   = document.getElementById('ing-fecha').value;
-  const hora    = document.getElementById('ing-hora').value;
-  const pedido  = document.getElementById('ing-pedido').value;
-  const metodo  = document.getElementById('ing-metodo').value;
-  const cantidad= parseInt(document.getElementById('ing-cantidad').value) || 1;
-  const turno   = turnoFromHora(hora);
+// estadoFinal: 'pendiente' (normal) | 'pagado' (botón "Pagado inmediatamente")
+// Registra TODO el pedido de una vez: los almuerzos que ya estaban en cola +
+// el que está armado en el formulario ahora mismo (si hay uno válido) + los
+// extras en cola — todos con el mismo grupo_pedido, para poder identificarlos
+// y moverlos/pagarlos juntos aunque compartan mesa con otro pedido distinto.
+async function agregarIngreso(estadoFinal = 'pendiente') {
+  if (!selectedUbicacion) { showToast('⚠ Selecciona una mesa, domicilio, fiado o sin mesa', 'warning'); return; }
+  const fecha  = document.getElementById('ing-fecha').value;
+  const hora   = document.getElementById('ing-hora').value;
+  const metodo = document.getElementById('ing-metodo').value;
+  const turno  = turnoManual;
 
-  if (!pedido)     { showToast('⚠ Selecciona un tipo de pedido', 'warning'); return; }
   if (!fecha||!hora) { showToast('⚠ Completa fecha y hora', 'warning'); return; }
+  if (!turnoAbierto(fecha, turno)) {
+    showToast('⚠ Debes abrir el turno antes de registrar pedidos', 'warning');
+    abrirModalTurno();
+    return;
+  }
 
-  const baseAlm    = parseFloat(document.getElementById('ing-monto-alm').value) || 0;
-  const bebidaSel  = document.getElementById('ing-bebida');
-  const montoBebida = (bebidaSel && bebidaSel.value)
-    ? (parseFloat(bebidaSel.options[bebidaSel.selectedIndex]?.getAttribute('data-monto')) || 0)
-    : 0;
-  const montoUnit  = baseAlm + montoBebida;
-  const chkPL    = document.getElementById('ing-para-llevar');
-  const esPL     = selectedUbicacion.startsWith('mesa_') && chkPL.checked && turno === 'almuerzo';
-  const monto_almuerzo = (montoUnit + (esPL ? 1000 : 0)) * cantidad;
-  const monto_domicilio = selectedUbicacion === 'domicilio'
-    ? (parseFloat(document.getElementById('ing-domicilio-valor').value) || 0)
-    : 0;
-  const monto_total = monto_almuerzo + monto_domicilio;
+  const itemActual = leerAlmuerzoActualDelFormulario();
+  const items = [...almuerzosEnCola, ...(itemActual ? [itemActual] : [])];
+  if (!items.length) { showToast('⚠ Agrega al menos un almuerzo', 'warning'); return; }
 
-  if (monto_total <= 0) { showToast('⚠ El monto debe ser mayor a $0', 'warning'); return; }
-
-  const sopa    = document.getElementById('ing-sopa').value;
-  const arroz   = document.getElementById('ing-arroz').value;
-  const proteina= document.getElementById('ing-proteina').value;
-  const acomp   = document.getElementById('ing-acomp').value;
-  const crDesc  = document.getElementById('ing-cr-desc').value.trim();
-  const crItem  = PL.comidaRapida.find(p => p.c === pedido);
-  const bebidaItem = (bebidaSel && bebidaSel.value)
-    ? PL.comidaRapida.find(p => p.c === bebidaSel.value)
-    : null;
   const direccionValue = selectedUbicacion === 'domicilio'
     ? (document.getElementById('ing-direccion')?.value.trim() || '')
     : '';
-  const detalle = crItem
-    ? [crItem.n, bebidaItem?.n, crDesc, direccionValue ? '📍 ' + direccionValue : ''].filter(Boolean).join(' · ')
-    : [sopa, arroz, proteina, acomp, direccionValue ? '📍 ' + direccionValue : ''].filter(Boolean).join(' · ');
-
   const mesa_numero = selectedUbicacion.startsWith('mesa_')
     ? parseInt(selectedUbicacion.split('_')[1])
     : null;
-
-  const pedidoData = {
-    fecha, hora, turno, pedido,
-    sopa: sopa||'', arroz: arroz||'', proteina: proteina||'', acomp: acomp||'',
-    detalle, metodo, cantidad,
-    monto_unit: montoUnit, monto_almuerzo, monto_domicilio, monto_total,
-    estado: 'pendiente', es_domicilio: selectedUbicacion === 'domicilio',
-    mesa: mesa_numero, para_llevar: esPL,
-    es_fiar: selectedUbicacion === 'fiar',
-    direccion: direccionValue || ''
-  };
+  const grupoPedido = `g_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
   const mesaYaTienePendientes = mesa_numero !== null && ST.pendientes.some(p => p.mesa === mesa_numero);
   try {
-    let newPedido;
-    try {
-      [newPedido] = await sbInsert('pedidos', pedidoData);
-    } catch(e) {
-      const msg = e.message || '';
-      if (msg.includes('es_fiar') || msg.includes('direccion')) {
-        // Columnas opcionales aún no existen en Supabase — reintenta sin ambas
-        const { es_fiar: esFiarVal, direccion: dirVal, ...pedidoBase } = pedidoData;
-        [newPedido] = await sbInsert('pedidos', pedidoBase);
-        newPedido.es_fiar = esFiarVal;
-        newPedido.direccion = dirVal;
-      } else { throw e; }
+    const pedidosInsertados = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      // El envío (domicilio + empaque) solo se cobra en el primer ítem del pedido
+      const monto_domicilio = (selectedUbicacion === 'domicilio' && i === 0)
+        ? valMiles('ing-domicilio-valor') + EMPAQUE_DOMICILIO
+        : 0;
+      const monto_total = item.monto_almuerzo + monto_domicilio;
+
+      const pedidoData = {
+        fecha, hora, turno, pedido: item.pedido,
+        sopa: item.sopa, arroz: item.arroz, proteina: item.proteina, acomp: item.acomp,
+        detalle: item.detalle, metodo, cantidad: item.cantidad,
+        monto_unit: item.monto_unit, monto_almuerzo: item.monto_almuerzo, monto_domicilio, monto_total,
+        estado: estadoFinal, es_domicilio: selectedUbicacion === 'domicilio',
+        mesa: mesa_numero, para_llevar: item.para_llevar,
+        es_fiar: selectedUbicacion === 'fiar',
+        es_sin_mesa: selectedUbicacion === 'sinmesa',
+        direccion: direccionValue || '', grupo_pedido: grupoPedido
+      };
+
+      let newPedido;
+      try {
+        [newPedido] = await sbInsert('pedidos', pedidoData);
+      } catch (e) {
+        const msg = e.message || '';
+        if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido')) {
+          // Columnas opcionales aún no existen en Supabase — reintenta sin ellas
+          const { es_fiar: esFiarVal, direccion: dirVal, es_sin_mesa: esSinMesaVal, grupo_pedido: grupoVal, ...pedidoBase } = pedidoData;
+          [newPedido] = await sbInsert('pedidos', pedidoBase);
+          newPedido.es_fiar = esFiarVal; newPedido.direccion = dirVal;
+          newPedido.es_sin_mesa = esSinMesaVal; newPedido.grupo_pedido = grupoVal;
+        } else { throw e; }
+      }
+
+      pedidosInsertados.push(newPedido);
+      if (estadoFinal === 'pagado') ST.ingresos.unshift(newPedido);
+      else ST.pendientes.unshift(newPedido);
     }
-    ST.pendientes.unshift(newPedido);
 
     // Marcar mesa como ocupada solo si es la primera orden pendiente
-    if (mesa_numero && !mesaYaTienePendientes) {
+    if (estadoFinal !== 'pagado' && mesa_numero && !mesaYaTienePendientes) {
       await sbPatch('mesas', `numero=eq.${mesa_numero}`, { estado: 'ocupada' });
       const mesa = ST.mesas.find(m => m.numero === mesa_numero);
       if (mesa) mesa.estado = 'ocupada';
     }
 
-    setSyncBadge('ok');
-    showToast(`✅ Pedido registrado — ${selectedUbicacion === 'domicilio' ? 'Domicilio' : selectedUbicacion === 'fiar' ? 'Fiado' : 'Mesa ' + mesa_numero}`, 'ok');
+    // Insertar los productos extra en cola (si hay), con el mismo grupo_pedido
+    if (extrasIngresoPendientes.length) {
+      for (const ex of extrasIngresoPendientes) {
+        const extraData = {
+          fecha, hora, turno, pedido: 'extra',
+          sopa: '', arroz: '', proteina: '', acomp: '',
+          detalle: ex.descripcion, metodo, cantidad: ex.cantidad,
+          monto_unit: ex.valorUnitario, monto_almuerzo: ex.valorUnitario * ex.cantidad,
+          monto_domicilio: 0, monto_total: ex.valorUnitario * ex.cantidad,
+          estado: estadoFinal, es_domicilio: selectedUbicacion === 'domicilio',
+          mesa: mesa_numero, para_llevar: false,
+          es_fiar: selectedUbicacion === 'fiar', es_sin_mesa: selectedUbicacion === 'sinmesa',
+          direccion: '', grupo_pedido: grupoPedido
+        };
+        try {
+          let newExtra;
+          try {
+            [newExtra] = await sbInsert('pedidos', extraData);
+          } catch (e) {
+            const msg = e.message || '';
+            if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido')) {
+              const { es_fiar: efV, direccion: dV, es_sin_mesa: esmV, grupo_pedido: gV, ...extraBase } = extraData;
+              [newExtra] = await sbInsert('pedidos', extraBase);
+              newExtra.es_fiar = efV; newExtra.direccion = dV; newExtra.es_sin_mesa = esmV; newExtra.grupo_pedido = gV;
+            } else { throw e; }
+          }
+          pedidosInsertados.push(newExtra);
+          if (estadoFinal === 'pagado') ST.ingresos.unshift(newExtra);
+          else ST.pendientes.unshift(newExtra);
+        } catch (e) {
+          console.error(e);
+          showToast(`⚠ No se pudo agregar el extra "${ex.descripcion}"`, 'warning');
+        }
+      }
+    }
 
-    // Reset form
+    const ubicLabel = selectedUbicacion === 'domicilio' ? 'Domicilio'
+      : selectedUbicacion === 'fiar' ? 'Fiado'
+      : selectedUbicacion === 'sinmesa' ? 'Sin mesa'
+      : 'Mesa ' + mesa_numero;
+    const idsInsertados = pedidosInsertados.map(p => p.id);
+
+    setSyncBadge('ok');
+    showToast(
+      estadoFinal === 'pagado'
+        ? `✅ Venta registrada (${pedidosInsertados.length} ítem${pedidosInsertados.length>1?'s':''}) — ${ubicLabel}`
+        : `✅ Pedido registrado (${pedidosInsertados.length} ítem${pedidosInsertados.length>1?'s':''}) — ${ubicLabel}`,
+      'ok',
+      estadoFinal === 'pagado' ? { label: '↩ Deshacer', onClick: () => revertirPago(idsInsertados) } : null
+    );
+
+    // Pedido completo enviado: se limpia todo (cola de almuerzos, extras y ubicación)
+    almuerzosEnCola = [];
+    extrasIngresoPendientes = [];
+    renderAlmuerzosEnColaLista();
+    renderExtrasIngresoLista();
     selectedUbicacion = null;
-    document.getElementById('ing-pedido').value      = '';
-    document.getElementById('ing-cantidad').value    = '1';
-    document.getElementById('ing-hora').value        = nowTime();
-    document.getElementById('ing-cr-desc').value  = '';
-    const crMontoEl = document.getElementById('ing-cr-monto');
-    if (crMontoEl) crMontoEl.value = '';
-    document.getElementById('cr-precio-manual').style.display = 'none';
-    const bebidaSelR = document.getElementById('ing-bebida');
-    if (bebidaSelR) bebidaSelR.value = '';
-    document.getElementById('campo-bebida').style.display = 'none';
+    limpiarCamposAlmuerzo();
+    document.getElementById('ing-hora').value = nowTime();
+    document.getElementById('ing-pago-con').value = '';
+    document.getElementById('vuelto-resultado').innerHTML = '';
     document.getElementById('ing-domicilio-valor').value = '';
     const dirResetEl = document.getElementById('ing-direccion');
     if (dirResetEl) dirResetEl.value = '';
-    document.getElementById('ing-para-llevar').checked  = false;
     document.getElementById('para-llevar-section').style.display = 'none';
     document.getElementById('domicilio-valor-section').style.display = 'none';
     const fiarInfoEl = document.getElementById('fiar-info-section');
     if (fiarInfoEl) fiarInfoEl.style.display = 'none';
-    onPedidoChange();
     onHoraChange();
     renderAll();
   } catch (err) {
@@ -1645,23 +2387,55 @@ async function agregarIngreso() {
   }
 }
 
+// Botón "Agregar almuerzo": guarda el almuerzo actual EN UNA COLA LOCAL (no lo
+// inserta en Supabase todavía) y limpia el formulario para el siguiente. Todo
+// se registra junto cuando se haga clic en "Registrar pedido"/"Pagado inmediatamente".
+function agregarAlmuerzoAlPedido() {
+  if (!selectedUbicacion) { showToast('⚠ Selecciona una mesa, domicilio, fiado o sin mesa', 'warning'); return; }
+  const item = leerAlmuerzoActualDelFormulario();
+  if (!item) { showToast('⚠ Selecciona un tipo de pedido con monto válido', 'warning'); return; }
+  almuerzosEnCola.push(item);
+  limpiarCamposAlmuerzo();
+  renderAlmuerzosEnColaLista();
+  actualizarMontoDisplay();
+  validarRegistro();
+  showToast(`✅ ${LABELS[item.pedido] || item.pedido} agregado — sigue con el próximo almuerzo`, 'ok');
+}
+
 // ── Modal detalle ingreso ─────────────────────────────────────────────
 function verDetalleIngreso(id) {
   const i = ST.ingresos.find(x => x.id === id);
   if (!i) return;
+  mostrarDetallePedidoModal(i);
+}
+
+// Usado desde la sección "Pedidos": busca tanto en pendientes como en pagados.
+function verDetallePedido(id) {
+  const i = ST.pendientes.find(x => x.id === id) || ST.ingresos.find(x => x.id === id);
+  if (!i) return;
+  mostrarDetallePedidoModal(i);
+}
+
+function mostrarDetallePedidoModal(i) {
   const crItem = PL.comidaRapida.find(p => p.c === i.pedido);
   const esCR = !!crItem || i.turno === 'cena';
+  const requiereDosCheckbox = requiereEntregaDoble(i);
 
   let html = `<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:var(--accent);margin-bottom:20px;">
     ${i.turno === 'cena' ? '🌙' : '☀️'} ${LABELS[i.pedido] || i.pedido}
   </div>`;
 
+  const entregaTexto = requiereDosCheckbox
+    ? `Sopa: ${i.entrega_sopa ? '✅ Entregada' : '⏳ Falta'} · Seco: ${i.entrega_plato ? '✅ Entregado' : '⏳ Falta'}`
+    : (i.entrega_plato ? '✅ Entregado' : '⏳ Pendiente de entregar');
+
   const campos = [
     ['Fecha',       i.fecha],
     ['Hora',        i.hora || '—'],
     ['Turno',       i.turno === 'cena' ? 'Comida Rápida' : 'Almuerzo'],
-    ['Ubicación',   i.es_fiar ? '📒 Fiado' : i.es_domicilio ? '🛵 Domicilio' : i.mesa ? `Mesa ${i.mesa}` : '—'],
+    ['Ubicación',   i.es_fiar ? '📒 Fiado' : i.es_sin_mesa ? '🧍 Sin mesa' : i.es_domicilio ? '🛵 Domicilio' : i.mesa ? `Mesa ${i.mesa}` : '—'],
     i.es_domicilio && i.direccion ? ['Dirección', '📍 ' + i.direccion] : null,
+    ['Estado de pago', i.estado === 'pagado' ? '✅ Pagado' : '⏳ Pendiente de pago'],
     ['Método',      i.metodo],
     ['Cantidad',    i.cantidad || 1],
     !esCR && i.sopa     ? ['Sopa',           i.sopa]     : null,
@@ -1671,7 +2445,8 @@ function verDetalleIngreso(id) {
     i.detalle           ? ['Detalle',        i.detalle]  : null,
     i.para_llevar       ? ['Para llevar',    '✓ Sí (+$1.000)'] : null,
     i.monto_almuerzo && i.es_domicilio ? ['Valor comida',    fmt(i.monto_almuerzo)] : null,
-    i.monto_domicilio && i.es_domicilio ? ['Valor domicilio', fmt(i.monto_domicilio)] : null,
+    i.monto_domicilio && i.es_domicilio ? ['Valor domicilio (incl. $1.000 empaque)', fmt(i.monto_domicilio)] : null,
+    ['Entrega en cocina', entregaTexto],
     ['Total', `<span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(i.monto_total || 0)}</span>`],
   ].filter(Boolean);
 
@@ -1703,12 +2478,43 @@ async function eliminarIngreso(id) {
   } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
 }
 
+// ── Cambiar método de pago de un ingreso ya registrado como pagado ─────
+let metodoEditId = null;
+
+function editarMetodoIngreso(id) {
+  metodoEditId = id;
+  renderIngresos();
+}
+
+function cancelarEdicionMetodo() {
+  metodoEditId = null;
+  renderIngresos();
+}
+
+async function guardarMetodoIngreso(id) {
+  const sel = document.getElementById(`metodo-edit-${id}`);
+  if (!sel) return;
+  const metodo = sel.value;
+  try {
+    await sbPatch('pedidos', `id=eq.${id}`, { metodo });
+    const i = ST.ingresos.find(x => x.id === id);
+    if (i) i.metodo = metodo;
+    metodoEditId = null;
+    setSyncBadge('ok');
+    renderAll();
+    showToast('✅ Método de pago actualizado', 'ok');
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al actualizar el método de pago', 'warning');
+  }
+}
+
 // ── Mapa del salón (visual, read-only) ────────────────────────────────
 function renderSalonMap(containerId, clickable = false) {
   const container = document.getElementById(containerId);
   if (!container) return;
   let html = '';
-  for (let i = 1; i <= 15; i++) {
+  for (let i = 1; i <= NUM_MESAS; i++) {
     const mesa    = ST.mesas.find(m => m.numero === i);
     const estado  = mesa ? mesa.estado : 'libre';
     const pendCnt = ST.pendientes.filter(p => p.mesa === i).length;
@@ -1730,7 +2536,7 @@ function irAPendientesConMesa(mesaNum) {
   const navTab = document.querySelector('[onclick*="pendientes"]');
   showTab('pendientes', navTab);
   setTimeout(() => {
-    const el = document.getElementById(`mesa-group-${mesaNum}`);
+    const el = document.getElementById(`mesa-group-${mesaNum}-1`);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
       el.classList.add('highlighted');
@@ -1740,7 +2546,7 @@ function irAPendientesConMesa(mesaNum) {
 }
 
 function scrollToMesa(mesaNum) {
-  const el = document.getElementById(`mesa-group-${mesaNum}`);
+  const el = document.getElementById(`mesa-group-${mesaNum}-1`);
   if (el) {
     el.scrollIntoView({ behavior: 'smooth' });
     el.classList.add('highlighted');
@@ -1748,25 +2554,31 @@ function scrollToMesa(mesaNum) {
   }
 }
 
-// ── Marcar mesa como pagada (todos los pendientes de esa mesa) ─────────
-async function marcarMesaPagada(mesaNum) {
-  const metodoEl = document.getElementById(`metodo-mesa-${mesaNum}`);
+// ── Marcar como pagado UN pedido completo de una mesa (puede haber más de
+// uno en la misma mesa) — ids es la lista de pedidos de ese pedido específico.
+async function marcarGrupoMesaPagado(ids, mesaNum, key) {
+  const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = metodoEl ? metodoEl.value : 'efectivo';
 
   try {
-    await sbPatch('pedidos', `mesa=eq.${mesaNum}&estado=eq.pendiente`, { estado: 'pagado', metodo });
-    await sbPatch('mesas',   `numero=eq.${mesaNum}`, { estado: 'libre' });
+    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { estado: 'pagado', metodo });
 
-    const ahora = ST.pendientes.filter(p => p.mesa === mesaNum);
+    const ahora = ST.pendientes.filter(p => ids.includes(p.id));
     ahora.forEach(p => { p.estado = 'pagado'; p.metodo = metodo; });
     ST.ingresos   = [...ahora, ...ST.ingresos];
-    ST.pendientes = ST.pendientes.filter(p => p.mesa !== mesaNum);
+    ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
 
-    const mesa = ST.mesas.find(m => m.numero === mesaNum);
-    if (mesa) mesa.estado = 'libre';
+    // Solo se libera la mesa si ya no queda NINGÚN pedido pendiente ahí (de ningún grupo)
+    const quedan = ST.pendientes.filter(p => p.mesa === mesaNum).length;
+    if (quedan === 0) {
+      await sbPatch('mesas', `numero=eq.${mesaNum}`, { estado: 'libre' });
+      const mesa = ST.mesas.find(m => m.numero === mesaNum);
+      if (mesa) mesa.estado = 'libre';
+    }
 
     setSyncBadge('ok');
-    showToast(`✅ Mesa ${mesaNum} pagada y liberada`, 'ok');
+    showToast(`✅ Pedido pagado — Mesa ${mesaNum}${quedan === 0 ? ' (mesa liberada)' : ''}`, 'ok',
+      ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
     renderAll();
   } catch (e) {
     console.error(e);
@@ -1775,21 +2587,48 @@ async function marcarMesaPagada(mesaNum) {
 }
 
 // ── Marcar domicilio individual como pagado ────────────────────────────
-async function marcarDomicilioPagado(pedidoId) {
-  const metodoEl = document.getElementById(`metodo-dom-${pedidoId}`);
+// Un domicilio puede traer varios almuerzos/extras (mismo grupo_pedido) —
+// se pagan todos juntos de una vez.
+async function marcarGrupoDomicilioPagado(ids, key) {
+  const metodoEl = document.getElementById(`metodo-${key}`);
+  const metodo   = metodoEl ? metodoEl.value : 'efectivo';
+
+  try {
+    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { estado: 'pagado', metodo });
+
+    const ahora = ST.pendientes.filter(p => ids.includes(p.id));
+    ahora.forEach(p => { p.estado = 'pagado'; p.metodo = metodo; });
+    ST.ingresos   = [...ahora, ...ST.ingresos];
+    ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
+
+    setSyncBadge('ok');
+    showToast('✅ Domicilio marcado como pagado', 'ok',
+      ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al procesar el pago', 'warning');
+  }
+}
+
+// ── Marcar pedido "sin mesa" como pagado ────────────────────────────────
+async function marcarSinMesaPagado(pedidoId) {
+  const metodoEl = document.getElementById(`metodo-sinmesa-${pedidoId}`);
   const metodo   = metodoEl ? metodoEl.value : 'efectivo';
 
   try {
     await sbPatch('pedidos', `id=eq.${pedidoId}`, { estado: 'pagado', metodo });
 
+    let ped = null;
     const idx = ST.pendientes.findIndex(p => p.id === pedidoId);
     if (idx !== -1) {
-      const [ped] = ST.pendientes.splice(idx, 1);
+      [ped] = ST.pendientes.splice(idx, 1);
       ped.estado = 'pagado'; ped.metodo = metodo;
       ST.ingresos.unshift(ped);
     }
     setSyncBadge('ok');
-    showToast('✅ Domicilio marcado como pagado', 'ok');
+    showToast('✅ Pedido (sin mesa) marcado como pagado', 'ok',
+      ped ? { label: '↩ Deshacer', onClick: () => revertirPago(ped.id) } : null);
     renderAll();
   } catch (e) {
     showToast('⚠ Error al procesar el pago', 'warning');
@@ -1803,16 +2642,29 @@ async function marcarFiadoPagado(pedidoId) {
   const fechaHoy = today();
 
   try {
-    await sbPatch('pedidos', `id=eq.${pedidoId}`, { estado: 'pagado', metodo, fecha: fechaHoy });
+    const pedOriginal = ST.pendientes.find(p => p.id === pedidoId);
+    const fechaOriginal = pedOriginal ? pedOriginal.fecha : null;
 
+    let patchData = { estado: 'pagado', metodo, fecha: fechaHoy, fecha_original: fechaOriginal };
+    try {
+      await sbPatch('pedidos', `id=eq.${pedidoId}`, patchData);
+    } catch (e) {
+      if ((e.message || '').includes('fecha_original')) {
+        delete patchData.fecha_original;
+        await sbPatch('pedidos', `id=eq.${pedidoId}`, patchData);
+      } else { throw e; }
+    }
+
+    let ped = null;
     const idx = ST.pendientes.findIndex(p => p.id === pedidoId);
     if (idx !== -1) {
-      const [ped] = ST.pendientes.splice(idx, 1);
-      ped.estado = 'pagado'; ped.metodo = metodo; ped.fecha = fechaHoy;
+      [ped] = ST.pendientes.splice(idx, 1);
+      Object.assign(ped, patchData);
       ST.ingresos.unshift(ped);
     }
     setSyncBadge('ok');
-    showToast('✅ Fiado marcado como pagado', 'ok');
+    showToast('✅ Fiado marcado como pagado', 'ok',
+      ped ? { label: '↩ Deshacer', onClick: () => revertirPago(ped.id) } : null);
     renderAll();
   } catch (e) {
     showToast('⚠ Error al procesar el pago', 'warning');
@@ -1841,6 +2693,27 @@ async function cancelarPendiente(pedidoId) {
   } catch(e) { showToast('⚠ Error al cancelar', 'warning'); }
 }
 
+// Cancela TODO un pedido de una mesa de una vez (todos sus almuerzos + extras),
+// sin tocar los demás pedidos que pueda haber en esa misma mesa.
+async function cancelarGrupoPendiente(ids, mesaNum) {
+  if (!confirm(`¿Cancelar este pedido completo (${ids.length} ítem${ids.length > 1 ? 's' : ''})?`)) return;
+  try {
+    await sbDelete('pedidos', `id=in.(${ids.join(',')})`);
+    ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
+
+    if (mesaNum) {
+      const quedan = ST.pendientes.filter(p => p.mesa === mesaNum).length;
+      if (quedan === 0) {
+        await sbPatch('mesas', `numero=eq.${mesaNum}`, { estado: 'libre' });
+        const mesa = ST.mesas.find(m => m.numero === mesaNum);
+        if (mesa) mesa.estado = 'libre';
+      }
+    }
+    showToast('Pedido cancelado', 'info');
+    renderAll();
+  } catch (e) { showToast('⚠ Error al cancelar', 'warning'); }
+}
+
 // ── Render PENDIENTES ──────────────────────────────────────────────────
 function renderPendientes() {
   // Badge en nav
@@ -1851,45 +2724,73 @@ function renderPendientes() {
   // Mapa
   renderSalonMap('pend-salon-grid', true);
 
-  // Agrupar
-  const mesaGrupos = {};
-  const domicilios = [];
+  // Agrupar — dentro de una misma mesa puede haber más de un pedido distinto
+  // (mesa compartida por dos grupos de personas): se agrupa por mesa + grupo_pedido,
+  // no solo por mesa. Los pedidos viejos sin grupo_pedido (antes de este cambio)
+  // se agrupan juntos por mesa como venían funcionando.
+  const mesaGruposMap = {}; // "mesa::grupo" -> { mesa, orders: [] }
+  const domicilioGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — un domicilio puede traer varios almuerzos
   const fiados     = [];
+  const sinMesaList = [];
   ST.pendientes.forEach(p => {
     if (p.es_fiar === true) {
       fiados.push(p);
+    } else if (p.es_sin_mesa === true) {
+      sinMesaList.push(p);
     } else if (p.es_domicilio || !p.mesa) {
-      domicilios.push(p);
+      const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
+      if (!domicilioGruposMap[grupoKey]) domicilioGruposMap[grupoKey] = { orders: [] };
+      domicilioGruposMap[grupoKey].orders.push(p);
     } else {
       const mn = p.mesa;
-      if (!mesaGrupos[mn]) mesaGrupos[mn] = [];
-      mesaGrupos[mn].push(p);
+      const grupoKey = p.grupo_pedido || 'legacy';
+      const compKey = `${mn}::${grupoKey}`;
+      if (!mesaGruposMap[compKey]) mesaGruposMap[compKey] = { mesa: mn, orders: [] };
+      mesaGruposMap[compKey].orders.push(p);
     }
   });
 
-  const mesasZone  = document.getElementById('pendientes-mesas-zone');
-  const domZone    = document.getElementById('pendientes-domicilios-zone');
-  const fiadosZone = document.getElementById('pendientes-fiados-zone');
+  const mesasZone   = document.getElementById('pendientes-mesas-zone');
+  const domZone     = document.getElementById('pendientes-domicilios-zone');
+  const fiadosZone  = document.getElementById('pendientes-fiados-zone');
+  const sinMesaZone = document.getElementById('pendientes-sinmesa-zone');
 
-  if (!Object.keys(mesaGrupos).length && !domicilios.length && !fiados.length) {
+  if (!Object.keys(mesaGruposMap).length && !Object.keys(domicilioGruposMap).length && !fiados.length && !sinMesaList.length) {
     mesasZone.innerHTML = `<div class="empty"><div class="empty-icon">🍽</div><div class="empty-text">No hay pedidos pendientes</div></div>`;
     domZone.innerHTML   = '';
-    if (fiadosZone) fiadosZone.innerHTML = '';
+    if (fiadosZone)  fiadosZone.innerHTML  = '';
+    if (sinMesaZone) sinMesaZone.innerHTML = '';
     return;
   }
 
-  // Grupos por mesa
-  const mesaKeys = Object.keys(mesaGrupos).map(Number).sort((a,b) => a-b);
-  mesasZone.innerHTML = mesaKeys.map(mn => {
-    const orders = mesaGrupos[mn];
+  // Grupos por mesa (uno o varios pedidos distintos por mesa)
+  Object.values(mesaGruposMap).forEach(g => g.orders.sort((a,b) => (a.hora||'').localeCompare(b.hora||'')));
+  const gruposOrdenados = Object.values(mesaGruposMap).sort((a, b) => {
+    if (a.mesa !== b.mesa) return a.mesa - b.mesa;
+    return (a.orders[0].hora||'').localeCompare(b.orders[0].hora||'');
+  });
+  const conteoGruposPorMesa = {};
+  gruposOrdenados.forEach(g => { conteoGruposPorMesa[g.mesa] = (conteoGruposPorMesa[g.mesa]||0) + 1; });
+  const contadorMesa = {};
+
+  mesasZone.innerHTML = gruposOrdenados.map(grupo => {
+    const mn = grupo.mesa;
+    const orders = grupo.orders;
+    contadorMesa[mn] = (contadorMesa[mn] || 0) + 1;
+    const numeroPedido = contadorMesa[mn];
+    const varios = conteoGruposPorMesa[mn] > 1;
+    const tituloMesa = varios ? `Mesa ${mn} · Pedido ${numeroPedido}` : `Mesa ${mn}`;
     const total  = orders.reduce((a,b) => a + (b.monto_total||0), 0);
     const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
+    const key = `mesa-${mn}-${numeroPedido}`;
+    const idsGrupo = orders.map(o => o.id);
+    const grupoPedidoVal = orders[0].grupo_pedido || '';
     return `
-    <div class="pending-group" id="mesa-group-${mn}">
+    <div class="pending-group" id="mesa-group-${mn}-${numeroPedido}">
       <div class="pending-group-hdr">
         <div>
-          <div class="pending-group-title">Mesa ${mn}</div>
-          <div class="pending-group-sub">${orders.length} pedido(s)</div>
+          <div class="pending-group-title">${tituloMesa}</div>
+          <div class="pending-group-sub">${orders.length} pedido(s)${varios ? ' · esta mesa tiene más de un pedido' : ''}</div>
         </div>
         <div class="pending-group-total">${fmt(total)}</div>
       </div>
@@ -1905,48 +2806,130 @@ function renderPendientes() {
               </td>
               <td>${p.cantidad||1}</td>
               <td class="amount-pos">${fmt(p.monto_total||0)}</td>
-              <td><button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕</button></td>
+              <td style="display:flex;gap:4px;white-space:nowrap;">
+                <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="marcarPedidoIndividualPagado(${p.id},'${key}')" title="Pagar solo este pedido (cuenta separada)">✅ Pagar</button>
+                <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
+                <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
+                <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕</button>
+              </td>
             </tr>`).join('')}
           </tbody>
         </table>
       </div>
       <div class="pending-pay-bar">
-        <select id="metodo-mesa-${mn}">
+        <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')">
           <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
           <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
         </select>
-        <button class="btn btn-primary" onclick="marcarMesaPagada(${mn})">✅ Marcar todo como pagado</button>
+        <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
+          style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+        <button class="btn btn-primary" onclick="marcarGrupoMesaPagado([${idsGrupo.join(',')}],${mn},'${key}')">✅ Marcar todo como pagado</button>
+        <button class="btn btn-outline" onclick="abrirModalAgregarProducto(${mn},'${grupoPedidoVal}')">+ Agregar producto</button>
+        <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Mueve este pedido completo (no los demás de la mesa)">🔄 Cambiar de mesa</button>
+        <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],${mn})" title="Cancela TODO este pedido (todos sus platos)">✕</button>
         <span style="font-size:11px;color:var(--text3);">Total: ${fmt(total)}</span>
+        <span id="vuelto-${key}" class="vuelto-box"></span>
       </div>
     </div>`;
   }).join('');
 
-  // Domicilios
-  if (domicilios.length) {
+  // Domicilios — un domicilio puede traer varios almuerzos/extras: se muestran
+  // juntos como UN pedido con una tabla y una sola barra de pago, no uno por almuerzo.
+  const gruposDomOrdenados = Object.values(domicilioGruposMap);
+  gruposDomOrdenados.forEach(g => g.orders.sort((a,b) => (a.hora||'').localeCompare(b.hora||'')));
+  gruposDomOrdenados.sort((a, b) => (a.orders[0].hora||'').localeCompare(b.orders[0].hora||''));
+
+  if (gruposDomOrdenados.length) {
     domZone.innerHTML = `
       <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--blue);">🛵 Domicilios pendientes</span></div>
-      ${domicilios.map(p => `
+      ${gruposDomOrdenados.map((grupo, idx) => {
+        const orders = grupo.orders;
+        const key = `dom-${orders[0].grupo_pedido || orders[0].id}`;
+        const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
+        const montoAlmuerzoTotal = orders.reduce((a,b) => a + (b.monto_almuerzo||0), 0);
+        const montoDomicilioTotal = orders.reduce((a,b) => a + (b.monto_domicilio||0), 0);
+        const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
+        const idsGrupo = orders.map(o => o.id);
+        const primero = orders[0];
+        return `
       <div class="pending-group">
         <div class="pending-group-hdr">
           <div>
-            <div class="pending-group-title">Domicilio — ${p.hora||'—'}</div>
-            <div class="pending-group-sub">${LABELS[p.pedido]||p.pedido} · ${p.detalle||'—'}</div>
-            ${p.direccion ? `<div style="font-size:11px;color:var(--blue);margin-top:2px;">📍 ${p.direccion}</div>` : ''}
+            <div class="pending-group-title">Domicilio — ${primero.hora||'—'}</div>
+            <div class="pending-group-sub">${orders.length} pedido(s)</div>
+            ${primero.direccion ? `<div style="font-size:11px;color:var(--blue);margin-top:2px;">📍 ${primero.direccion}</div>` : ''}
           </div>
-          <div class="pending-group-total">${fmt(p.monto_total||0)}</div>
+          <div class="pending-group-total">${fmt(total)}</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Hora</th><th>Tipo</th><th>Detalle</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
+            <tbody>${orders.map(p => `
+              <tr>
+                <td>${p.hora||'—'}</td>
+                <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
+                <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.detalle||'—'}</td>
+                <td>${p.cantidad||1}</td>
+                <td class="amount-pos">${fmt(p.monto_total||0)}</td>
+                <td style="display:flex;gap:4px;white-space:nowrap;">
+                  <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
+                  <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
+                  <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
         </div>
         <div class="pending-pay-bar">
-          <select id="metodo-dom-${p.id}">
-            <option value="efectivo"${(p.metodo||'efectivo')==='efectivo'?' selected':''}>Efectivo</option>
-            <option value="transferencia"${p.metodo==='transferencia'?' selected':''}>Transferencia</option>
+          <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')">
+            <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
+            <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
           </select>
-          <button class="btn btn-primary" onclick="marcarDomicilioPagado(${p.id})">✅ Marcar como pagado</button>
-          <span class="pending-dom-detail">🍽 ${fmt(p.monto_almuerzo||0)} + 🛵 ${fmt(p.monto_domicilio||0)}</span>
-          <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕ Cancelar</button>
+          <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
+            style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+          <button class="btn btn-primary" onclick="marcarGrupoDomicilioPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
+          <span class="pending-dom-detail">🍽 ${fmt(montoAlmuerzoTotal)} + 🛵 ${fmt(montoDomicilioTotal)}</span>
+          <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa">🔄 Ubicar en mesa</button>
+          <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancela TODO este pedido">✕ Cancelar</button>
+          <span id="vuelto-${key}" class="vuelto-box"></span>
         </div>
-      </div>`).join('')}`;
+      </div>`; }).join('')}`;
   } else {
     domZone.innerHTML = '';
+  }
+
+  // Sin mesa
+  if (sinMesaZone) {
+    if (sinMesaList.length) {
+      sinMesaZone.innerHTML = `
+        <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--text2);">🧍 Sin mesa — esperando de pie</span></div>
+        ${sinMesaList.map(p => { const key = `sinmesa-${p.id}`; const metodoInicial = p.metodo === 'transferencia' ? 'transferencia' : 'efectivo'; return `
+        <div class="pending-group">
+          <div class="pending-group-hdr">
+            <div>
+              <div class="pending-group-title" style="color:var(--text);">Sin mesa — ${p.hora||'—'}</div>
+              <div class="pending-group-sub">${LABELS[p.pedido]||p.pedido} · ${p.detalle||'—'}</div>
+            </div>
+            <div class="pending-group-total">${fmt(p.monto_total||0)}</div>
+          </div>
+          <div class="pending-pay-bar">
+            <select id="metodo-sinmesa-${p.id}" onchange="onMetodoPendienteChange('${key}')">
+              <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
+              <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
+            </select>
+            <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
+              style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${p.monto_total||0})">
+            <button class="btn btn-primary" onclick="marcarSinMesaPagado(${p.id})">✅ Marcar como pagado</button>
+            <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${p.id}])" title="Ya hay mesa libre: reubicar">🔄 Ubicar en mesa</button>
+            <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
+            <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
+            <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕ Cancelar</button>
+            <span id="vuelto-${key}" class="vuelto-box"></span>
+          </div>
+        </div>`; }).join('')}`;
+    } else {
+      sinMesaZone.innerHTML = '';
+    }
   }
 
   // Fiados
@@ -1954,7 +2937,7 @@ function renderPendientes() {
     if (fiados.length) {
       fiadosZone.innerHTML = `
         <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--purple);">📒 Fiados pendientes</span></div>
-        ${fiados.map(p => `
+        ${fiados.map(p => { const key = `fiar-${p.id}`; const metodoInicial = p.metodo === 'transferencia' ? 'transferencia' : 'efectivo'; return `
         <div class="pending-group">
           <div class="pending-group-hdr">
             <div>
@@ -1964,14 +2947,19 @@ function renderPendientes() {
             <div class="pending-group-total">${fmt(p.monto_total||0)}</div>
           </div>
           <div class="pending-pay-bar">
-            <select id="metodo-fiar-${p.id}">
-              <option value="efectivo"${(p.metodo||'efectivo')==='efectivo'?' selected':''}>Efectivo</option>
-              <option value="transferencia"${p.metodo==='transferencia'?' selected':''}>Transferencia</option>
+            <select id="metodo-fiar-${p.id}" onchange="onMetodoPendienteChange('${key}')">
+              <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
+              <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
             </select>
+            <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
+              style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${p.monto_total||0})">
             <button class="btn btn-primary" onclick="marcarFiadoPagado(${p.id})">✅ Marcar como pagado</button>
+            <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
+            <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
             <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕ Cancelar</button>
+            <span id="vuelto-${key}" class="vuelto-box"></span>
           </div>
-        </div>`).join('')}`;
+        </div>`; }).join('')}`;
     } else {
       fiadosZone.innerHTML = '';
     }
@@ -1992,14 +2980,25 @@ function renderIngresos() {
         <td>${i.fecha}</td>
         <td>${i.hora||'—'}</td>
         <td><span class="badge ${i.turno==='cena'?'badge-purple':'badge-accent'}">${i.turno==='cena'?'🌙 CR':'☀️ Alm'}</span></td>
-        <td style="font-size:11px;color:var(--text3);">${i.es_domicilio?'🛵 Dom':i.mesa?`Mesa ${i.mesa}`:'—'}</td>
+        <td style="font-size:11px;color:var(--text3);">${i.es_fiar?'📒 Fiado':i.es_sin_mesa?'🧍 Sin mesa':i.es_domicilio?'🛵 Dom':i.mesa?`Mesa ${i.mesa}`:'—'}</td>
         <td style="color:var(--text);font-size:12px;">${LABELS[i.pedido]||i.pedido}</td>
         <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.detalle||'—'}</td>
-        <td><span class="badge ${metC(i.metodo)}">${i.metodo}</span></td>
+        <td>${metodoEditId === i.id ? `
+          <div style="display:flex;gap:4px;align-items:center;">
+            <select id="metodo-edit-${i.id}" style="padding:4px 6px;width:auto;">
+              <option value="efectivo"${i.metodo==='efectivo'?' selected':''}>Efectivo</option>
+              <option value="transferencia"${i.metodo==='transferencia'?' selected':''}>Transferencia</option>
+            </select>
+            <button class="btn btn-primary" style="padding:4px 8px;font-size:11px;" onclick="guardarMetodoIngreso(${i.id})">✓</button>
+            <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="cancelarEdicionMetodo()">✕</button>
+          </div>`
+          : `<span class="badge ${metC(i.metodo)}" style="cursor:pointer;" onclick="editarMetodoIngreso(${i.id})" title="Clic para cambiar el método de pago">${i.metodo} ✏</span>`
+        }</td>
         <td>${i.cantidad||1}</td>
         <td class="amount-pos">${fmt(i.monto_total||0)}</td>
         <td style="display:flex;gap:4px;">
           <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetalleIngreso(${i.id})">👁</button>
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="revertirPago(${i.id})" title="Revertir a pendiente">↩</button>
           <button class="btn btn-danger" onclick="eliminarIngreso(${i.id})">✕</button>
         </td>
       </tr>`).join('')
@@ -2040,15 +3039,17 @@ function renderIngresos() {
     crBody.innerHTML = html;
   }
 
-  const sM = f => ST.ingresos.filter(i=>inP(i.fecha,f)).reduce((a,b)=>a+(b.monto_total||0),0);
+  // Suma la venta de desayuno del período (no está en pedidos, solo en la apertura del turno)
+  const sM = f => ST.ingresos.filter(i=>inP(i.fecha,f)).reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo(f);
   document.getElementById('ing-hoy').textContent     = fmt(sM('hoy'));
   document.getElementById('ing-semana').textContent  = fmt(sM('semana'));
   document.getElementById('ing-mes').textContent     = fmt(sM('mes'));
-  document.getElementById('ing-ef').textContent    = fmt(hoy.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('ing-ef').textContent    = fmt(hoy.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy'));
   document.getElementById('ing-trans').textContent = fmt(hoy.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0));
 
   // Regenerar mesas del formulario
   renderMesasForm();
+  validarRegistro();
 }
 
 function setFI(f, btn) {
@@ -2059,6 +3060,753 @@ function setFI(f, btn) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// BLOQUE 2.5 — Apertura de turno, notas del día, pago individual, revertir
+// ══════════════════════════════════════════════════════════════════════
+
+// ── Apertura de turno (caja inicial + venta desayuno) ──────────────────
+let aperturaTurnoSel = null;
+
+function abrirModalTurno() {
+  aperturaTurnoSel = turnoManual;
+  pintarSeleccionTurnoApertura();
+  document.getElementById('modal-turno').style.display = 'flex';
+}
+
+function cerrarModalTurno() {
+  document.getElementById('modal-turno').style.display = 'none';
+}
+
+function cerrarModalTurnoClick(e) {
+  if (e.target.id === 'modal-turno') cerrarModalTurno();
+}
+
+function seleccionarTurnoApertura(t) {
+  aperturaTurnoSel = t;
+  pintarSeleccionTurnoApertura();
+}
+
+// Si ya existe una apertura guardada hoy para el turno elegido, se precargan
+// sus valores para poder corregirlos (en vez de partir siempre de cero).
+function pintarSeleccionTurnoApertura() {
+  document.getElementById('apertura-btn-almuerzo').classList.toggle('active', aperturaTurnoSel === 'almuerzo');
+  document.getElementById('apertura-btn-cena').classList.toggle('active', aperturaTurnoSel === 'cena');
+  document.getElementById('apertura-desayuno-wrap').style.display = aperturaTurnoSel === 'almuerzo' ? 'block' : 'none';
+
+  const existente = ST.aperturasTurno.find(a => a.fecha === today() && a.turno === aperturaTurnoSel);
+  const yaCerrado = ST.cierresDia.some(c => c.fecha === today() && c.turno === aperturaTurnoSel);
+  const cajaEl = document.getElementById('apertura-caja-inicial');
+  const desEl  = document.getElementById('apertura-venta-desayuno');
+  cajaEl.value = existente && existente.caja_inicial != null ? Number(existente.caja_inicial).toLocaleString('es-CO') : '';
+  desEl.value  = existente && existente.venta_desayuno != null ? Number(existente.venta_desayuno).toLocaleString('es-CO') : '';
+
+  const tituloEl = document.getElementById('apertura-modal-titulo');
+  const btnEl    = document.getElementById('apertura-btn-guardar');
+  if (existente && yaCerrado) {
+    if (tituloEl) tituloEl.textContent = '🔓 Reabrir turno (ya estaba cerrado)';
+    if (btnEl)    btnEl.textContent    = '✅ Reabrir turno';
+  } else if (existente) {
+    if (tituloEl) tituloEl.textContent = '✏️ Corregir turno abierto';
+    if (btnEl)    btnEl.textContent    = '💾 Guardar corrección';
+  } else {
+    if (tituloEl) tituloEl.textContent = '🔓 Abrir turno';
+    if (btnEl)    btnEl.textContent    = '✅ Abrir turno';
+  }
+}
+
+async function guardarAperturaTurno() {
+  const fecha = today();
+  const turno = aperturaTurnoSel;
+  const cajaInicial = valMiles('apertura-caja-inicial');
+  const ventaDesayuno = turno === 'almuerzo' ? valMiles('apertura-venta-desayuno') : 0;
+
+  if (!turno) { showToast('⚠ Selecciona el turno a abrir', 'warning'); return; }
+  if (!document.getElementById('apertura-caja-inicial').value.trim()) { showToast('⚠ Ingresa la caja inicial', 'warning'); return; }
+
+  try {
+    // Reabrir un turno ya cerrado borra ese cierre — se vuelve a generar solo
+    // (con los totales acumulados) cuando se cierre de nuevo. No se pierde
+    // nada porque solo existe un cierre por fecha+turno (el último manda).
+    const cierrePrevio = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
+    if (cierrePrevio) {
+      await sbDelete('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`);
+      ST.cierresDia = ST.cierresDia.filter(c => !(c.fecha === fecha && c.turno === turno));
+    }
+
+    const existente = ST.aperturasTurno.find(a => a.fecha === fecha && a.turno === turno);
+    if (existente) {
+      await sbPatch('aperturas_turno', `fecha=eq.${fecha}&turno=eq.${turno}`, { caja_inicial: cajaInicial, venta_desayuno: ventaDesayuno });
+      Object.assign(existente, { caja_inicial: cajaInicial, venta_desayuno: ventaDesayuno });
+      showToast(
+        cierrePrevio
+          ? `✅ Turno de ${turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} reabierto`
+          : `✅ Apertura de ${turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} corregida`,
+        'ok'
+      );
+    } else {
+      const [row] = await sbInsert('aperturas_turno', { fecha, turno, caja_inicial: cajaInicial, venta_desayuno: ventaDesayuno });
+      ST.aperturasTurno.unshift(row);
+      showToast(`✅ Turno de ${turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} abierto`, 'ok');
+    }
+    setSyncBadge('ok');
+    // Si estaban viendo este mismo turno en Cierre, que vuelva a la vista en vivo
+    if (document.getElementById('dd-fecha') && document.getElementById('dd-fecha').value === fecha && ddTurno === turno) {
+      viendoHistorialCierre = false;
+    }
+    cerrarModalTurno();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al abrir turno — ¿ya creaste la tabla aperturas_turno en Supabase?', 'warning');
+  }
+}
+
+// ── Notas del día ────────────────────────────────────────────────────
+function abrirModalNotas() {
+  renderNotasModal();
+  document.getElementById('modal-notas').style.display = 'flex';
+}
+
+function cerrarModalNotasClick(e) {
+  if (e.target.id === 'modal-notas') e.target.style.display = 'none';
+}
+
+async function agregarNotaDia() {
+  const input = document.getElementById('nota-nueva-texto');
+  const texto = input.value.trim();
+  if (!texto) return;
+  try {
+    const [row] = await sbInsert('notas_dia', { fecha: today(), texto });
+    ST.notasDia.unshift(row);
+    input.value = '';
+    setSyncBadge('ok');
+    renderNotasModal();
+    renderPendientesNotasBadge();
+    showToast('✅ Nota guardada', 'ok');
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al guardar nota — ¿ya creaste la tabla notas_dia en Supabase?', 'warning');
+  }
+}
+
+async function eliminarNotaDia(id) {
+  if (!confirm('¿Eliminar esta nota?')) return;
+  try {
+    await sbDelete('notas_dia', `id=eq.${id}`);
+    ST.notasDia = ST.notasDia.filter(n => n.id !== id);
+    renderNotasModal();
+    renderPendientesNotasBadge();
+    showToast('Nota eliminada', 'info');
+  } catch (e) { showToast('⚠ Error al eliminar nota', 'warning'); }
+}
+
+function renderNotasModal() {
+  const notas = ST.notasDia.filter(n => n.fecha === today());
+  const el = document.getElementById('notas-lista');
+  if (!el) return;
+  el.innerHTML = notas.length
+    ? notas.map(n => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:12px;color:var(--text2);">${formatearNumerosEnTexto(n.texto)}</span>
+        <button class="btn btn-danger" onclick="eliminarNotaDia(${n.id})">✕</button>
+      </div>`).join('')
+    : `<div style="color:var(--text3);font-size:12px;">Sin notas para hoy.</div>`;
+}
+
+function renderPendientesNotasBadge() {
+  const badge = document.getElementById('notas-badge');
+  if (!badge) return;
+  const cnt = ST.notasDia.filter(n => n.fecha === today()).length;
+  badge.textContent = cnt > 0 ? cnt : '';
+  badge.style.display = cnt > 0 ? 'inline' : 'none';
+}
+
+// ── Calculadora de vuelto (solo pantalla, no se guarda) ─────────────────
+function onMetodoPendienteChange(key) {
+  const metodoEl = document.getElementById(`metodo-${key}`);
+  const inp      = document.getElementById(`pago-con-${key}`);
+  const vuelto   = document.getElementById(`vuelto-${key}`);
+  if (!metodoEl || !inp) return;
+  if (metodoEl.value === 'efectivo') {
+    inp.style.display = 'inline-block';
+  } else {
+    inp.style.display = 'none';
+    inp.value = '';
+    if (vuelto) vuelto.innerHTML = '';
+  }
+}
+
+function calcularVueltoPendiente(key, total) {
+  const inp    = document.getElementById(`pago-con-${key}`);
+  const vuelto = document.getElementById(`vuelto-${key}`);
+  if (!inp || !vuelto) return;
+  const pagoCon = parseMiles(inp.value);
+  if (pagoCon <= 0) { vuelto.innerHTML = ''; return; }
+  const v = pagoCon - total;
+  vuelto.innerHTML = v < 0
+    ? `<span style="color:var(--red);">Falta ${fmt(Math.abs(v))}</span>`
+    : `<span style="color:var(--green);">Vuelto a entregar: ${fmt(v)}</span>`;
+}
+
+// ── Revertir un pago (uno o varios pedidos) sin duplicar ni perder datos ─
+// Usa PATCH sobre el/los mismo(s) registro(s) — nunca borra ni reinserta.
+async function revertirPago(ids) {
+  const idArr = Array.isArray(ids) ? ids : [ids];
+  const objetos = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
+  if (!objetos.length) return;
+
+  try {
+    for (const p of objetos) {
+      const patch = { estado: 'pendiente' };
+      if (p.fecha_original) { patch.fecha = p.fecha_original; patch.fecha_original = null; }
+      try {
+        await sbPatch('pedidos', `id=eq.${p.id}`, patch);
+      } catch (e) {
+        if ((e.message || '').includes('fecha_original')) {
+          delete patch.fecha_original;
+          await sbPatch('pedidos', `id=eq.${p.id}`, patch);
+        } else { throw e; }
+      }
+      Object.assign(p, patch);
+      if (patch.fecha_original === null) delete p.fecha_original;
+    }
+
+    idArr.forEach(id => {
+      const idx = ST.ingresos.findIndex(i => i.id === id);
+      if (idx !== -1) {
+        const [pd] = ST.ingresos.splice(idx, 1);
+        ST.pendientes.unshift(pd);
+      }
+    });
+
+    const mesasAfectadas = [...new Set(objetos.filter(p => p.mesa).map(p => p.mesa))];
+    for (const mn of mesasAfectadas) {
+      await sbPatch('mesas', `numero=eq.${mn}`, { estado: 'ocupada' });
+      const mesa = ST.mesas.find(m => m.numero === mn);
+      if (mesa) mesa.estado = 'ocupada';
+    }
+
+    setSyncBadge('ok');
+    showToast(`↩ ${idArr.length > 1 ? 'Pagos revertidos' : 'Pago revertido'} — vuelve${idArr.length > 1 ? 'n' : ''} a pendientes`, 'info');
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al revertir el pago', 'warning');
+  }
+}
+
+// ── Marcar UN pedido individual de una mesa como pagado (cuentas separadas) ─
+// key = id del grupo mesa+pedido en pantalla (ej. "mesa-3-2"), para leer el
+// método de pago de la barra correcta cuando la mesa tiene varios pedidos.
+async function marcarPedidoIndividualPagado(pedidoId, key) {
+  const metodoEl = document.getElementById(`metodo-${key}`);
+  const metodo   = metodoEl ? metodoEl.value : 'efectivo';
+
+  try {
+    await sbPatch('pedidos', `id=eq.${pedidoId}`, { estado: 'pagado', metodo });
+
+    let pedidoPagado = null;
+    let mesaNum = null;
+    const idx = ST.pendientes.findIndex(p => p.id === pedidoId);
+    if (idx !== -1) {
+      [pedidoPagado] = ST.pendientes.splice(idx, 1);
+      mesaNum = pedidoPagado.mesa;
+      pedidoPagado.estado = 'pagado'; pedidoPagado.metodo = metodo;
+      ST.ingresos.unshift(pedidoPagado);
+    }
+
+    if (mesaNum) {
+      const quedan = ST.pendientes.filter(p => p.mesa === mesaNum).length;
+      if (quedan === 0) {
+        await sbPatch('mesas', `numero=eq.${mesaNum}`, { estado: 'libre' });
+        const mesa = ST.mesas.find(m => m.numero === mesaNum);
+        if (mesa) mesa.estado = 'libre';
+      }
+    }
+
+    setSyncBadge('ok');
+    showToast(`✅ Pedido pagado${mesaNum ? ' — Mesa ' + mesaNum : ''}`, 'ok',
+      pedidoPagado ? { label: '↩ Deshacer', onClick: () => revertirPago(pedidoPagado.id) } : null);
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al procesar el pago', 'warning');
+  }
+}
+
+// ── Cambiar de mesa uno o varios pedidos pendientes ya registrados ──────
+// Si un pedido tiene varios almuerzos (mismo grupo de mesa), se mueven todos
+// juntos: cambioMesaIds siempre es un arreglo, aunque sea de un solo id.
+let cambioMesaIds = [];
+
+function abrirModalCambiarMesa(ids) {
+  cambioMesaIds = Array.isArray(ids) ? ids : [ids];
+  renderOpcionesCambiarMesa();
+  document.getElementById('modal-cambiar-mesa').style.display = 'flex';
+}
+
+function cerrarModalCambiarMesa() {
+  document.getElementById('modal-cambiar-mesa').style.display = 'none';
+  cambioMesaIds = [];
+}
+
+function cerrarModalCambiarMesaClick(e) {
+  if (e.target.id === 'modal-cambiar-mesa') cerrarModalCambiarMesa();
+}
+
+function renderOpcionesCambiarMesa() {
+  const grid = document.getElementById('cambiar-mesa-grid');
+  if (!grid) return;
+  const pedidosMover = cambioMesaIds.map(id => ST.pendientes.find(x => x.id === id)).filter(Boolean);
+  const mesaActual = pedidosMover.length ? pedidosMover[0].mesa : null;
+  let html = '';
+  for (let i = 1; i <= NUM_MESAS; i++) {
+    const ocupadaPorOtros = ST.pendientes.some(x => x.mesa === i && !cambioMesaIds.includes(x.id));
+    const esActual = i === mesaActual;
+    // Se puede mover a cualquier mesa, incluso ocupada por otro pedido —
+    // ambos quedan como pedidos distintos en la misma mesa.
+    const cls = esActual ? 'selected' : (ocupadaPorOtros ? 'ocupada' : 'libre');
+    html += `<button class="mesa-btn ${cls}" ${esActual ? 'disabled title="Mesa actual"' : `onclick="moverPedidoAMesa(${i})" title="${ocupadaPorOtros ? 'Ocupada por otro pedido — igual se puede mover aquí' : 'Mesa libre'}"`}>
+      <span class="mesa-num">Mesa ${i}</span>
+      ${esActual ? '<span class="mesa-cnt">Actual</span>' : (ocupadaPorOtros ? '<span class="mesa-cnt">Ocupada</span>' : '')}
+    </button>`;
+  }
+  grid.innerHTML = html;
+}
+
+async function moverPedidoAMesa(nuevaMesa) {
+  const ids = cambioMesaIds;
+  const pedidosMover = ids.map(id => ST.pendientes.find(x => x.id === id)).filter(Boolean);
+  if (!pedidosMover.length) { cerrarModalCambiarMesa(); return; }
+  const mesaAnterior = pedidosMover[0].mesa;
+  if (mesaAnterior === nuevaMesa) { cerrarModalCambiarMesa(); return; }
+
+  try {
+    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: nuevaMesa, es_sin_mesa: false, es_domicilio: false });
+    pedidosMover.forEach(p => { p.mesa = nuevaMesa; p.es_sin_mesa = false; p.es_domicilio = false; });
+
+    if (mesaAnterior) {
+      const quedan = ST.pendientes.filter(x => x.mesa === mesaAnterior).length;
+      if (quedan === 0) {
+        await sbPatch('mesas', `numero=eq.${mesaAnterior}`, { estado: 'libre' });
+        const m = ST.mesas.find(m => m.numero === mesaAnterior);
+        if (m) m.estado = 'libre';
+      }
+    }
+    await sbPatch('mesas', `numero=eq.${nuevaMesa}`, { estado: 'ocupada' });
+    const mNueva = ST.mesas.find(m => m.numero === nuevaMesa);
+    if (mNueva) mNueva.estado = 'ocupada';
+
+    setSyncBadge('ok');
+    showToast(`✅ ${ids.length > 1 ? 'Pedido completo movido' : 'Pedido movido'} a Mesa ${nuevaMesa}`, 'ok');
+    cerrarModalCambiarMesa();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al cambiar de mesa', 'warning');
+  }
+}
+
+async function moverPedidoASinMesa() {
+  const ids = cambioMesaIds;
+  const pedidosMover = ids.map(id => ST.pendientes.find(x => x.id === id)).filter(Boolean);
+  if (!pedidosMover.length) { cerrarModalCambiarMesa(); return; }
+  const mesaAnterior = pedidosMover[0].mesa;
+  if (!mesaAnterior && pedidosMover.every(p => p.es_sin_mesa)) { cerrarModalCambiarMesa(); return; }
+
+  try {
+    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: null, es_sin_mesa: true, es_domicilio: false });
+    pedidosMover.forEach(p => { p.mesa = null; p.es_sin_mesa = true; p.es_domicilio = false; });
+
+    if (mesaAnterior) {
+      const quedan = ST.pendientes.filter(x => x.mesa === mesaAnterior).length;
+      if (quedan === 0) {
+        await sbPatch('mesas', `numero=eq.${mesaAnterior}`, { estado: 'libre' });
+        const m = ST.mesas.find(m => m.numero === mesaAnterior);
+        if (m) m.estado = 'libre';
+      }
+    }
+
+    setSyncBadge('ok');
+    showToast(`✅ ${ids.length > 1 ? 'Pedido completo movido' : 'Pedido movido'} a "Sin mesa"`, 'ok');
+    cerrarModalCambiarMesa();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al cambiar de mesa', 'warning');
+  }
+}
+
+// ── Agregar producto extra: modal compartido entre Pendientes e Ingresos ─
+// Pendientes (mesa ya registrada) → se inserta de una vez en Supabase.
+// Ingresos (pedido que se está armando) → se guarda en una cola local y se
+// inserta junto con el almuerzo cuando se registre el pedido.
+let mesaAgregarProductoActual = null;
+let grupoAgregarProductoActual = null; // grupo_pedido del pedido específico al que se agrega (si aplica)
+let extraProductoContexto = 'pendientes'; // 'pendientes' | 'ingresos'
+
+function abrirModalAgregarProducto(mesaNum, grupoPedido) {
+  extraProductoContexto = 'pendientes';
+  mesaAgregarProductoActual = mesaNum;
+  grupoAgregarProductoActual = grupoPedido || null;
+  document.getElementById('extra-producto-catalogo').value = '';
+  document.getElementById('extra-producto-desc').value = '';
+  document.getElementById('extra-producto-valor').value = '';
+  document.getElementById('extra-producto-cantidad').value = '1';
+  document.getElementById('extra-producto-mesa-label').textContent = `— Mesa ${mesaNum}`;
+  document.getElementById('modal-agregar-producto').style.display = 'flex';
+}
+
+function abrirModalAgregarExtraIngreso() {
+  extraProductoContexto = 'ingresos';
+  mesaAgregarProductoActual = null;
+  document.getElementById('extra-producto-catalogo').value = '';
+  document.getElementById('extra-producto-desc').value = '';
+  document.getElementById('extra-producto-valor').value = '';
+  document.getElementById('extra-producto-cantidad').value = '1';
+  document.getElementById('extra-producto-mesa-label').textContent = '';
+  document.getElementById('modal-agregar-producto').style.display = 'flex';
+}
+
+function cerrarModalAgregarProducto() {
+  document.getElementById('modal-agregar-producto').style.display = 'none';
+  mesaAgregarProductoActual = null;
+  grupoAgregarProductoActual = null;
+}
+
+function cerrarModalAgregarProductoClick(e) {
+  if (e.target.id === 'modal-agregar-producto') cerrarModalAgregarProducto();
+}
+
+async function guardarProductoExtra() {
+  const desc          = document.getElementById('extra-producto-desc').value.trim();
+  const valorUnitario = valMiles('extra-producto-valor');
+  const cantidad       = parseInt(document.getElementById('extra-producto-cantidad').value) || 1;
+  if (!desc) { showToast('⚠ Completa la descripción', 'warning'); return; }
+  if (!valorUnitario || valorUnitario <= 0) { showToast('⚠ Ingresa el valor unitario', 'warning'); return; }
+
+  // Contexto Ingresos: se queda en cola local, se inserta al registrar el pedido
+  if (extraProductoContexto === 'ingresos') {
+    extrasIngresoPendientes.push({ descripcion: desc, valorUnitario, cantidad });
+    renderExtrasIngresoLista();
+    cerrarModalAgregarProducto();
+    actualizarMontoDisplay();
+    showToast(`✅ "${desc}" se agregará al registrar el pedido`, 'ok');
+    return;
+  }
+
+  // Contexto Pendientes: mesa ya registrada → se inserta de inmediato,
+  // etiquetado con el mismo grupo_pedido para que quede en ESE pedido y no
+  // se mezcle con otro pedido distinto que esté sentado en la misma mesa.
+  const mesaNum = mesaAgregarProductoActual;
+  if (!mesaNum) return;
+  const valorTotal = valorUnitario * cantidad;
+
+  const grupoObjetivo = grupoAgregarProductoActual || 'legacy';
+  const existentesGrupo = ST.pendientes.filter(p => p.mesa === mesaNum && (p.grupo_pedido || 'legacy') === grupoObjetivo);
+  const turno = existentesGrupo.length ? existentesGrupo[0].turno : turnoManual;
+  const fecha = existentesGrupo.length ? existentesGrupo[0].fecha : today();
+
+  const pedidoData = {
+    fecha, hora: nowTime(), turno, pedido: 'extra',
+    sopa: '', arroz: '', proteina: '', acomp: '',
+    detalle: desc, metodo: 'efectivo', cantidad,
+    monto_unit: valorUnitario, monto_almuerzo: valorTotal, monto_domicilio: 0, monto_total: valorTotal,
+    estado: 'pendiente', es_domicilio: false, mesa: mesaNum, para_llevar: false,
+    es_fiar: false, es_sin_mesa: false, direccion: '',
+    grupo_pedido: grupoAgregarProductoActual || null
+  };
+
+  try {
+    let newPedido;
+    try {
+      [newPedido] = await sbInsert('pedidos', pedidoData);
+    } catch (e) {
+      const msg = e.message || '';
+      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido')) {
+        const { es_fiar, direccion, es_sin_mesa, grupo_pedido, ...pedidoBase } = pedidoData;
+        [newPedido] = await sbInsert('pedidos', pedidoBase);
+        newPedido.es_fiar = false; newPedido.direccion = ''; newPedido.es_sin_mesa = false; newPedido.grupo_pedido = grupo_pedido;
+      } else { throw e; }
+    }
+    ST.pendientes.unshift(newPedido);
+
+    // La mesa ya estaba ocupada normalmente, pero por si acaso (mesa "reabierta" con este producto)
+    await sbPatch('mesas', `numero=eq.${mesaNum}`, { estado: 'ocupada' });
+    const mesa = ST.mesas.find(m => m.numero === mesaNum);
+    if (mesa) mesa.estado = 'ocupada';
+
+    setSyncBadge('ok');
+    showToast(`✅ "${desc}" agregado a Mesa ${mesaNum}`, 'ok');
+    cerrarModalAgregarProducto();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al agregar el producto', 'warning');
+  }
+}
+
+// ── Editar un pedido ya registrado en Pendientes (tipo, valor y nota) ───
+let editarPedidoId = null;
+
+function abrirModalEditarPedido(id) {
+  const p = ST.pendientes.find(x => x.id === id);
+  if (!p) return;
+  editarPedidoId = id;
+  document.getElementById('editar-ped-actual').textContent = `${LABELS[p.pedido] || p.pedido} · ${p.detalle || 'sin detalle'} · ${fmt(p.monto_total || 0)}`;
+  rebuildEditarPedidoSelect(p.turno);
+  document.getElementById('editar-ped-tipo').value = p.pedido;
+  document.getElementById('editar-ped-sopa').value = p.sopa || '';
+  document.getElementById('editar-ped-arroz').value = p.arroz || '';
+  document.getElementById('editar-ped-proteina').value = p.proteina || '';
+  document.getElementById('editar-ped-acomp').value = p.acomp || '';
+  document.getElementById('editar-ped-cantidad').value = p.cantidad || 1;
+  document.getElementById('editar-ped-nota').value = '';
+  onEditarPedTipoChange();
+  document.getElementById('modal-editar-pedido').style.display = 'flex';
+}
+
+function cerrarModalEditarPedido() {
+  document.getElementById('modal-editar-pedido').style.display = 'none';
+  editarPedidoId = null;
+}
+
+function cerrarModalEditarPedidoClick(e) {
+  if (e.target.id === 'modal-editar-pedido') cerrarModalEditarPedido();
+}
+
+// Reconstruye el <select> de tipos con el mismo catálogo del formulario de
+// Ingresos, pero fijado al turno DEL PEDIDO que se está editando (no cambia).
+function rebuildEditarPedidoSelect(turno) {
+  const sel = document.getElementById('editar-ped-tipo');
+  if (turno === 'almuerzo') {
+    sel.innerHTML = `
+      <optgroup label="☀️ ALMUERZOS">
+        <option value="completo"      data-monto="14000">Almuerzo Completo (con sopa) · $14.000</option>
+        <option value="seco"          data-monto="12000">Almuerzo Seco (sin sopa) · $12.000</option>
+        <option value="asado130"      data-monto="17000">Asado 130g · $17.000</option>
+        <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
+        <option value="porcion-sopa"  data-monto="6000">Porción de Sopa · $6.000</option>
+        <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
+        <option value="sopa-y-arroz"  data-monto="11000">Sopa y Arroz · $11.000</option>
+      </optgroup>`;
+  } else {
+    const cats = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS','SANDWICH CUBANO','AREPAS','SUIZOS','ADICIONALES'];
+    const groups = cats.map(cat => {
+      const items = PL.comidaRapida.filter(p => p.cat === cat);
+      const opts  = items.map(p =>
+        `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`
+      ).join('');
+      return `<optgroup label="🌙 ${cat}">${opts}</optgroup>`;
+    }).join('');
+    sel.innerHTML = groups;
+
+    const bebidaSel = document.getElementById('editar-ped-bebida');
+    const bebidas = PL.comidaRapida.filter(p => p.cat === 'BEBIDAS');
+    bebidaSel.innerHTML = `<option value="" data-monto="0">— Sin bebida —</option>` +
+      bebidas.map(p => `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`).join('');
+  }
+}
+
+function onEditarPedTipoChange() {
+  const val = document.getElementById('editar-ped-tipo').value;
+  const camposAlm = document.getElementById('editar-ped-campos-almuerzo');
+  const camposCR  = document.getElementById('editar-ped-campos-cena');
+  const crItem = PL.comidaRapida.find(p => p.c === val);
+
+  if (crItem) {
+    camposAlm.style.display = 'none';
+    camposCR.style.display  = 'block';
+    const manualDiv = document.getElementById('editar-ped-precio-manual');
+    const esEditable = crItem.cat === 'ADICIONALES';
+    manualDiv.style.display = esEditable ? 'block' : 'none';
+    if (esEditable) document.getElementById('editar-ped-precio').value = crItem.precio.toLocaleString('es-CO');
+  } else {
+    camposAlm.style.display = 'block';
+    camposCR.style.display  = 'none';
+  }
+  recalcularEditarPedidoMonto();
+}
+
+function recalcularEditarPedidoMonto() {
+  const val = document.getElementById('editar-ped-tipo').value;
+  const cantidad = parseInt(document.getElementById('editar-ped-cantidad').value) || 1;
+  const crItem = PL.comidaRapida.find(p => p.c === val);
+  let montoUnit = 0;
+
+  if (crItem) {
+    const esEditable = crItem.cat === 'ADICIONALES';
+    montoUnit = esEditable ? valMiles('editar-ped-precio') : crItem.precio;
+    const bebidaSel = document.getElementById('editar-ped-bebida');
+    const montoBebida = (bebidaSel && bebidaSel.value)
+      ? (parseFloat(bebidaSel.options[bebidaSel.selectedIndex]?.getAttribute('data-monto')) || 0)
+      : 0;
+    montoUnit += montoBebida;
+  } else {
+    montoUnit = PRECIOS[val] || 0;
+  }
+
+  const p = ST.pendientes.find(x => x.id === editarPedidoId);
+  const paraLlevarBonus = (p && p.para_llevar) ? 1000 : 0;
+  const total = (montoUnit + paraLlevarBonus) * cantidad;
+  document.getElementById('editar-ped-monto-display').textContent = fmt(total);
+}
+
+async function guardarEdicionPedido() {
+  const id = editarPedidoId;
+  const p = ST.pendientes.find(x => x.id === id);
+  if (!p) return;
+
+  const val = document.getElementById('editar-ped-tipo').value;
+  const cantidad = parseInt(document.getElementById('editar-ped-cantidad').value) || 1;
+  const nota = document.getElementById('editar-ped-nota').value.trim();
+  const crItem = PL.comidaRapida.find(x => x.c === val);
+  const direccionValue = p.es_domicilio ? (p.direccion || '') : '';
+
+  let sopa = '', arroz = '', proteina = '', acomp = '', detalleBase = '', montoUnit = 0;
+
+  if (crItem) {
+    const esEditable = crItem.cat === 'ADICIONALES';
+    montoUnit = esEditable ? valMiles('editar-ped-precio') : crItem.precio;
+    const bebidaSel  = document.getElementById('editar-ped-bebida');
+    const bebidaItem = (bebidaSel && bebidaSel.value) ? PL.comidaRapida.find(x => x.c === bebidaSel.value) : null;
+    montoUnit += bebidaItem ? bebidaItem.precio : 0;
+    detalleBase = [crItem.n, bebidaItem?.n, direccionValue ? '📍 ' + direccionValue : ''].filter(Boolean).join(' · ');
+  } else {
+    montoUnit = PRECIOS[val] || 0;
+    sopa     = document.getElementById('editar-ped-sopa').value.trim();
+    arroz    = document.getElementById('editar-ped-arroz').value.trim();
+    proteina = document.getElementById('editar-ped-proteina').value.trim();
+    acomp    = document.getElementById('editar-ped-acomp').value.trim();
+    detalleBase = [sopa, arroz, proteina, acomp, direccionValue ? '📍 ' + direccionValue : ''].filter(Boolean).join(' · ');
+  }
+
+  if (montoUnit <= 0) { showToast('⚠ El monto debe ser mayor a $0', 'warning'); return; }
+
+  const detalle = [detalleBase, nota].filter(Boolean).join(' · ');
+  const monto_almuerzo = (montoUnit + (p.para_llevar ? 1000 : 0)) * cantidad;
+  const monto_total    = monto_almuerzo + (p.monto_domicilio || 0);
+
+  const patchData = {
+    pedido: val, sopa, arroz, proteina, acomp, detalle, cantidad,
+    monto_unit: montoUnit, monto_almuerzo, monto_total
+  };
+
+  try {
+    await sbPatch('pedidos', `id=eq.${id}`, patchData);
+    Object.assign(p, patchData);
+    setSyncBadge('ok');
+    showToast('✅ Pedido actualizado', 'ok');
+    cerrarModalEditarPedido();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al actualizar el pedido', 'warning');
+  }
+}
+
+// ── Sección PEDIDOS (seguimiento de cocina del turno actual) ───────────
+// Completo/Asado son los tipos que estructuralmente llevan sopa — se define
+// por el TIPO de pedido, no por si el cajero alcanzó a escribir cuál sopa era
+// (ese campo es opcional y puede quedar vacío sin que el pedido deje de llevar sopa).
+const TIPOS_CON_SOPA_Y_SECO = ['completo', 'asado130', 'asado200'];
+
+// Domicilio o para llevar → el pedido sale completo de una sola vez, así tenga
+// sopa: no tiene sentido distinguir "sopa entregada" de "seco entregado" ahí,
+// solo importa si ya salió o no (check "Entregado/Recogido"). Los pedidos en
+// mesa/sin mesa con sopa sí necesitan las 2 marcas porque la sopa llega
+// primero y el seco después.
+function requiereEntregaDoble(p) {
+  const esTipoConSopa = TIPOS_CON_SOPA_Y_SECO.includes(p.pedido);
+  return esTipoConSopa && !p.es_domicilio && !p.para_llevar;
+}
+
+async function toggleEntrega(pedidoId, campo, valor) {
+  try {
+    await sbPatch('pedidos', `id=eq.${pedidoId}`, { [campo]: valor });
+    const p = ST.pendientes.find(x => x.id === pedidoId) || ST.ingresos.find(x => x.id === pedidoId);
+    if (p) p[campo] = valor;
+    setSyncBadge('ok');
+    renderPedidosTurno();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ No se pudo actualizar la entrega — ¿ya agregaste las columnas entrega_sopa/entrega_plato en Supabase?', 'warning');
+    renderPedidosTurno();
+  }
+}
+
+// Eliminar/cancelar un pedido desde la sección Pedidos (por si se registró algo
+// que no es, sin importar si ya está pagado o sigue pendiente).
+function eliminarPedidoTurno(id) {
+  const p = ST.pendientes.find(x => x.id === id) || ST.ingresos.find(x => x.id === id);
+  if (!p) return;
+  if (p.estado === 'pagado') eliminarIngreso(id);
+  else cancelarPendiente(id);
+}
+
+// ¿Ya se entregó por completo este pedido? (ambos checks si aplica, o el único check si no)
+function pedidoEntregadoCompleto(p) {
+  return requiereEntregaDoble(p) ? !!(p.entrega_sopa && p.entrega_plato) : !!p.entrega_plato;
+}
+
+function renderPedidosTurno() {
+  const labelEl = document.getElementById('pedidos-turno-label');
+  const tbody   = document.getElementById('pedidos-turno-body');
+  if (!labelEl || !tbody) return;
+
+  const turnoHoy = turnoManual;
+  labelEl.textContent = turnoHoy === 'almuerzo' ? '☀️ Almuerzo' : '🌙 Comidas Rápidas';
+
+  // Los que faltan por entregar quedan arriba (siempre a la vista); los ya
+  // entregados bajan al final. Dentro de cada grupo, orden por hora.
+  const lista = [...ST.pendientes, ...ST.ingresos]
+    .filter(p => p.fecha === today() && p.turno === turnoHoy)
+    .sort((a, b) => {
+      const ca = pedidoEntregadoCompleto(a), cb = pedidoEntregadoCompleto(b);
+      if (ca !== cb) return ca ? 1 : -1;
+      return (a.hora || '').localeCompare(b.hora || '');
+    });
+
+  if (!lista.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">🍽</div><div class="empty-text">Sin pedidos en este turno todavía</div></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = lista.map(p => {
+    const ubic = p.es_fiar ? '📒 Fiado' : p.es_sin_mesa ? '🧍 Sin mesa' : p.es_domicilio ? '🛵 Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
+    const dosCheckbox = requiereEntregaDoble(p);
+    let entregaHtml;
+    if (dosCheckbox) {
+      entregaHtml = `
+        <label style="display:flex;align-items:center;gap:5px;margin-bottom:4px;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" ${p.entrega_sopa ? 'checked' : ''} onchange="toggleEntrega(${p.id},'entrega_sopa',this.checked)"> 🍲 Sopa
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" ${p.entrega_plato ? 'checked' : ''} onchange="toggleEntrega(${p.id},'entrega_plato',this.checked)"> 🍽 Seco
+        </label>`;
+    } else {
+      entregaHtml = `
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;">
+          <input type="checkbox" ${p.entrega_plato ? 'checked' : ''} onchange="toggleEntrega(${p.id},'entrega_plato',this.checked)"> ✅ ${(p.es_domicilio || p.para_llevar) ? 'Entregado/Recogido' : 'Entregado'}
+        </label>`;
+    }
+    const completo = pedidoEntregadoCompleto(p);
+    const detalleConNota = [p.detalle || '—', p.para_llevar ? '<span style="color:var(--accent);">· Para llevar</span>' : ''].filter(Boolean).join(' ');
+    return `<tr style="${completo ? 'opacity:0.5;' : ''}">
+      <td>${p.hora || '—'}</td>
+      <td style="font-size:11px;color:var(--text3);">${ubic}</td>
+      <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido] || p.pedido}</td>
+      <td style="color:var(--text3);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detalleConNota}</td>
+      <td>${p.cantidad || 1}</td>
+      <td><span class="badge ${p.estado === 'pagado' ? 'badge-green' : 'badge-orange'}">${p.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</span></td>
+      <td>${entregaHtml}</td>
+      <td style="display:flex;gap:4px;white-space:nowrap;">
+        <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
+        <button class="btn btn-danger" onclick="eliminarPedidoTurno(${p.id})" title="Eliminar este pedido">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // BLOQUE 3 — Egresos, inventario, reportes, día a día
 // ══════════════════════════════════════════════════════════════════════
 
@@ -2066,7 +3814,7 @@ function setFI(f, btn) {
 async function agregarEgreso() {
   const fecha = document.getElementById('egr-fecha').value;
   const cat   = document.getElementById('egr-cat').value;
-  const monto = parseFloat(document.getElementById('egr-monto').value);
+  const monto = valMiles('egr-monto');
   const desc  = document.getElementById('egr-desc').value.trim();
   if (!fecha || !monto || monto <= 0) { showToast('⚠ Completa fecha y monto', 'warning'); return; }
 
@@ -2125,7 +3873,7 @@ async function agregarProducto() {
   const unidad = document.getElementById('inv-unidad').value;
   const stock  = parseFloat(document.getElementById('inv-stock').value);
   const minimo = parseFloat(document.getElementById('inv-minimo').value) || 0;
-  const costo  = parseFloat(document.getElementById('inv-costo').value)  || 0;
+  const costo  = valMiles('inv-costo');
   if (!nombre || isNaN(stock)) { showToast('⚠ Completa nombre y stock', 'warning'); return; }
 
   try {
@@ -2229,7 +3977,8 @@ function setFR(f, btn) {
 function renderReportes() {
   const ings = ST.ingresos.filter(i => inP(i.fecha, fR));
   const egrs = ST.egresos.filter(e  => inP(e.fecha, fR));
-  const tI   = ings.reduce((a,b) => a + (b.monto_total||0), 0);
+  const desayunoPeriodo = desayunoEnPeriodo(fR);
+  const tI   = ings.reduce((a,b) => a + (b.monto_total||0), 0) + desayunoPeriodo;
   const tE   = egrs.reduce((a,b) => a + b.monto, 0);
   const ut   = tI - tE;
   const mg   = tI > 0 ? ((ut/tI)*100).toFixed(1) : 0;
@@ -2244,7 +3993,7 @@ function renderReportes() {
   document.getElementById('rp-parroz').textContent= cnt('porcion-arroz');
   document.getElementById('rp-tal').textContent   = fmt(alm.reduce((a,b)=>a+(b.monto_total||0),0));
 
-  document.getElementById('rp-ef').textContent    = fmt(ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('rp-ef').textContent    = fmt(ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoPeriodo);
   document.getElementById('rp-trans').textContent = fmt(ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0));
   document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(b.monto_total||0),0));
   document.getElementById('rp-ting').textContent  = fmt(tI);
@@ -2353,11 +4102,26 @@ function renderReportes() {
 // ── DÍA A DÍA ────────────────────────────────────────────────────────
 let fDD = 'hoy';
 
+// Estado del panel Cierre:
+// - viendoHistorialCierre: true solo cuando llegó aquí con "Ver" desde el historial —
+//   permite ver/corregir un turno YA cerrado sin que se muestre en blanco.
+// Efectivo/Transferencia YA NO son editables: siempre es la suma fija de los
+// pedidos registrados. Lo único editable a mano es el campo "Ajuste".
+let viendoHistorialCierre = false;
+
 function setDDTurno(t, btn) {
   ddTurno = t;
+  viendoHistorialCierre = false;
+  resetearCamposAjusteCierre();
   document.getElementById('dd-btn-almuerzo').classList.remove('active');
   document.getElementById('dd-btn-cena').classList.remove('active');
   btn.classList.add('active');
+  renderDiaADia();
+}
+
+function onFechaCierreChange() {
+  viendoHistorialCierre = false;
+  resetearCamposAjusteCierre();
   renderDiaADia();
 }
 
@@ -2368,26 +4132,128 @@ function setFDD(f, btn) {
   renderDiaADia();
 }
 
+function toggleAjusteManual() {
+  const sec = document.getElementById('ajuste-manual-section');
+  const btn = document.getElementById('btn-toggle-ajuste');
+  const abrir = sec.style.display === 'none';
+  sec.style.display = abrir ? 'block' : 'none';
+  btn.textContent = abrir ? '➖ Ocultar ajuste' : '➕ Ajuste';
+}
+
+function resetearCamposAjusteCierre() {
+  const montoEl = document.getElementById('dd-ajuste-monto');
+  const notaEl  = document.getElementById('dd-ajuste-nota');
+  if (montoEl) montoEl.value = '';
+  if (notaEl)  notaEl.value  = '';
+  const sec = document.getElementById('ajuste-manual-section');
+  const btn = document.getElementById('btn-toggle-ajuste');
+  if (sec) sec.style.display = 'none';
+  if (btn) btn.textContent = '➕ Ajuste';
+}
+
+// Suma fija de los pedidos ya registrados (no editable) para una fecha/turno.
+function calcularVentasFijas(fecha, turno) {
+  const apertura      = ST.aperturasTurno.find(a => a.fecha === fecha && a.turno === turno);
+  const ventaDesayuno = (turno === 'almuerzo' && apertura) ? (apertura.venta_desayuno || 0) : 0;
+  const ings = ST.ingresos.filter(i => i.fecha === fecha && i.turno === turno);
+  const efectivoPedidos = ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0);
+  const transferencia   = ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0);
+  return { efectivo: efectivoPedidos + ventaDesayuno, transferencia, cajaInicial: apertura ? (apertura.caja_inicial||0) : 0, ventaDesayuno, tieneApertura: !!apertura };
+}
+
+// Recalcula los totales derivados (KPIs, utilidad, caja esperada). Efectivo y
+// transferencia son siempre la suma fija de los pedidos; solo el Ajuste es editable.
+function recalcularResultadoCierre() {
+  const fecha = document.getElementById('dd-fecha').value || today();
+  const { efectivo, transferencia, cajaInicial, ventaDesayuno, tieneApertura } = calcularVentasFijas(fecha, ddTurno);
+  const total = efectivo + transferencia;
+
+  const gastos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === ddTurno).reduce((a,b)=>a+b.monto,0);
+  const ajuste = valMilesConSigno('dd-ajuste-monto');
+
+  const resultado    = total - gastos + ajuste;
+  const cajaEsperada = cajaInicial + efectivo - gastos + ajuste;
+
+  document.getElementById('dd-res-caja-inicial').innerHTML = tieneApertura
+    ? fmt(cajaInicial)
+    : `$0 <span style="color:var(--text3);font-weight:400;">(sin abrir turno)</span>`;
+  document.getElementById('dd-res-desayuno-row').style.display = ddTurno === 'almuerzo' ? 'flex' : 'none';
+  document.getElementById('dd-res-desayuno').textContent = fmt(ventaDesayuno);
+  document.getElementById('dd-res-efectivo').textContent = fmt(efectivo - ventaDesayuno);
+  document.getElementById('dd-res-transferencia').textContent = fmt(transferencia);
+
+  document.getElementById('dd-total').textContent         = fmt(total);
+  document.getElementById('dd-efectivo').textContent      = fmt(efectivo);
+  document.getElementById('dd-transferencia').textContent = fmt(transferencia);
+  document.getElementById('dd-turno-label').textContent   = ddTurno==='almuerzo' ? 'Efectivo + Transferencia almuerzo (incl. desayuno)' : 'Efectivo + Transferencia comida rápida';
+
+  document.getElementById('dd-res-gastos').textContent  = fmt(gastos);
+  document.getElementById('dd-total-turno').textContent = fmt(total);
+  document.getElementById('dd-resultado').textContent   = fmt(resultado);
+  document.getElementById('dd-resultado').style.color   = resultado >= 0 ? 'var(--accent)' : 'var(--red)';
+  document.getElementById('dd-caja-esperada').textContent = fmt(cajaEsperada);
+
+  const ajusteRow = document.getElementById('dd-res-ajuste-row');
+  const ajusteEl  = document.getElementById('dd-res-ajuste');
+  if (ajuste !== 0) {
+    ajusteRow.style.display = 'flex';
+    ajusteEl.textContent = (ajuste > 0 ? '+ ' : '− ') + '$' + Math.abs(Math.round(ajuste)).toLocaleString('es-CO');
+    ajusteEl.className   = ajuste >= 0 ? 'amount-pos' : 'amount-neg';
+  } else {
+    ajusteRow.style.display = 'none';
+  }
+}
+
 async function guardarCierre() {
-  const fecha         = document.getElementById('dd-fecha').value || today();
-  const ings          = ST.ingresos.filter(i => i.fecha === fecha && i.turno === ddTurno);
-  const efectivo      = ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0);
-  const transferencia = ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0);
-  const gastos        = ST.gastosDia.filter(g=>g.fecha===fecha&&g.turno===ddTurno).reduce((a,b)=>a+b.monto,0);
-  const resultado     = efectivo + transferencia - gastos;
+  const fecha = document.getElementById('dd-fecha').value || today();
+  const { efectivo, transferencia } = calcularVentasFijas(fecha, ddTurno);
+  const gastos = ST.gastosDia.filter(g=>g.fecha===fecha&&g.turno===ddTurno).reduce((a,b)=>a+b.monto,0);
+
+  const ajuste     = valMilesConSigno('dd-ajuste-monto');
+  const ajusteNota = document.getElementById('dd-ajuste-nota').value.trim();
+  if (ajuste !== 0 && !ajusteNota) {
+    showToast('⚠ Escribe la explicación del ajuste', 'warning');
+    return;
+  }
+  const resultado = efectivo + transferencia - gastos + ajuste;
+
+  const datosGuardar = {
+    efectivo, transferencia, gastos, resultado,
+    ajuste_manual: ajuste, ajuste_manual_nota: ajuste !== 0 ? ajusteNota : ''
+  };
 
   try {
     const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
-    if (existing) {
-      await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${ddTurno}`, { efectivo, transferencia, gastos, resultado });
-      Object.assign(existing, { efectivo, transferencia, gastos, resultado });
-    } else {
-      const [row] = await sbInsert('cierres_dia', { fecha, turno: ddTurno, efectivo, transferencia, gastos, resultado });
-      ST.cierresDia.unshift(row);
+    try {
+      if (existing) {
+        await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${ddTurno}`, datosGuardar);
+        Object.assign(existing, datosGuardar);
+      } else {
+        const [row] = await sbInsert('cierres_dia', { fecha, turno: ddTurno, ...datosGuardar });
+        ST.cierresDia.unshift(row);
+      }
+    } catch (e) {
+      const msg = e.message || '';
+      if (msg.includes('ajuste_manual')) {
+        // Columnas de ajuste manual aún no existen en Supabase — reintenta sin ellas
+        const { ajuste_manual, ajuste_manual_nota, ...datosBase } = datosGuardar;
+        if (existing) {
+          await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${ddTurno}`, datosBase);
+          Object.assign(existing, datosBase);
+        } else {
+          const [row] = await sbInsert('cierres_dia', { fecha, turno: ddTurno, ...datosBase });
+          ST.cierresDia.unshift(row);
+        }
+        showToast('⚠ El ajuste manual no se guardó — falta agregar esas columnas en Supabase (ver script SQL)', 'warning');
+      } else { throw e; }
     }
+
     setSyncBadge('ok');
-    showToast('✅ Cierre guardado', 'ok');
-    renderDiaADia();
+    showToast(`✅ Turno de ${ddTurno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} cerrado — abre un nuevo turno para seguir registrando pedidos`, 'ok');
+
+    viendoHistorialCierre = false;
+    resetearCamposAjusteCierre();
+    renderAll();
   } catch(e) {
     console.error(e);
     showToast('⚠ Error al guardar cierre: ' + e.message, 'warning');
@@ -2397,7 +4263,7 @@ async function guardarCierre() {
 async function agregarGastoDia() {
   const fecha  = document.getElementById('dd-fecha').value;
   const nombre = document.getElementById('dd-gasto-nombre').value.trim();
-  const monto  = parseFloat(document.getElementById('dd-gasto-monto').value);
+  const monto  = valMiles('dd-gasto-monto');
   if (!fecha)           { showToast('⚠ Selecciona una fecha', 'warning'); return; }
   if (!nombre || !monto || monto <= 0) { showToast('⚠ Completa nombre y monto', 'warning'); return; }
 
@@ -2436,7 +4302,7 @@ async function guardarEdicionGastoDia(id) {
   const montoEl  = document.getElementById(`dd-edit-monto-${id}`);
   if (!nombreEl || !montoEl) return;
   const nombre = nombreEl.value.trim();
-  const monto  = parseFloat(montoEl.value);
+  const monto  = parseMiles(montoEl.value);
   if (!nombre || !monto || monto <= 0) { showToast('⚠ Completa nombre y monto', 'warning'); return; }
   try {
     await sbPatch('gastos_dia', `id=eq.${id}`, { nombre, monto });
@@ -2454,9 +4320,40 @@ async function eliminarCierre(fecha, turno) {
   try {
     await sbDelete('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`);
     ST.cierresDia = ST.cierresDia.filter(c => !(c.fecha === fecha && c.turno === turno));
-    showToast('Cierre eliminado', 'info');
-    renderDiaADia();
+    viendoHistorialCierre = false;
+    showToast('↩ Cierre eliminado — el turno vuelve a quedar abierto (si tenía apertura)', 'info');
+    renderAll();
   } catch(e) { showToast('⚠ Error al eliminar cierre', 'warning'); }
+}
+
+function renderNotasCierre(fecha) {
+  const notasFecha = ST.notasDia.filter(n => n.fecha === fecha);
+  const notasBody  = document.getElementById('dd-notas-body');
+  if (notasBody) {
+    notasBody.innerHTML = notasFecha.length
+      ? notasFecha.map(n => `<div class="report-line"><span>${formatearNumerosEnTexto(n.texto)}</span></div>`).join('')
+      : `<div style="color:var(--text3);font-size:12px;">Sin notas registradas para esta fecha.</div>`;
+  }
+}
+
+function renderHistorialCierres() {
+  const histData = ST.cierresDia.filter(c => inP(c.fecha, fDD));
+  const histBody = document.getElementById('dd-historial-body');
+  if (!histBody) return;
+  histBody.innerHTML = histData.length
+    ? histData.map(c => `<tr>
+        <td>${c.fecha}</td>
+        <td><span class="badge ${c.turno==='cena'?'badge-purple':'badge-accent'}">${c.turno==='cena'?'🌙 Cena':'☀️ Almuerzo'}</span></td>
+        <td class="amount-pos">${fmt(c.efectivo)}</td>
+        <td class="amount-pos">${fmt(c.transferencia)}</td>
+        <td class="amount-neg">${fmt(c.gastos)}</td>
+        <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}${c.ajuste_manual ? ' <span title="Incluye ajuste manual">*</span>' : ''}</td>
+        <td style="display:flex;gap:4px;">
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="irADiaADia('${c.fecha}','${c.turno}')">Ver</button>
+          <button class="btn btn-danger" style="padding:5px 10px;font-size:11px;" onclick="eliminarCierre('${c.fecha}','${c.turno}')">🗑</button>
+        </td>
+      </tr>`).join('')
+    : `<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px;">Aún no hay cierres guardados</td></tr>`;
 }
 
 function renderDiaADia() {
@@ -2464,17 +4361,41 @@ function renderDiaADia() {
   if (!fechaEl) return;
   const fecha = fechaEl.value || today();
 
-  // Solo ingresos PAGADOS del día y turno seleccionado
-  const ings          = ST.ingresos.filter(i => i.fecha === fecha && i.turno === ddTurno);
-  const efectivo      = ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0);
-  const transferencia = ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0);
-  const total         = efectivo + transferencia;
+  const cierreExistente = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
+  const mostrarCerrado  = !!cierreExistente && !viendoHistorialCierre;
 
-  document.getElementById('dd-total').textContent         = fmt(total);
-  document.getElementById('dd-turno-label').textContent   = ddTurno==='almuerzo' ? 'Efectivo + Transferencia almuerzo' : 'Efectivo + Transferencia comida rápida';
-  document.getElementById('dd-efectivo').textContent      = fmt(efectivo);
-  document.getElementById('dd-transferencia').textContent = fmt(transferencia);
+  const banner     = document.getElementById('dd-cerrado-banner');
+  const formActivo = document.getElementById('dd-form-activo');
+  const modoLabel  = document.getElementById('dd-modo-label');
 
+  if (mostrarCerrado) {
+    if (banner)     banner.style.display = 'flex';
+    if (formActivo) formActivo.style.display = 'none';
+    document.getElementById('dd-total').textContent         = '$0';
+    document.getElementById('dd-turno-label').textContent   = 'Abre un turno nuevo para empezar';
+    document.getElementById('dd-efectivo').textContent      = '$0';
+    document.getElementById('dd-transferencia').textContent = '$0';
+    renderNotasCierre(fecha);
+    renderHistorialCierres();
+    return;
+  }
+
+  if (banner)     banner.style.display = 'none';
+  if (formActivo) formActivo.style.display = '';
+  if (modoLabel)  modoLabel.textContent = (viendoHistorialCierre && cierreExistente) ? '📌 viendo un cierre guardado' : '';
+
+  // Ajuste: si se está viendo un cierre guardado (botón "Ver"), se precarga tal
+  // cual quedó guardado. Efectivo/Transferencia ya no se prefiltran aquí — los
+  // calcula siempre recalcularResultadoCierre() a partir de los pedidos reales.
+  if (viendoHistorialCierre && cierreExistente) {
+    const ajusteVal = cierreExistente.ajuste_manual || 0;
+    document.getElementById('dd-ajuste-monto').value = ajusteVal ? (ajusteVal < 0 ? '-' : '') + Math.abs(ajusteVal).toLocaleString('es-CO') : '';
+    document.getElementById('dd-ajuste-nota').value  = cierreExistente.ajuste_manual_nota || '';
+    document.getElementById('ajuste-manual-section').style.display = ajusteVal ? 'block' : 'none';
+    document.getElementById('btn-toggle-ajuste').textContent = ajusteVal ? '➖ Ocultar ajuste' : '➕ Ajuste';
+  }
+
+  // Gastos (siempre reales — no dependen del modo en el que estemos)
   const gastos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === ddTurno);
   const tbody  = document.getElementById('dd-gastos-body');
   tbody.innerHTML = gastos.length
@@ -2482,7 +4403,7 @@ function renderDiaADia() {
         if (ddEditId === g.id) {
           return `<tr>
             <td><input type="text"   id="dd-edit-nombre-${g.id}" value="${g.nombre.replace(/"/g,'&quot;')}" style="width:100%;"></td>
-            <td><input type="number" id="dd-edit-monto-${g.id}"  value="${g.monto}" style="width:90px;"></td>
+            <td><input type="text" inputmode="numeric" id="dd-edit-monto-${g.id}" value="${Number(g.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
             <td style="white-space:nowrap;display:flex;gap:4px;">
               <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="guardarEdicionGastoDia(${g.id})">✓ Guardar</button>
               <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="cancelarEdicionGastoDia()">✕ Cancelar</button>
@@ -2500,40 +4421,174 @@ function renderDiaADia() {
       }).join('')
     : `<tr><td colspan="3"><div class="empty"><div class="empty-icon">🧾</div><div class="empty-text">Sin gastos agregados</div></div></td></tr>`;
 
-  const totalGastos = gastos.reduce((a,b) => a+b.monto, 0);
-  const resultado   = total - totalGastos;
-  document.getElementById('dd-res-efectivo').textContent      = fmt(efectivo);
-  document.getElementById('dd-res-transferencia').textContent = fmt(transferencia);
-  document.getElementById('dd-res-gastos').textContent        = fmt(totalGastos);
-  document.getElementById('dd-resultado').textContent         = fmt(resultado);
-  document.getElementById('dd-resultado').style.color         = resultado >= 0 ? 'var(--accent)' : 'var(--red)';
-
-  // Historial de cierres guardados
-  const histData = ST.cierresDia.filter(c => inP(c.fecha, fDD));
-  const histBody = document.getElementById('dd-historial-body');
-  histBody.innerHTML = histData.length
-    ? histData.map(c => `<tr>
-        <td>${c.fecha}</td>
-        <td><span class="badge ${c.turno==='cena'?'badge-purple':'badge-accent'}">${c.turno==='cena'?'🌙 Cena':'☀️ Almuerzo'}</span></td>
-        <td class="amount-pos">${fmt(c.efectivo)}</td>
-        <td class="amount-pos">${fmt(c.transferencia)}</td>
-        <td class="amount-neg">${fmt(c.gastos)}</td>
-        <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}</td>
-        <td style="display:flex;gap:4px;">
-          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="irADiaADia('${c.fecha}','${c.turno}')">Ver</button>
-          <button class="btn btn-danger" style="padding:5px 10px;font-size:11px;" onclick="eliminarCierre('${c.fecha}','${c.turno}')">🗑</button>
-        </td>
-      </tr>`).join('')
-    : `<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px;">Aún no hay cierres guardados</td></tr>`;
+  recalcularResultadoCierre();
+  renderNotasCierre(fecha);
+  renderHistorialCierres();
 }
 
 function irADiaADia(fecha, turno) {
   document.getElementById('dd-fecha').value = fecha;
   ddTurno = turno;
   ddEditId = null;
+  viendoHistorialCierre = true;
   document.querySelectorAll('#tab-diaadia .filter-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(turno==='almuerzo'?'dd-btn-almuerzo':'dd-btn-cena').classList.add('active');
   renderDiaADia();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// BLOQUE 3.5 — CAJA (utilidades acumuladas, gastos generales y aportes)
+// ══════════════════════════════════════════════════════════════════════
+let fCaja = 'mes';
+let tipoMovimientoCaja = 'gasto';
+
+function setFCaja(f, btn) {
+  fCaja = f;
+  document.querySelectorAll('#tab-caja .filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCaja();
+}
+
+function setTipoMovimientoCaja(t, btn) {
+  tipoMovimientoCaja = t;
+  document.querySelectorAll('#caja-tipo-buttons .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// Efectivo/Transferencia acumulados son solo referencia visual (de dónde viene
+// la plata); "disponible" es una sola bolsa: se le suman aportes y se le
+// restan los gastos generales del negocio, sin importar el método.
+function calcularAcumuladosCaja() {
+  let efectivo = 0, transferencia = 0;
+  ST.cierresDia.forEach(c => {
+    efectivo      += (c.efectivo || 0) - (c.gastos || 0) + (c.ajuste_manual || 0);
+    transferencia += (c.transferencia || 0);
+  });
+  const aportes    = ST.movimientosCaja.filter(m => m.tipo === 'aporte').reduce((a,b) => a+(b.monto||0), 0);
+  const gastosCaja = ST.movimientosCaja.filter(m => m.tipo === 'gasto').reduce((a,b) => a+(b.monto||0), 0);
+  const disponible = efectivo + transferencia + aportes - gastosCaja;
+  return { efectivo, transferencia, aportes, gastosCaja, disponible };
+}
+
+async function agregarMovimientoCaja() {
+  const fecha       = document.getElementById('caja-mov-fecha').value || today();
+  const descripcion = document.getElementById('caja-mov-descripcion').value.trim();
+  const monto       = valMiles('caja-mov-monto');
+  if (!descripcion) { showToast('⚠ Escribe el detalle del movimiento', 'warning'); return; }
+  if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
+
+  try {
+    const [row] = await sbInsert('movimientos_caja', { fecha, tipo: tipoMovimientoCaja, descripcion, monto });
+    ST.movimientosCaja.unshift(row);
+    setSyncBadge('ok');
+    document.getElementById('caja-mov-descripcion').value = '';
+    document.getElementById('caja-mov-monto').value = '';
+    renderCaja();
+    showToast(`✅ ${tipoMovimientoCaja === 'aporte' ? 'Aporte de capital' : 'Gasto'} registrado`, 'ok');
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al registrar — ¿ya creaste la tabla movimientos_caja en Supabase?', 'warning');
+  }
+}
+
+async function eliminarMovimientoCaja(id) {
+  if (!confirm('¿Eliminar este movimiento de caja?')) return;
+  try {
+    await sbDelete('movimientos_caja', `id=eq.${id}`);
+    ST.movimientosCaja = ST.movimientosCaja.filter(m => m.id !== id);
+    renderCaja();
+    showToast('Movimiento eliminado', 'info');
+  } catch (e) { showToast('⚠ Error al eliminar', 'warning'); }
+}
+
+function renderCaja() {
+  const cajaEfEl = document.getElementById('caja-efectivo');
+  if (!cajaEfEl) return; // sección oculta/no cargada todavía
+
+  const { efectivo, transferencia, disponible } = calcularAcumuladosCaja();
+  cajaEfEl.textContent = fmt(efectivo);
+  document.getElementById('caja-transferencia').textContent = fmt(transferencia);
+  document.getElementById('caja-disponible').textContent    = fmt(disponible);
+  document.getElementById('caja-disponible').style.color    = disponible >= 0 ? 'var(--accent)' : 'var(--red)';
+
+  // Utilidades por día (agrupadas), filtradas por el período elegido
+  const cierresFiltrados = ST.cierresDia.filter(c => inP(c.fecha, fCaja));
+  const porDia = {};
+  cierresFiltrados.forEach(c => {
+    if (!porDia[c.fecha]) porDia[c.fecha] = { efectivo: 0, transferencia: 0 };
+    porDia[c.fecha].efectivo      += (c.efectivo || 0) - (c.gastos || 0) + (c.ajuste_manual || 0);
+    porDia[c.fecha].transferencia += (c.transferencia || 0);
+  });
+  const fechas = Object.keys(porDia).sort((a,b) => b.localeCompare(a));
+  const histBody = document.getElementById('caja-historial-body');
+  histBody.innerHTML = fechas.length
+    ? fechas.map(f => {
+        const d = porDia[f];
+        return `<tr>
+          <td>${f}</td>
+          <td class="amount-pos">${fmt(d.efectivo)}</td>
+          <td class="amount-pos">${fmt(d.transferencia)}</td>
+          <td><strong>${fmt(d.efectivo + d.transferencia)}</strong></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Sin cierres en este período</div></div></td></tr>`;
+
+  // Movimientos de caja (gastos y aportes), filtrados por el mismo período
+  const movs = ST.movimientosCaja.filter(m => inP(m.fecha, fCaja));
+  const movBody = document.getElementById('caja-movimientos-body');
+  movBody.innerHTML = movs.length
+    ? movs.map(m => `<tr>
+        <td>${m.fecha}</td>
+        <td><span class="badge ${m.tipo==='aporte'?'badge-green':'badge-red'}">${m.tipo==='aporte'?'➕ Aporte':'➖ Gasto'}</span></td>
+        <td style="color:var(--text)">${m.descripcion}</td>
+        <td class="${m.tipo==='aporte'?'amount-pos':'amount-neg'}">${fmt(m.monto)}</td>
+        <td><button class="btn btn-danger" onclick="eliminarMovimientoCaja(${m.id})">✕</button></td>
+      </tr>`).join('')
+    : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">💰</div><div class="empty-text">Sin movimientos registrados en este período</div></div></td></tr>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// AUDITORÍA — acceso con contraseña, lista de ajustes manuales en cierres
+// (Nota: es un candado simple del lado del cliente, pensado para que no
+// cualquiera entre a curiosear — no es seguridad real de servidor, ya que
+// el código de la página es visible para quien sepa cómo mirarlo.)
+// ══════════════════════════════════════════════════════════════════════
+const AUDITORIA_PASSWORD = 'Chocolate1625@2004';
+let auditoriaAutenticado = false;
+
+function intentarAccesoAuditoria() {
+  const input = document.getElementById('auditoria-password');
+  if (input.value === AUDITORIA_PASSWORD) {
+    auditoriaAutenticado = true;
+    document.getElementById('auditoria-login').style.display    = 'none';
+    document.getElementById('auditoria-contenido').style.display = 'block';
+    input.value = '';
+    renderAuditoria();
+  } else {
+    showToast('⚠ Contraseña incorrecta', 'warning');
+    input.value = '';
+  }
+}
+
+function cerrarSesionAuditoria() {
+  auditoriaAutenticado = false;
+  document.getElementById('auditoria-login').style.display    = 'block';
+  document.getElementById('auditoria-contenido').style.display = 'none';
+}
+
+function renderAuditoria() {
+  if (!auditoriaAutenticado) return;
+  const body = document.getElementById('auditoria-body');
+  if (!body) return;
+  const ajustes = ST.cierresDia.filter(c => c.ajuste_manual).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  body.innerHTML = ajustes.length
+    ? ajustes.map(c => `<tr>
+        <td>${c.fecha}</td>
+        <td><span class="badge ${c.turno==='cena'?'badge-purple':'badge-accent'}">${c.turno==='cena'?'🌙 Comidas rápidas':'☀️ Almuerzo'}</span></td>
+        <td class="${c.ajuste_manual>=0?'amount-pos':'amount-neg'}">${c.ajuste_manual>=0?'+ ':'− '}${fmt(Math.abs(c.ajuste_manual))}</td>
+        <td style="color:var(--text2);">${c.ajuste_manual_nota || '—'}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ajustes manuales registrados</div></div></td></tr>`;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -2542,8 +4597,8 @@ function irADiaADia(fecha, turno) {
 
 // ── DASHBOARD ────────────────────────────────────────────────────────
 function renderDashboard() {
-  // Solo pedidos pagados para los totales
-  const mI = ST.ingresos.filter(i=>inP(i.fecha,'mes')).reduce((a,b)=>a+(b.monto_total||0),0);
+  // Solo pedidos pagados para los totales, más venta de desayuno (no es un pedido)
+  const mI = ST.ingresos.filter(i=>inP(i.fecha,'mes')).reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('mes');
   const mE = ST.egresos.filter(e=>inP(e.fecha,'mes')).reduce((a,b)=>a+b.monto,0);
   const ut = mI - mE;
   const mg = mI > 0 ? ((ut/mI)*100).toFixed(1) : 0;
@@ -2636,10 +4691,14 @@ function renderAll() {
   renderDashboard();
   renderIngresos();
   renderPendientes();
+  renderPedidosTurno();
   renderEgresos();
   renderInventario();
   renderReportes();
   renderDiaADia();
+  renderCaja();
+  renderAuditoria();
+  renderPendientesNotasBadge();
 }
 
 // ── ARRANQUE ──────────────────────────────────────────────────────────
