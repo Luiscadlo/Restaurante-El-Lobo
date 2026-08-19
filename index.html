@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>El Lobo — Sistema Contable</title>
+<meta http-equiv="refresh" content="0; url=./Contabildad/ElLobo-Sistema%20Contable.html">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0e0c;
+    --accent: #e8b84b;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    height: 100%;
+  }
+  body {
+    background: var(--bg);
+    color: #f2ede2;
+    font-family: 'Syne', sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    text-align: center;
+    padding: 24px;
+  }
+  .wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(20px, 5vw, 30px);
+    color: var(--accent);
+    letter-spacing: 0.5px;
+  }
+  .spinner {
+    width: 34px;
+    height: 34px;
+    border: 3px solid rgba(232, 184, 75, 0.25);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  p.hint {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: #b8b0a1;
+  }
+  a.enlace {
+    margin-top: 6px;
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    color: #0f0e0c;
+    background: var(--accent);
+    padding: 12px 22px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: opacity 0.15s ease;
+  }
+  a.enlace:hover {
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="spinner"></div>
+    <h1>🐺 El Lobo — Redirigiendo...</h1>
+    <p class="hint">Si no eres redirigido automáticamente, usa el enlace de abajo.</p>
+    <a class="enlace" href="./Contabildad/ElLobo-Sistema%20Contable.html">Ir al Sistema Contable El Lobo →</a>
+  </div>
+</body>
+</html>
