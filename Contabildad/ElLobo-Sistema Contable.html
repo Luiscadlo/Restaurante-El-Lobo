@@ -419,7 +419,7 @@
     </div>
 
     <div class="kpi-grid">
-      <div class="kpi-card green"><div class="kpi-label">Ingresos</div><div class="kpi-value" id="kpi-ingresos">$0</div><div class="kpi-sub">Pedidos pagados + desayuno</div></div>
+      <div class="kpi-card green"><div class="kpi-label">Ingresos</div><div class="kpi-value" id="kpi-ingresos">$0</div><div class="kpi-sub">Solo turnos cerrados</div></div>
       <div class="kpi-card red"><div class="kpi-label">Egresos</div><div class="kpi-value" id="kpi-egresos">$0</div><div class="kpi-sub">Nómina · Proveedores · Arriendo · Servicios · Otros</div></div>
       <div class="kpi-card accent"><div class="kpi-label">Utilidad neta</div><div class="kpi-value" id="kpi-utilidad">$0</div><div class="kpi-sub" id="kpi-margen">Margen: 0%</div></div>
       <div class="kpi-card blue"><div class="kpi-label">Ticket promedio</div><div class="kpi-value" id="kpi-ticket">$0</div><div class="kpi-sub">Solo almuerzos — ingresos ÷ pedidos</div></div>
@@ -4106,13 +4106,31 @@ function setFTablero(f, btn) {
   renderTablero();
 }
 
+// Set de "fecha::turno" que ya tienen cierre guardado — el Tablero solo
+// cuenta turnos cerrados (como Ingresos y Caja), a diferencia de Pedidos
+// que sigue siendo la vista operativa en tiempo real.
+function turnosCerrados() {
+  return new Set(ST.cierresDia.map(c => `${c.fecha}::${c.turno}`));
+}
+
 function renderTablero() {
-  const ings = ST.ingresos.filter(i => inP(i.fecha, fTablero));
+  const cerrados = turnosCerrados();
+
+  // Ingresos: directo de los cierres guardados (efectivo/transferencia ya
+  // son la suma bruta de pedidos pagados de ese turno, antes de gastos —
+  // el mismo campo que ya usan renderIngresosFinanciero() y renderCaja()).
+  // Ya incluye el desayuno, porque calcularVentasFijas lo suma al guardar
+  // el cierre — no se vuelve a sumar aparte para no duplicarlo.
+  const cierresPeriodo = ST.cierresDia.filter(c => inP(c.fecha, fTablero));
+  const tI = cierresPeriodo.reduce((a,c) => a + (c.efectivo||0) + (c.transferencia||0), 0);
+  const totalEfectivoCierres      = cierresPeriodo.reduce((a,c) => a + (c.efectivo||0), 0);
+  const totalTransferenciaCierres = cierresPeriodo.reduce((a,c) => a + (c.transferencia||0), 0);
+
+  // Detalle (por tipo de plato, top proteínas/sopas/arroces, comidas rápidas
+  // por categoría) sí necesita mirar pedido por pedido — el cierre no guarda
+  // esa granularidad — pero solo de turnos que ya tienen cierre guardado.
+  const ings = ST.ingresos.filter(i => inP(i.fecha, fTablero) && cerrados.has(`${i.fecha}::${i.turno}`));
   const egrs = egresosCombinados().filter(e => inP(e.fecha, fTablero));
-  const desayunoPeriodo = desayunoEnPeriodo(fTablero);
-  const desayunoPeriodoEfectivo = desayunoEnPeriodo(fTablero, 'efectivo');
-  const desayunoPeriodoTransferencia = desayunoEnPeriodo(fTablero, 'transferencia');
-  const tI   = ings.reduce((a,b) => a + (b.monto_total||0), 0) + desayunoPeriodo;
   const tE   = egrs.reduce((a,b) => a + b.monto, 0);
   const ut   = tI - tE;
   const mg   = tI > 0 ? ((ut/tI)*100).toFixed(1) : 0;
@@ -4135,6 +4153,10 @@ function renderTablero() {
 
   // Alertas
   const al = [];
+  const pendienteDeCierre = ST.ingresos
+    .filter(i => inP(i.fecha, fTablero) && !cerrados.has(`${i.fecha}::${i.turno}`))
+    .reduce((a,b)=>a+(b.monto_total||0),0);
+  if (pendienteDeCierre > 0) al.push({t:'info', m:`🔓 Hay ${fmt(pendienteDeCierre)} en pedidos pagados de turnos sin cerrar — no están incluidos en este panel. Ciérralos desde Cierre para que aparezcan aquí.`});
   const pendTotal = ST.pendientes.reduce((a,b)=>a+(b.monto_total||0),0);
   if (ST.pendientes.length > 0) al.push({t:'info', m:`⏳ ${ST.pendientes.length} pedido(s) pendiente(s) de cobro · ${fmt(pendTotal)} por recaudar`});
   if (tE > tI && tI > 0) al.push({t:'warning', m:`⚠ Gastos mayores a ingresos en este período. Egresos: ${fmt(tE)}`});
@@ -4155,8 +4177,8 @@ function renderTablero() {
   document.getElementById('rp-parroz').textContent= cnt('porcion-arroz');
   document.getElementById('rp-tal').textContent   = fmt(alm.reduce((a,b)=>a+(b.monto_total||0),0));
 
-  document.getElementById('rp-ef').textContent    = fmt(ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoPeriodoEfectivo);
-  document.getElementById('rp-trans').textContent = fmt(ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoPeriodoTransferencia);
+  document.getElementById('rp-ef').textContent    = fmt(totalEfectivoCierres);
+  document.getElementById('rp-trans').textContent = fmt(totalTransferenciaCierres);
   document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(b.monto_total||0),0));
   document.getElementById('rp-ting').textContent  = fmt(tI);
 
