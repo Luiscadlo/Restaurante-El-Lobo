@@ -1166,6 +1166,17 @@
         </table>
       </div>
     </div>
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-header">
+        <div class="panel-title">🗑 Pedidos pagados eliminados</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Eliminado el</th><th>Pedido original</th><th>Ubicación</th><th>Detalle</th><th>Monto</th></tr></thead>
+          <tbody id="auditoria-eliminados-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -1497,7 +1508,8 @@ let ST = {
   aperturasTurno: [], // aperturas de turno (caja inicial + venta desayuno)
   notasDia:   [],   // notas/recordatorios del día
   movimientosCaja: [], // gastos generales y aportes de capital (sección Caja)
-  ingresosExtra: [] // ingresos adicionales personalizados (sección Ingresos)
+  ingresosExtra: [], // ingresos adicionales personalizados (sección Ingresos)
+  pedidosEliminados: [] // auditoría de pedidos pagados eliminados
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -1539,7 +1551,7 @@ function showToast(msg, tipo = 'info', accion = null) {
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra] = await Promise.all([
+    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados] = await Promise.all([
       sbGet('pedidos',     'order=created_at.desc'),
       sbGet('egresos',     'order=created_at.desc'),
       sbGet('inventario',  'order=nombre.asc'),
@@ -1550,7 +1562,8 @@ async function loadState() {
       sbGet('aperturas_turno', 'order=created_at.desc').catch(() => []),
       sbGet('notas_dia',   'order=created_at.desc').catch(() => []),
       sbGet('movimientos_caja', 'order=created_at.desc').catch(() => []),
-      sbGet('ingresos_extra', 'order=fecha.desc').catch(() => [])
+      sbGet('ingresos_extra', 'order=fecha.desc').catch(() => []),
+      sbGet('pedidos_eliminados', 'order=created_at.desc').catch(() => [])
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
@@ -1565,6 +1578,7 @@ async function loadState() {
     ST.notasDia   = notasDia;
     ST.movimientosCaja = movimientosCaja;
     ST.ingresosExtra   = ingresosExtra;
+    ST.pedidosEliminados = pedidosEliminados;
 
     setSyncBadge('ok');
   } catch (e) {
@@ -2591,10 +2605,29 @@ function cerrarModalDetalle(e) {
 }
 
 // ── Eliminar ingreso(s) pagado(s) — un pedido completo puede ser varias filas ─
+// Antes de borrar de verdad, deja rastro en pedidos_eliminados (Auditoría)
+// con la hora exacta de eliminación. Si ese registro falla (ej. la tabla
+// todavía no existe en Supabase), NO bloquea la eliminación real — solo avisa.
 async function eliminarGrupoIngreso(ids) {
   const idArr = Array.isArray(ids) ? ids : [ids];
   if (!confirm(idArr.length > 1 ? '¿Eliminar este pedido completo (todos sus ítems)?' : '¿Eliminar este ingreso?')) return;
   try {
+    const objetos = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
+    try {
+      for (const p of objetos) {
+        const ubicacion = p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
+        const [row] = await sbInsert('pedidos_eliminados', {
+          pedido_id: p.id, fecha: p.fecha, hora: p.hora || '', turno: p.turno,
+          pedido: p.pedido, detalle: p.detalle || '', ubicacion, metodo: p.metodo,
+          monto_total: p.monto_total || 0
+        });
+        if (row) ST.pedidosEliminados.unshift(row);
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('⚠ Se eliminó, pero no quedó registrado en Auditoría (falta crear la tabla pedidos_eliminados en Supabase)', 'warning');
+    }
+
     await sbDelete('pedidos', `id=in.(${idArr.join(',')})`);
     ST.ingresos = ST.ingresos.filter(i => !idArr.includes(i.id));
     renderAll();
@@ -4855,6 +4888,20 @@ function renderAuditoria() {
         <td style="color:var(--text2);">${c.ajuste_manual_nota || '—'}</td>
       </tr>`).join('')
     : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ajustes manuales registrados</div></div></td></tr>`;
+
+  const elimBody = document.getElementById('auditoria-eliminados-body');
+  if (elimBody) {
+    const eliminados = [...ST.pedidosEliminados].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    elimBody.innerHTML = eliminados.length
+      ? eliminados.map(e => `<tr>
+          <td>${new Date(e.created_at).toLocaleString('es-CO')}</td>
+          <td>${e.fecha}${e.hora ? ' · ' + e.hora : ''}</td>
+          <td><span class="badge badge-gray">${e.ubicacion || '—'}</span></td>
+          <td style="color:var(--text2);">${LABELS[e.pedido]||e.pedido}${e.detalle ? ' — ' + e.detalle : ''}</td>
+          <td class="amount-neg">${fmt(e.monto_total||0)}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">Sin pedidos eliminados registrados</div></div></td></tr>`;
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════
