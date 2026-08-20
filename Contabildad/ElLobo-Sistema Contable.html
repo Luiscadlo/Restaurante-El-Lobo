@@ -17,7 +17,7 @@
     --radius: 12px; --radius-sm: 8px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; min-height: 100vh; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; min-height: 100vh; overflow-x: hidden; }
 
   header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 60px; position: sticky; top: 0; z-index: 100; }
   .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; color: var(--accent); }
@@ -27,6 +27,13 @@
   .turno-badge { border-radius: 20px; padding: 6px 14px; font-size: 12px; font-family: 'Syne', sans-serif; font-weight: 700; }
   .turno-almuerzo { background: rgba(232,184,75,0.15); border: 1px solid rgba(232,184,75,0.4); color: var(--accent); }
   .turno-cena { background: rgba(155,127,212,0.15); border: 1px solid rgba(155,127,212,0.4); color: var(--purple); }
+  @media(max-width:600px) {
+    header { flex-wrap: wrap; height: auto; padding: 10px 14px; row-gap: 8px; }
+    .header-right { gap: 6px; flex-wrap: wrap; }
+    .date-badge, .turno-badge { padding: 4px 10px; font-size: 10px; }
+    .logo { font-size: 14px; }
+    .btn-label { display: none; }
+  }
 
   nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 4px; overflow-x: auto; }
   .tab { padding: 14px 18px; cursor: pointer; color: var(--text3); font-size: 12px; font-family: 'Syne', sans-serif; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid transparent; transition: all 0.2s; text-transform: uppercase; white-space: nowrap; }
@@ -361,8 +368,8 @@
   <div class="header-right">
     <div id="syncBadge" style="border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid rgba(232,184,75,0.4);background:rgba(232,184,75,0.1);color:var(--accent);">🔄 Sincronizando…</div>
     <button class="btn-abrir-turno" id="btn-abrir-turno-header" onclick="abrirModalTurno()" title="Registrar caja inicial del turno">🔓 Abrir turno</button>
-    <button class="btn btn-outline" onclick="exportarDatos()" style="font-size:11px;padding:6px 12px;" title="Exportar respaldo JSON">⬇ Exportar</button>
-    <label class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;" title="Importar respaldo JSON">⬆ Importar<input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
+    <button class="btn btn-outline" onclick="exportarDatos()" style="font-size:11px;padding:6px 12px;" title="Exportar respaldo JSON">⬇ <span class="btn-label">Exportar</span></button>
+    <label class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;" title="Importar respaldo JSON">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
     <div class="turno-badge turno-almuerzo" id="turnoBadge">☀️ Almuerzo</div>
     <div class="date-badge" id="currentDate"></div>
   </div>
@@ -811,10 +818,13 @@
           <div class="report-line"><span>Esta semana</span><strong class="amount-neg" id="egr-semana">$0</strong></div>
           <div class="report-line"><span>Este mes</span><strong class="amount-neg" id="egr-mes">$0</strong></div>
           <div class="divider"></div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Por categoría — período: <strong id="egr-cat-periodo" style="color:var(--text2);">hoy</strong> <span style="color:var(--text3);">(cambia con el filtro del historial, abajo)</span></div>
           <div class="report-line"><span>Nómina</span><strong id="egr-nom">$0</strong></div>
           <div class="report-line"><span>Proveedores</span><strong id="egr-prov">$0</strong></div>
           <div class="report-line"><span>Arriendo + Servicios</span><strong id="egr-arr">$0</strong></div>
           <div class="report-line"><span>Otros</span><strong id="egr-otros">$0</strong></div>
+          <div class="divider"></div>
+          <div class="report-line"><span><strong>Total del período</strong></span><strong class="amount-neg" id="egr-total-periodo">$0</strong></div>
         </div>
       </div>
     </div>
@@ -916,7 +926,8 @@
         <div class="panel-body">
           <div class="report-line"><span><strong>Ingresos totales</strong></span><strong class="amount-pos" id="ingfin-total">$0</strong></div>
           <div class="report-line"><span>(−) Nómina</span><strong class="amount-neg" id="ingfin-nomina">$0</strong></div>
-          <div class="report-line"><span><strong>= Después de nómina</strong></span><strong id="ingfin-despues-nomina">$0</strong></div>
+          <div class="report-line"><span>(−) Proveedores</span><strong class="amount-neg" id="ingfin-proveedores">$0</strong></div>
+          <div class="report-line"><span><strong>= Después de nómina y proveedores</strong></span><strong id="ingfin-despues-nomina">$0</strong></div>
           <div class="report-line"><span>(−) Gastos operativos (servicios + arriendo)</span><strong class="amount-neg" id="ingfin-operativos">$0</strong></div>
           <div class="divider"></div>
           <div class="report-line"><span><strong>= Después de gastos operativos</strong></span><strong id="ingfin-despues-operativos">$0</strong></div>
@@ -3933,10 +3944,17 @@ function renderEgresos() {
   document.getElementById('egr-hoy').textContent    = fmt(sE('hoy'));
   document.getElementById('egr-semana').textContent = fmt(sE('semana'));
   document.getElementById('egr-mes').textContent    = fmt(sE('mes'));
-  document.getElementById('egr-nom').textContent    = fmt(todos.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('egr-prov').textContent   = fmt(todos.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('egr-arr').textContent    = fmt(todos.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0));
-  document.getElementById('egr-otros').textContent  = fmt(todos.filter(e=>e.cat==='otro').reduce((a,b)=>a+b.monto,0));
+
+  // El desglose por categoría sigue el mismo período elegido en el filtro del
+  // historial (fE) — igual que en Ingresos — para que no parezca un total fijo
+  // desconectado de "Hoy/Semana/Mes/Todo".
+  const PERIODO_LABEL = { hoy:'hoy', semana:'esta semana', mes:'este mes', todo:'todo el historial' };
+  document.getElementById('egr-cat-periodo').textContent = PERIODO_LABEL[fE] || fE;
+  document.getElementById('egr-nom').textContent    = fmt(list.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
+  document.getElementById('egr-prov').textContent   = fmt(list.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
+  document.getElementById('egr-arr').textContent    = fmt(list.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0));
+  document.getElementById('egr-otros').textContent  = fmt(list.filter(e=>e.cat==='otro').reduce((a,b)=>a+b.monto,0));
+  document.getElementById('egr-total-periodo').textContent = fmt(list.reduce((a,b)=>a+b.monto,0));
 }
 
 // ── INVENTARIO ────────────────────────────────────────────────────────
@@ -4230,15 +4248,18 @@ function renderIngresosFinanciero() {
   const totalExtras  = extras.reduce((a,i) => a + (i.monto||0), 0);
   const totalIngresos = totalCierres + totalExtras;
 
-  const egrs      = egresosCombinados().filter(e => inP(e.fecha, fIngFin));
+  const egrs       = egresosCombinados().filter(e => inP(e.fecha, fIngFin));
   const nomina     = egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0);
+  const proveedores = egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0);
   const operativos = egrs.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0);
+  const despuesNominaProv = totalIngresos - nomina - proveedores;
 
   document.getElementById('ingfin-total').textContent            = fmt(totalIngresos);
   document.getElementById('ingfin-nomina').textContent           = fmt(nomina);
-  document.getElementById('ingfin-despues-nomina').textContent   = fmt(totalIngresos - nomina);
+  document.getElementById('ingfin-proveedores').textContent      = fmt(proveedores);
+  document.getElementById('ingfin-despues-nomina').textContent   = fmt(despuesNominaProv);
   document.getElementById('ingfin-operativos').textContent       = fmt(operativos);
-  document.getElementById('ingfin-despues-operativos').textContent = fmt(totalIngresos - nomina - operativos);
+  document.getElementById('ingfin-despues-operativos').textContent = fmt(despuesNominaProv - operativos);
 
   const filas = [
     ...cierres.map(c => ({
