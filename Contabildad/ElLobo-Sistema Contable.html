@@ -2564,15 +2564,10 @@ function verDetallePedido(id) {
 function mostrarDetallePedidoModal(i) {
   const crItem = PL.comidaRapida.find(p => p.c === i.pedido);
   const esCR = !!crItem || i.turno === 'cena';
-  const requiereDosCheckbox = requiereEntregaDoble(i);
 
   let html = `<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:var(--accent);margin-bottom:20px;">
     ${i.turno === 'cena' ? '🌙' : '☀️'} ${LABELS[i.pedido] || i.pedido}
   </div>`;
-
-  const entregaTexto = requiereDosCheckbox
-    ? `Sopa: ${i.entrega_sopa ? '✅ Entregada' : '⏳ Falta'} · Seco: ${i.entrega_plato ? '✅ Entregado' : '⏳ Falta'}`
-    : (i.entrega_plato ? '✅ Entregado' : '⏳ Pendiente de entregar');
 
   const campos = [
     ['Fecha',       i.fecha],
@@ -2591,7 +2586,6 @@ function mostrarDetallePedidoModal(i) {
     i.para_llevar       ? ['Para llevar',    '✓ Sí (+$1.000)'] : null,
     i.monto_almuerzo && i.es_domicilio ? ['Valor comida',    fmt(i.monto_almuerzo)] : null,
     i.monto_domicilio && i.es_domicilio ? ['Valor domicilio (incl. $1.000 empaque)', fmt(i.monto_domicilio)] : null,
-    ['Entrega en cocina', entregaTexto],
     ['Total', `<span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(i.monto_total || 0)}</span>`],
   ].filter(Boolean);
 
@@ -3915,21 +3909,6 @@ async function guardarEdicionPedido() {
     console.error(e);
     showToast('⚠ Error al actualizar el pedido', 'warning');
   }
-}
-
-// Completo/Asado son los tipos que estructuralmente llevan sopa — se define
-// por el TIPO de pedido, no por si el cajero alcanzó a escribir cuál sopa era
-// (ese campo es opcional y puede quedar vacío sin que el pedido deje de llevar sopa).
-// Se sigue usando en el modal de detalle del pedido (campo "Entrega en cocina").
-const TIPOS_CON_SOPA_Y_SECO = ['completo', 'asado130', 'asado200'];
-
-// Domicilio o para llevar → el pedido sale completo de una sola vez, así tenga
-// sopa: no tiene sentido distinguir "sopa entregada" de "seco entregado" ahí,
-// solo importa si ya salió o no. Los pedidos en mesa/sin mesa con sopa sí
-// necesitan las 2 marcas porque la sopa llega primero y el seco después.
-function requiereEntregaDoble(p) {
-  const esTipoConSopa = TIPOS_CON_SOPA_Y_SECO.includes(p.pedido);
-  return esTipoConSopa && !p.es_domicilio && !p.para_llevar;
 }
 
 // ══════════════════════════════════════════════════════════════════════
