@@ -422,7 +422,7 @@
       <div class="kpi-card green"><div class="kpi-label">Ingresos</div><div class="kpi-value" id="kpi-ingresos">$0</div><div class="kpi-sub">Pedidos pagados + desayuno</div></div>
       <div class="kpi-card red"><div class="kpi-label">Egresos</div><div class="kpi-value" id="kpi-egresos">$0</div><div class="kpi-sub">Nómina · Proveedores · Arriendo · Servicios · Otros</div></div>
       <div class="kpi-card accent"><div class="kpi-label">Utilidad neta</div><div class="kpi-value" id="kpi-utilidad">$0</div><div class="kpi-sub" id="kpi-margen">Margen: 0%</div></div>
-      <div class="kpi-card blue"><div class="kpi-label">Ticket promedio</div><div class="kpi-value" id="kpi-ticket">$0</div><div class="kpi-sub">Ingresos ÷ pedidos del período</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">Ticket promedio</div><div class="kpi-value" id="kpi-ticket">$0</div><div class="kpi-sub">Solo almuerzos — ingresos ÷ pedidos</div></div>
       <div class="kpi-card purple"><div class="kpi-label">Promedio por día</div><div class="kpi-value" id="kpi-promedio">$0</div><div class="kpi-sub">Ingresos ÷ días con ventas</div></div>
       <div class="kpi-card orange"><div class="kpi-label">Bajo stock</div><div class="kpi-value" id="kpi-stock">0</div><div class="kpi-sub">Productos por reabastecer</div></div>
     </div>
@@ -4137,15 +4137,20 @@ function renderTablero() {
   const tE   = egrs.reduce((a,b) => a + b.monto, 0);
   const ut   = tI - tE;
   const mg   = tI > 0 ? ((ut/tI)*100).toFixed(1) : 0;
-  const totalPedidos = ings.reduce((a,b) => a + (b.cantidad||1), 0);
   const diasConVentas = [...new Set(ings.map(i=>i.fecha))].length || 1;
+
+  // Ticket promedio: solo almuerzos (excluye desayuno y comidas rápidas),
+  // así que se necesita "alm" antes de calcularlo.
+  const alm = ings.filter(i => i.turno === 'almuerzo');
+  const almMonto    = alm.reduce((a,b) => a + (b.monto_total||0), 0);
+  const almCantidad = alm.reduce((a,b) => a + (b.cantidad||1), 0);
 
   document.getElementById('kpi-ingresos').textContent = fmt(tI);
   document.getElementById('kpi-egresos').textContent  = fmt(tE);
   document.getElementById('kpi-utilidad').textContent = fmt(ut);
   document.getElementById('kpi-utilidad').style.color = ut >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('kpi-margen').textContent   = `Margen: ${mg}%`;
-  document.getElementById('kpi-ticket').textContent   = fmt(totalPedidos > 0 ? tI / totalPedidos : 0);
+  document.getElementById('kpi-ticket').textContent   = fmt(almCantidad > 0 ? almMonto / almCantidad : 0);
   document.getElementById('kpi-promedio').textContent = fmt(tI / diasConVentas);
   document.getElementById('kpi-stock').textContent    = ST.inventario.filter(p=>p.stock<=p.minimo).length;
 
@@ -4162,7 +4167,6 @@ function renderTablero() {
 
   renderBarChart();
 
-  const alm  = ings.filter(i => i.turno === 'almuerzo');
   const cnt  = t  => alm.filter(i=>i.pedido===t).reduce((a,b)=>a+(b.cantidad||1),0);
   document.getElementById('rp-comp').textContent  = cnt('completo');
   document.getElementById('rp-seco').textContent  = cnt('seco');
