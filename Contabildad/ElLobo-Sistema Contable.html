@@ -455,36 +455,26 @@
         <div class="report-line"><span>Otros</span><strong id="rp-otros" class="amount-neg">$0</strong></div>
         <div class="report-line"><span><strong>Total egresos</strong></span><strong id="rp-tegr" class="amount-neg">$0</strong></div>
       </div>
-      <div class="report-block">
+      <!-- "Más pedidos" — oculto por ahora, se usará en un futuro tablero -->
+      <div class="report-block" style="display:none;">
         <div class="report-block-title">🍗 Proteínas más pedidas</div>
         <div id="rp-proteinas"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
       </div>
-      <div class="report-block">
+      <div class="report-block" style="display:none;">
         <div class="report-block-title">🍲 Sopas más pedidas</div>
         <div id="rp-sopas"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
       </div>
-      <div class="report-block">
+      <div class="report-block" style="display:none;">
         <div class="report-block-title">🍚 Arroces más pedidos</div>
         <div id="rp-arroces"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
       </div>
-      <div class="report-block">
+      <div class="report-block" style="display:none;">
         <div class="report-block-title">🥩 Asados más pedidos</div>
         <div id="rp-asados"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
       </div>
       <div class="report-block" style="grid-column: 1 / -1;">
         <div class="report-block-title">🌙 Comidas Rápidas — Desglose por categoría</div>
         <div id="rp-cr-categorias"></div>
-      </div>
-    </div>
-
-    <div class="two-col" style="margin:20px 0;">
-      <div class="panel">
-        <div class="panel-header"><div class="panel-title">Últimos ingresos pagados</div></div>
-        <div class="table-wrap"><table><thead><tr><th>Hora</th><th>Turno</th><th>Pedido</th><th>Monto</th></tr></thead><tbody id="dash-ingresos-body"></tbody></table></div>
-      </div>
-      <div class="panel">
-        <div class="panel-header"><div class="panel-title">Últimos egresos</div></div>
-        <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th></tr></thead><tbody id="dash-egresos-body"></tbody></table></div>
       </div>
     </div>
 
@@ -981,8 +971,8 @@
 
   <!-- Se muestra cuando este turno ya está cerrado y no se está viendo desde el historial -->
   <div class="alert ok" id="dd-cerrado-banner" style="display:none;margin-bottom:20px;">
-    <div style="flex:1;">🔒 Este turno ya está cerrado. Los valores quedaron guardados.</div>
-    <button type="button" class="btn btn-outline" style="margin-right:8px;" onclick="corregirCierreActual()">✏️ Corregir cierre</button>
+    <div style="flex:1;" id="dd-cerrado-mensaje">🔒 Este turno ya está cerrado. Los valores quedaron guardados.</div>
+    <button type="button" class="btn btn-outline" style="margin-right:8px;" id="btn-corregir-cierre" onclick="corregirCierreActual()">✏️ Corregir cierre</button>
     <button type="button" class="btn-abrir-turno" onclick="abrirModalTurno()">🔓 Abrir turno</button>
   </div>
 
@@ -1001,7 +991,7 @@
           </div>
           <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="dd-gasto-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
         </div>
-        <div class="form-group mb"><label>Detalle</label><input type="text" id="dd-gasto-nombre" placeholder="ej: Comida del día…"></div>
+        <div class="form-group mb"><label>Detalle <span style="color:var(--text3);font-weight:400;">(opcional)</span></label><input type="text" id="dd-gasto-nombre" placeholder="ej: Comida del día…"></div>
         <button class="btn btn-primary" onclick="agregarGastoDia()">+ Agregar gasto</button>
         <div style="font-size:11px;color:var(--text3);margin:8px 0 0;">💡 "Préstamos" es para cuando pones dinero propio (ej: para dar vuelto) — se resta de la caja del día, pero no se cuenta en Egresos ni afecta el total del mes por categoría.</div>
         <div class="divider"></div>
@@ -1044,7 +1034,7 @@
         </div>
         <div class="monto-display" style="margin-top:10px;background:rgba(91,155,213,0.07);border-color:rgba(91,155,213,0.25);">
           <div class="monto-val" id="dd-caja-esperada" style="color:var(--blue);">$0</div>
-          <div class="monto-label">Caja esperada en efectivo al cierre</div>
+          <div class="monto-label">Caja esperada en efectivo al cierre <span style="color:var(--text3);">(incluye préstamos)</span></div>
         </div>
         <button class="btn btn-primary" onclick="guardarCierre()" style="width:100%;margin-top:14px;">💾 Guardar cierre del día</button>
       </div>
@@ -1577,7 +1567,14 @@ async function loadState() {
 
 // ── Utilidades ────────────────────────────────────────────────────────
 const fmt      = n  => '$' + Math.abs(Math.round(n)).toLocaleString('es-CO');
-const today    = () => new Date().toISOString().split('T')[0];
+// Fecha local en formato YYYY-MM-DD. OJO: NO usar Date.toISOString() para esto —
+// esa función convierte a UTC, y en Colombia (UTC-5) eso hace que desde las
+// 7:00pm hasta medianoche "today()" devuelva el día siguiente por error,
+// rompiendo los filtros de "Hoy" justo en el horario de comidas rápidas.
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+const today    = () => toLocalDateStr(new Date());
 const nowTime  = () => { const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
 
 // ── Formato de miles en campos de dinero (100000 → 100.000 mientras se escribe) ─
@@ -1616,7 +1613,7 @@ function valMilesConSigno(id) {
 function formatearNumerosEnTexto(texto) {
   return String(texto ?? '').replace(/\d{4,}/g, m => parseInt(m, 10).toLocaleString('es-CO'));
 }
-const weekStart= () => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return d.toISOString().split('T')[0]; };
+const weekStart= () => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return toLocalDateStr(d); };
 const monthStart=()=> { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; };
 
 function inP(fecha, p) {
@@ -4082,27 +4079,6 @@ function renderTablero() {
 
   renderBarChart();
 
-  // Últimos ingresos pagados
-  const r5i = ST.ingresos.slice(0, 5);
-  document.getElementById('dash-ingresos-body').innerHTML = r5i.length
-    ? r5i.map(i=>`<tr>
-        <td>${i.hora||'—'}</td>
-        <td><span class="badge ${i.turno==='cena'?'badge-purple':'badge-accent'}">${i.turno==='cena'?'🌙':'☀️'}</span></td>
-        <td style="color:var(--text);font-size:12px;">${LABELS[i.pedido]||i.pedido}</td>
-        <td class="amount-pos">${fmt(i.monto_total||0)}</td>
-      </tr>`).join('')
-    : `<tr><td colspan="4" style="color:var(--text3);text-align:center;padding:20px;">Sin registros pagados</td></tr>`;
-
-  // Últimos egresos (Egresos manuales + gastos categorizados de Cierre)
-  const r5e = egresosCombinados().sort((a,b) => b.fecha.localeCompare(a.fecha)).slice(0, 5);
-  document.getElementById('dash-egresos-body').innerHTML = r5e.length
-    ? r5e.map(e=>`<tr>
-        <td>${e.fecha}</td>
-        <td><span class="badge ${catC(e.cat)}">${CAT_LABELS[e.cat]||e.cat}</span></td>
-        <td class="amount-neg">${fmt(e.monto)}</td>
-      </tr>`).join('')
-    : `<tr><td colspan="3" style="color:var(--text3);text-align:center;padding:20px;">Sin registros</td></tr>`;
-
   const alm  = ings.filter(i => i.turno === 'almuerzo');
   const cnt  = t  => alm.filter(i=>i.pedido===t).reduce((a,b)=>a+(b.cantidad||1),0);
   document.getElementById('rp-comp').textContent  = cnt('completo');
@@ -4354,6 +4330,19 @@ function calcularVentasFijas(fecha, turno) {
   return { efectivo: efectivoPedidos + ventaDesayuno, transferencia, cajaInicial: apertura ? (apertura.caja_inicial||0) : 0, ventaDesayuno, tieneApertura: !!apertura };
 }
 
+// Gastos del turno separados en dos totales: "reales" (todo menos préstamos,
+// lo que de verdad reduce la utilidad del negocio) y "con préstamos" (todo,
+// que es lo que de verdad sale físicamente de la caja). Un préstamo no es un
+// gasto del negocio — es plata propia que el dueño retira de la caja para
+// recuperar lo que había prestado antes, así que solo debe afectar cuánto
+// efectivo se espera encontrar al cierre, nunca la utilidad ni Egresos.
+function calcularGastosTurno(fecha, turno) {
+  const delTurno = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno);
+  const reales       = delTurno.filter(g => g.categoria !== 'prestamo').reduce((a,b)=>a+b.monto,0);
+  const conPrestamos  = delTurno.reduce((a,b)=>a+b.monto,0);
+  return { reales, conPrestamos };
+}
+
 // Recalcula los totales derivados (KPIs, utilidad, caja esperada). Efectivo y
 // transferencia son siempre la suma fija de los pedidos; solo el Ajuste es editable.
 function recalcularResultadoCierre() {
@@ -4361,11 +4350,11 @@ function recalcularResultadoCierre() {
   const { efectivo, transferencia, cajaInicial, ventaDesayuno, tieneApertura } = calcularVentasFijas(fecha, ddTurno);
   const total = efectivo + transferencia;
 
-  const gastos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === ddTurno).reduce((a,b)=>a+b.monto,0);
+  const { reales: gastos, conPrestamos: gastosConPrestamos } = calcularGastosTurno(fecha, ddTurno);
   const ajuste = valMilesConSigno('dd-ajuste-monto');
 
   const resultado    = total - gastos + ajuste;
-  const cajaEsperada = cajaInicial + efectivo - gastos + ajuste;
+  const cajaEsperada = cajaInicial + efectivo - gastosConPrestamos + ajuste;
 
   document.getElementById('dd-res-caja-inicial').innerHTML = tieneApertura
     ? fmt(cajaInicial)
@@ -4400,7 +4389,7 @@ function recalcularResultadoCierre() {
 async function guardarCierre() {
   const fecha = document.getElementById('dd-fecha').value || today();
   const { efectivo, transferencia } = calcularVentasFijas(fecha, ddTurno);
-  const gastos = ST.gastosDia.filter(g=>g.fecha===fecha&&g.turno===ddTurno).reduce((a,b)=>a+b.monto,0);
+  const { reales: gastos } = calcularGastosTurno(fecha, ddTurno);
 
   const ajuste     = valMilesConSigno('dd-ajuste-monto');
   const ajusteNota = document.getElementById('dd-ajuste-nota').value.trim();
@@ -4459,7 +4448,7 @@ async function agregarGastoDia() {
   const monto    = valMiles('dd-gasto-monto');
   const categoria = document.getElementById('dd-gasto-cat').value;
   if (!fecha)           { showToast('⚠ Selecciona una fecha', 'warning'); return; }
-  if (!nombre || !monto || monto <= 0) { showToast('⚠ Completa detalle y monto', 'warning'); return; }
+  if (!monto || monto <= 0) { showToast('⚠ Ingresa el monto', 'warning'); return; }
 
   try {
     let row;
@@ -4509,7 +4498,7 @@ async function guardarEdicionGastoDia(id) {
   const nombre = nombreEl.value.trim();
   const monto  = parseMiles(montoEl.value);
   const categoria = catEl ? catEl.value : undefined;
-  if (!nombre || !monto || monto <= 0) { showToast('⚠ Completa detalle y monto', 'warning'); return; }
+  if (!monto || monto <= 0) { showToast('⚠ Ingresa el monto', 'warning'); return; }
   try {
     const patch = categoria !== undefined ? { nombre, monto, categoria } : { nombre, monto };
     await sbPatch('gastos_dia', `id=eq.${id}`, patch);
@@ -4582,6 +4571,17 @@ function renderDiaADia() {
     document.getElementById('dd-turno-label').textContent   = 'Abre un turno nuevo para empezar';
     document.getElementById('dd-efectivo').textContent      = '$0';
     document.getElementById('dd-transferencia').textContent = '$0';
+
+    // Solo se puede corregir libremente el cierre de HOY. Para uno de otro
+    // día hace falta la contraseña (misma del historial completo, abajo).
+    const puedeCorregir = fecha === today() || adminAutenticado;
+    const msgEl = document.getElementById('dd-cerrado-mensaje');
+    const btnCorregir = document.getElementById('btn-corregir-cierre');
+    if (btnCorregir) btnCorregir.style.display = puedeCorregir ? '' : 'none';
+    if (msgEl) msgEl.textContent = puedeCorregir
+      ? '🔒 Este turno ya está cerrado. Los valores quedaron guardados.'
+      : '🔒 Este cierre es de otro día — ingresa la contraseña en "Historial completo de cierres" (más abajo) para verlo o corregirlo.';
+
     renderNotasCierre(fecha);
     aplicarGateAdmin('dd-historial', renderHistorialCierres);
     return;
@@ -4609,7 +4609,7 @@ function renderDiaADia() {
     ? gastos.map(g => {
         if (ddEditId === g.id) {
           return `<tr>
-            <td><input type="text"   id="dd-edit-nombre-${g.id}" value="${g.nombre.replace(/"/g,'&quot;')}" style="width:100%;"></td>
+            <td><input type="text"   id="dd-edit-nombre-${g.id}" value="${(g.nombre||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
             <td><select id="dd-edit-cat-${g.id}" style="width:100%;">
               <option value="nomina"${g.categoria==='nomina'?' selected':''}>Nómina</option>
               <option value="proveedor"${g.categoria==='proveedor'?' selected':''}>Proveedores</option>
@@ -4624,7 +4624,7 @@ function renderDiaADia() {
           </tr>`;
         }
         return `<tr>
-          <td style="color:var(--text)">${g.nombre}</td>
+          <td style="color:var(--text)">${g.nombre || '—'}</td>
           <td>${g.categoria ? `<span class="badge ${catC(g.categoria)}">${CAT_LABELS[g.categoria]||g.categoria}</span>` : '<span style="color:var(--text3);font-size:11px;">sin categoría</span>'}</td>
           <td class="amount-neg">${fmt(g.monto)}</td>
           <td style="white-space:nowrap;display:flex;gap:4px;">
@@ -4656,6 +4656,10 @@ function irADiaADia(fecha, turno) {
 // la contraseña del historial completo, más abajo en esta misma pestaña.
 function corregirCierreActual() {
   const fecha = document.getElementById('dd-fecha').value || today();
+  if (fecha !== today() && !adminAutenticado) {
+    showToast('🔒 Para corregir un cierre de otro día, ingresa la contraseña en "Historial completo de cierres"', 'warning');
+    return;
+  }
   irADiaADia(fecha, ddTurno);
 }
 
@@ -4840,7 +4844,7 @@ function renderBarChart() {
   const days = [];
   for (let i = 6; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i);
-    const f  = d.toISOString().split('T')[0];
+    const f  = toLocalDateStr(d);
     const lb = d.toLocaleDateString('es-CO', {weekday:'short'});
     days.push({
       lb,
