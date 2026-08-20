@@ -369,71 +369,132 @@
 </header>
 
 <nav>
-  <div class="tab active" onclick="showTab('dashboard',this)">Dashboard</div>
-  <div class="tab" onclick="showTab('ingresos',this)">Ingresos</div>
+  <!-- Operativas — acceso libre, para el día a día en el mostrador -->
+  <div class="tab active" onclick="showTab('ingresos',this)">Pedidos</div>
   <div class="tab" onclick="showTab('pendientes',this)" id="tab-nav-pendientes">Pendientes <span id="pend-badge" style="display:none;background:var(--orange);color:#0f0e0c;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
-  <!-- Oculta temporalmente: quita este style="display:none" para reactivarla -->
-  <div class="tab" onclick="showTab('pedidos',this)" style="display:none;">Pedidos</div>
-  <div class="tab" onclick="showTab('egresos',this)">Egresos</div>
-  <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
-  <div class="tab" onclick="showTab('reportes',this)">Reportes</div>
   <div class="tab" onclick="showTab('diaadia',this)">Cierre</div>
-  <div class="tab" onclick="showTab('caja',this)">Caja</div>
+  <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
+  <!-- Administrativas — todas piden la misma contraseña -->
+  <div class="tab" onclick="showTab('dashboard',this)">🔒 Tablero</div>
+  <div class="tab" onclick="showTab('ingfin',this)">🔒 Ingresos</div>
+  <div class="tab" onclick="showTab('egresos',this)">🔒 Egresos</div>
+  <div class="tab" onclick="showTab('caja',this)">🔒 Caja</div>
   <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría</div>
 </nav>
 
 <main>
 
-<!-- ===== DASHBOARD ===== -->
-<section class="section active" id="tab-dashboard">
-  <div id="alertZone" style="margin-bottom:16px;"></div>
-  <div class="kpi-grid">
-    <div class="kpi-card green"><div class="kpi-label">Ingresos del mes</div><div class="kpi-value" id="kpi-ingresos">$0</div><div class="kpi-sub">Solo pedidos pagados</div></div>
-    <div class="kpi-card red"><div class="kpi-label">Egresos del mes</div><div class="kpi-value" id="kpi-egresos">$0</div><div class="kpi-sub">Arriendo · Nómina · Insumos</div></div>
-    <div class="kpi-card accent"><div class="kpi-label">Utilidad neta</div><div class="kpi-value" id="kpi-utilidad">$0</div><div class="kpi-sub" id="kpi-margen">Margen: 0%</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">Almuerzos hoy</div><div class="kpi-value" id="kpi-almuerzos">0</div><div class="kpi-sub">Pedidos pagados</div></div>
-    <div class="kpi-card purple"><div class="kpi-label">Comidas rápidas hoy</div><div class="kpi-value" id="kpi-cenas">0</div><div class="kpi-sub">Pedidos pagados</div></div>
-    <div class="kpi-card blue"><div class="kpi-label">Bajo stock</div><div class="kpi-value" id="kpi-stock">0</div><div class="kpi-sub">Productos por reabastecer</div></div>
+<!-- ===== TABLERO (antes Dashboard — ahora también incluye lo de Reportes; acceso con contraseña) ===== -->
+<section class="section" id="tab-dashboard">
+  <div id="tablero-login" class="panel" style="max-width:400px;margin:60px auto;">
+    <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
+    <div class="panel-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">El tablero muestra el estado financiero completo del negocio.</div>
+      <div class="form-group mb">
+        <label>Contraseña</label>
+        <input type="password" id="tablero-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('tablero-password')">
+      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('tablero-password')">Entrar</button>
+    </div>
   </div>
 
-  <!-- Estado del salón -->
-  <div class="panel salon-section">
-    <div class="panel-header">
-      <div class="panel-title">Estado del salón</div>
-      <div style="font-size:11px;color:var(--text3);">Clic en mesa con pedidos → ir a Pendientes</div>
+  <div id="tablero-contenido" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
     </div>
-    <div class="panel-body">
-      <div class="mesa-grid" id="dash-salon-grid"></div>
-      <div class="salon-legend">
-        <div class="salon-legend-item"><div class="salon-legend-dot" style="background:var(--green);"></div> Libre</div>
-        <div class="salon-legend-item"><div class="salon-legend-dot" style="background:var(--orange);"></div> Con pedidos pendientes</div>
-        <div class="salon-legend-item"><div class="salon-legend-dot" style="background:var(--red);opacity:0.6;"></div> Ocupada (sin pendientes en sistema)</div>
+    <div id="alertZone" style="margin-bottom:16px;"></div>
+
+    <div class="filter-bar">
+      <button class="filter-btn" onclick="setFTablero('hoy',this)">Hoy</button>
+      <button class="filter-btn" onclick="setFTablero('semana',this)">Esta semana</button>
+      <button class="filter-btn active" onclick="setFTablero('mes',this)">Este mes</button>
+      <button class="filter-btn" onclick="setFTablero('todo',this)">Todo el historial</button>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card green"><div class="kpi-label">Ingresos</div><div class="kpi-value" id="kpi-ingresos">$0</div><div class="kpi-sub">Pedidos pagados + desayuno</div></div>
+      <div class="kpi-card red"><div class="kpi-label">Egresos</div><div class="kpi-value" id="kpi-egresos">$0</div><div class="kpi-sub">Nómina · Proveedores · Arriendo · Servicios · Otros</div></div>
+      <div class="kpi-card accent"><div class="kpi-label">Utilidad neta</div><div class="kpi-value" id="kpi-utilidad">$0</div><div class="kpi-sub" id="kpi-margen">Margen: 0%</div></div>
+      <div class="kpi-card blue"><div class="kpi-label">Ticket promedio</div><div class="kpi-value" id="kpi-ticket">$0</div><div class="kpi-sub">Ingresos ÷ pedidos del período</div></div>
+      <div class="kpi-card purple"><div class="kpi-label">Promedio por día</div><div class="kpi-value" id="kpi-promedio">$0</div><div class="kpi-sub">Ingresos ÷ días con ventas</div></div>
+      <div class="kpi-card orange"><div class="kpi-label">Bajo stock</div><div class="kpi-value" id="kpi-stock">0</div><div class="kpi-sub">Productos por reabastecer</div></div>
+    </div>
+
+    <div class="chart-container">
+      <div class="chart-title">Ingresos vs Egresos — Últimos 7 días</div>
+      <div class="bar-chart" id="barChart"></div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Ingresos</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Egresos</div>
       </div>
     </div>
-  </div>
 
-  <div class="chart-container">
-    <div class="chart-title">Ingresos vs Egresos — Últimos 7 días</div>
-    <div class="bar-chart" id="barChart"></div>
-    <div class="chart-legend">
-      <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Ingresos</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Egresos</div>
+    <div class="report-grid">
+      <div class="report-block">
+        <div class="report-block-title">☀️ Desglose almuerzos</div>
+        <div class="report-line"><span>Completos</span><strong id="rp-comp">0</strong></div>
+        <div class="report-line"><span>Secos</span><strong id="rp-seco">0</strong></div>
+        <div class="report-line"><span>Asado 130g</span><strong id="rp-a130">0</strong></div>
+        <div class="report-line"><span>Asado 200g</span><strong id="rp-a200">0</strong></div>
+        <div class="report-line"><span>Porción sopa</span><strong id="rp-psopa">0</strong></div>
+        <div class="report-line"><span>Porción arroz</span><strong id="rp-parroz">0</strong></div>
+        <div class="report-line"><span><strong>Total almuerzos</strong></span><strong class="amount-pos" id="rp-tal">$0</strong></div>
+      </div>
+      <div class="report-block">
+        <div class="report-block-title">💰 Ingresos por método</div>
+        <div class="report-line"><span>Efectivo</span><strong id="rp-ef" class="amount-pos">$0</strong></div>
+        <div class="report-line"><span>Transferencia</span><strong id="rp-trans" class="amount-pos">$0</strong></div>
+        <div class="report-line"><span>🌙 Comidas rápidas</span><strong id="rp-tcr" class="amount-pos">$0</strong></div>
+        <div class="report-line"><span><strong>Total ingresos</strong></span><strong id="rp-ting" class="amount-pos">$0</strong></div>
+      </div>
+      <div class="report-block">
+        <div class="report-block-title">📤 Egresos por categoría</div>
+        <div class="report-line"><span>Nómina</span><strong id="rp-nom" class="amount-neg">$0</strong></div>
+        <div class="report-line"><span>Proveedores</span><strong id="rp-prov" class="amount-neg">$0</strong></div>
+        <div class="report-line"><span>Arriendo + Servicios</span><strong id="rp-arr" class="amount-neg">$0</strong></div>
+        <div class="report-line"><span>Otros</span><strong id="rp-otros" class="amount-neg">$0</strong></div>
+        <div class="report-line"><span><strong>Total egresos</strong></span><strong id="rp-tegr" class="amount-neg">$0</strong></div>
+      </div>
+      <div class="report-block">
+        <div class="report-block-title">🍗 Proteínas más pedidas</div>
+        <div id="rp-proteinas"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
+      </div>
+      <div class="report-block">
+        <div class="report-block-title">🍲 Sopas más pedidas</div>
+        <div id="rp-sopas"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
+      </div>
+      <div class="report-block">
+        <div class="report-block-title">🍚 Arroces más pedidos</div>
+        <div id="rp-arroces"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
+      </div>
+      <div class="report-block">
+        <div class="report-block-title">🥩 Asados más pedidos</div>
+        <div id="rp-asados"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
+      </div>
+      <div class="report-block" style="grid-column: 1 / -1;">
+        <div class="report-block-title">🌙 Comidas Rápidas — Desglose por categoría</div>
+        <div id="rp-cr-categorias"></div>
+      </div>
     </div>
-  </div>
-  <div class="two-col">
-    <div class="panel">
-      <div class="panel-header"><div class="panel-title">Últimos ingresos pagados</div></div>
-      <div class="table-wrap"><table><thead><tr><th>Hora</th><th>Turno</th><th>Pedido</th><th>Monto</th></tr></thead><tbody id="dash-ingresos-body"></tbody></table></div>
+
+    <div class="two-col" style="margin:20px 0;">
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">Últimos ingresos pagados</div></div>
+        <div class="table-wrap"><table><thead><tr><th>Hora</th><th>Turno</th><th>Pedido</th><th>Monto</th></tr></thead><tbody id="dash-ingresos-body"></tbody></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">Últimos egresos</div></div>
+        <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th></tr></thead><tbody id="dash-egresos-body"></tbody></table></div>
+      </div>
     </div>
-    <div class="panel">
-      <div class="panel-header"><div class="panel-title">Últimos egresos</div></div>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Monto</th></tr></thead><tbody id="dash-egresos-body"></tbody></table></div>
-    </div>
+
+    <div style="margin-bottom:12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;">🎯 Drivers de mejora</span></div>
+    <div id="drivers-zone"></div>
   </div>
 </section>
 
-<!-- ===== INGRESOS ===== -->
-<section class="section" id="tab-ingresos">
+<!-- ===== PEDIDOS (antes Ingresos) — registro del día, sin historial de semana/mes ===== -->
+<section class="section active" id="tab-ingresos">
   <div class="two-col" style="margin-bottom:20px;">
     <div class="panel">
       <div class="panel-header"><div class="panel-title">Registrar pedido</div></div>
@@ -650,34 +711,29 @@
         </div>
       </div>
       <div class="panel">
-        <div class="panel-header"><div class="panel-title">Ingresos acumulados</div></div>
+        <div class="panel-header"><div class="panel-title">Ingresos de hoy</div></div>
         <div class="panel-body" style="padding:16px;">
-          <div class="report-line"><span>Efectivo hoy</span><strong id="ing-ef">$0</strong></div>
-          <div class="report-line"><span>Transferencia hoy</span><strong id="ing-trans">$0</strong></div>
+          <div class="report-line"><span>Efectivo</span><strong id="ing-ef">$0</strong></div>
+          <div class="report-line"><span>Transferencia</span><strong id="ing-trans">$0</strong></div>
           <div class="divider" style="margin:8px 0;"></div>
-          <div class="report-line"><span><strong>Hoy</strong></span><strong class="amount-pos" id="ing-hoy">$0</strong></div>
-          <div class="report-line"><span>Semana</span><strong class="amount-pos" id="ing-semana">$0</strong></div>
-          <div class="report-line"><span>Mes</span><strong class="amount-pos" id="ing-mes">$0</strong></div>
+          <div class="report-line"><span><strong>Total hoy</strong></span><strong class="amount-pos" id="ing-hoy">$0</strong></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Historial de ingresos pagados -->
+  <!-- Historial de pedidos del día (agrupado por pedido completo, no por producto) -->
   <div class="panel">
     <div class="panel-header">
-      <div class="panel-title">Historial de ingresos <span style="color:var(--green);font-size:11px;">(pagados)</span></div>
+      <div class="panel-title">Pedidos de hoy <span style="color:var(--green);font-size:11px;">(pagados)</span></div>
       <div class="filter-bar" style="margin-bottom:0;">
-        <button class="filter-btn active" onclick="setFI('hoy',this)">Hoy</button>
-        <button class="filter-btn" onclick="setFI('semana',this)">Semana</button>
-        <button class="filter-btn" onclick="setFI('mes',this)">Mes</button>
-        <button class="filter-btn" onclick="setFI('todo',this)">Todo</button>
+        <button class="filter-btn active" onclick="setFI('todos',this)">Todos</button>
         <button class="filter-btn" onclick="setFI('almuerzo',this)">Almuerzos</button>
-        <button class="filter-btn" onclick="setFI('cena',this)">Cenas</button>
+        <button class="filter-btn" onclick="setFI('cena',this)">Comidas rápidas</button>
       </div>
     </div>
     <div class="table-wrap">
-      <table><thead><tr><th>Fecha</th><th>Hora</th><th>Turno</th><th>Ubicación</th><th>Pedido</th><th>Detalle</th><th>Método</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
+      <table><thead><tr><th>Hora</th><th>Turno</th><th>Ubicación</th><th>Pedido</th><th>Detalle</th><th>Método</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
       <tbody id="ingresos-body"></tbody></table>
     </div>
   </div>
@@ -717,72 +773,73 @@
   <div id="pendientes-fiados-zone"></div>
 </section>
 
-<!-- ===== PEDIDOS (seguimiento de cocina) ===== -->
-<section class="section" id="tab-pedidos">
-  <div class="panel">
-    <div class="panel-header">
-      <div class="panel-title">🍽 Pedidos del turno — <span id="pedidos-turno-label">Almuerzo</span></div>
-      <div style="font-size:11px;color:var(--text3);">Marca cada plato cuando lo entregues · sopa + seco por separado solo en mesa/sin mesa; domicilio y para llevar usan un solo check</div>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Hora</th><th>Ubicación</th><th>Pedido</th><th>Detalle</th><th>Cant.</th><th>Pago</th><th>Entrega</th><th></th></tr></thead>
-        <tbody id="pedidos-turno-body"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<!-- ===== EGRESOS ===== -->
+<!-- ===== EGRESOS (acceso con contraseña) ===== -->
 <section class="section" id="tab-egresos">
-  <div class="two-col" style="margin-bottom:20px;">
-    <div class="panel">
-      <div class="panel-header"><div class="panel-title">Registrar egreso</div></div>
-      <div class="panel-body">
-        <div class="form-row">
-          <div class="form-group"><label>Fecha</label><input type="date" id="egr-fecha"></div>
-          <div class="form-group"><label>Categoría</label>
-            <select id="egr-cat">
-              <option value="ingredientes">Ingredientes / Materia prima</option>
-              <option value="nomina">Nómina de empleados</option>
-              <option value="arriendo">Arriendo</option>
-              <option value="servicios">Servicios públicos</option>
-              <option value="proveedor">Proveedor</option>
-              <option value="otro">Otro</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="egr-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
-          <div class="form-group"><label>Descripción</label><input type="text" id="egr-desc" placeholder="ej: Pollo, pago empleado…"></div>
-        </div>
-        <button class="btn btn-primary" onclick="agregarEgreso()">+ Registrar egreso</button>
+  <div id="egresos-login" class="panel" style="max-width:400px;margin:60px auto;">
+    <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
+    <div class="panel-body">
+      <div class="form-group mb">
+        <label>Contraseña</label>
+        <input type="password" id="egresos-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('egresos-password')">
       </div>
-    </div>
-    <div class="panel">
-      <div class="panel-header"><div class="panel-title">Resumen egresos</div></div>
-      <div class="panel-body">
-        <div class="report-line"><span>Hoy</span><strong class="amount-neg" id="egr-hoy">$0</strong></div>
-        <div class="report-line"><span>Esta semana</span><strong class="amount-neg" id="egr-semana">$0</strong></div>
-        <div class="report-line"><span>Este mes</span><strong class="amount-neg" id="egr-mes">$0</strong></div>
-        <div class="divider"></div>
-        <div class="report-line"><span>Ingredientes</span><strong id="egr-ing">$0</strong></div>
-        <div class="report-line"><span>Nómina</span><strong id="egr-nom">$0</strong></div>
-        <div class="report-line"><span>Arriendo + Servicios</span><strong id="egr-arr">$0</strong></div>
-      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('egresos-password')">Entrar</button>
     </div>
   </div>
-  <div class="panel">
-    <div class="panel-header">
-      <div class="panel-title">Historial de egresos</div>
-      <div class="filter-bar" style="margin-bottom:0;">
-        <button class="filter-btn active" onclick="setFE('hoy',this)">Hoy</button>
-        <button class="filter-btn" onclick="setFE('semana',this)">Semana</button>
-        <button class="filter-btn" onclick="setFE('mes',this)">Mes</button>
-        <button class="filter-btn" onclick="setFE('todo',this)">Todo</button>
+
+  <div id="egresos-contenido" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
+    </div>
+    <div class="two-col" style="margin-bottom:20px;">
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">Registrar egreso</div></div>
+        <div class="panel-body">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Para gastos del día a día (nómina, proveedores, otros) es mejor registrarlos desde <strong>Cierre</strong> — aparecen aquí solos. Este formulario es para lo que no pasa por un cierre, como arriendo o servicios.</div>
+          <div class="form-row">
+            <div class="form-group"><label>Fecha</label><input type="date" id="egr-fecha"></div>
+            <div class="form-group"><label>Categoría</label>
+              <select id="egr-cat">
+                <option value="nomina">Nómina de empleados</option>
+                <option value="proveedor">Proveedores</option>
+                <option value="arriendo">Arriendo</option>
+                <option value="servicios">Servicios públicos</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="egr-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
+            <div class="form-group"><label>Descripción</label><input type="text" id="egr-desc" placeholder="ej: Arriendo local, luz…"></div>
+          </div>
+          <button class="btn btn-primary" onclick="agregarEgreso()">+ Registrar egreso</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">Resumen egresos</div></div>
+        <div class="panel-body">
+          <div class="report-line"><span>Hoy</span><strong class="amount-neg" id="egr-hoy">$0</strong></div>
+          <div class="report-line"><span>Esta semana</span><strong class="amount-neg" id="egr-semana">$0</strong></div>
+          <div class="report-line"><span>Este mes</span><strong class="amount-neg" id="egr-mes">$0</strong></div>
+          <div class="divider"></div>
+          <div class="report-line"><span>Nómina</span><strong id="egr-nom">$0</strong></div>
+          <div class="report-line"><span>Proveedores</span><strong id="egr-prov">$0</strong></div>
+          <div class="report-line"><span>Arriendo + Servicios</span><strong id="egr-arr">$0</strong></div>
+          <div class="report-line"><span>Otros</span><strong id="egr-otros">$0</strong></div>
+        </div>
       </div>
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Monto</th><th></th></tr></thead><tbody id="egresos-body"></tbody></table></div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Historial de egresos <span style="color:var(--text3);font-size:11px;">— incluye los gastos categorizados que registras en Cierre</span></div>
+        <div class="filter-bar" style="margin-bottom:0;">
+          <button class="filter-btn active" onclick="setFE('hoy',this)">Hoy</button>
+          <button class="filter-btn" onclick="setFE('semana',this)">Semana</button>
+          <button class="filter-btn" onclick="setFE('mes',this)">Mes</button>
+          <button class="filter-btn" onclick="setFE('todo',this)">Todo</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Origen</th><th>Monto</th><th></th></tr></thead><tbody id="egresos-body"></tbody></table></div>
+    </div>
   </div>
 </section>
 
@@ -833,69 +890,62 @@
   </div>
 </section>
 
-<!-- ===== REPORTES ===== -->
-<section class="section" id="tab-reportes">
-  <div class="filter-bar">
-    <button class="filter-btn" onclick="setFR('hoy',this)">Hoy</button>
-    <button class="filter-btn active" onclick="setFR('semana',this)">Esta semana</button>
-    <button class="filter-btn" onclick="setFR('mes',this)">Este mes</button>
-    <button class="filter-btn" onclick="setFR('todo',this)">Todo el historial</button>
-  </div>
-  <div class="report-grid">
-    <div class="report-block">
-      <div class="report-block-title">☀️ Desglose almuerzos</div>
-      <div class="report-line"><span>Completos</span><strong id="rp-comp">0</strong></div>
-      <div class="report-line"><span>Secos</span><strong id="rp-seco">0</strong></div>
-      <div class="report-line"><span>Asado 130g</span><strong id="rp-a130">0</strong></div>
-      <div class="report-line"><span>Asado 200g</span><strong id="rp-a200">0</strong></div>
-      <div class="report-line"><span>Porción sopa</span><strong id="rp-psopa">0</strong></div>
-      <div class="report-line"><span>Porción arroz</span><strong id="rp-parroz">0</strong></div>
-      <div class="report-line"><span><strong>Total almuerzos</strong></span><strong class="amount-pos" id="rp-tal">$0</strong></div>
-    </div>
-    <div class="report-block">
-      <div class="report-block-title">💰 Ingresos por método</div>
-      <div class="report-line"><span>Efectivo</span><strong id="rp-ef" class="amount-pos">$0</strong></div>
-      <div class="report-line"><span>Transferencia</span><strong id="rp-trans" class="amount-pos">$0</strong></div>
-      <div class="report-line"><span>🌙 Comidas rápidas</span><strong id="rp-tcr" class="amount-pos">$0</strong></div>
-      <div class="report-line"><span><strong>Total ingresos</strong></span><strong id="rp-ting" class="amount-pos">$0</strong></div>
-    </div>
-    <div class="report-block">
-      <div class="report-block-title">📤 Egresos por categoría</div>
-      <div class="report-line"><span>Ingredientes</span><strong id="rp-ingr" class="amount-neg">$0</strong></div>
-      <div class="report-line"><span>Nómina</span><strong id="rp-nom" class="amount-neg">$0</strong></div>
-      <div class="report-line"><span>Arriendo + Servicios</span><strong id="rp-arr" class="amount-neg">$0</strong></div>
-      <div class="report-line"><span>Otros</span><strong id="rp-otros" class="amount-neg">$0</strong></div>
-      <div class="report-line"><span><strong>Total egresos</strong></span><strong id="rp-tegr" class="amount-neg">$0</strong></div>
-    </div>
-    <div class="report-block">
-      <div class="report-block-title">🍗 Proteínas más pedidas</div>
-      <div id="rp-proteinas"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
-    </div>
-    <div class="report-block">
-      <div class="report-block-title">🍲 Sopas más pedidas</div>
-      <div id="rp-sopas"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
-    </div>
-    <div class="report-block">
-      <div class="report-block-title">🍚 Arroces más pedidos</div>
-      <div id="rp-arroces"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
-    </div>
-    <div class="report-block">
-      <div class="report-block-title">🥩 Asados más pedidos</div>
-      <div id="rp-asados"><div style="color:var(--text3);font-size:12px;">Sin datos aún</div></div>
-    </div>
-    <div class="report-block" style="grid-column: 1 / -1;">
-      <div class="report-block-title">🌙 Comidas Rápidas — Desglose por categoría</div>
-      <div id="rp-cr-categorias"></div>
+<!-- ===== INGRESOS (nueva — reporte financiero, acceso con contraseña) ===== -->
+<section class="section" id="tab-ingfin">
+  <div id="ingfin-login" class="panel" style="max-width:400px;margin:60px auto;">
+    <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
+    <div class="panel-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Ingresos totales del negocio, tomados de los cierres guardados.</div>
+      <div class="form-group mb">
+        <label>Contraseña</label>
+        <input type="password" id="ingfin-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('ingfin-password')">
+      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('ingfin-password')">Entrar</button>
     </div>
   </div>
-  <div class="kpi-grid" style="margin-bottom:24px;">
-    <div class="kpi-card accent"><div class="kpi-label">Utilidad neta</div><div class="kpi-value" id="rp-util">$0</div></div>
-    <div class="kpi-card blue"><div class="kpi-label">Margen</div><div class="kpi-value" id="rp-margen">0%</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Promedio/día</div><div class="kpi-value" id="rp-prom">$0</div></div>
-    <div class="kpi-card orange"><div class="kpi-label">Total pedidos</div><div class="kpi-value" id="rp-ped">0</div></div>
+
+  <div id="ingfin-contenido" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
+    </div>
+    <div class="two-col" style="margin-bottom:20px;">
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">Registrar ingreso adicional</div></div>
+        <div class="panel-body">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Solo para ingresos que NO vienen de un pedido ni de un cierre (ej: venta de algo puntual).</div>
+          <div class="form-row">
+            <div class="form-group"><label>Fecha</label><input type="date" id="ingext-fecha"></div>
+            <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="ingext-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
+          </div>
+          <div class="form-group mb"><label>Descripción</label><input type="text" id="ingext-desc" placeholder="ej: Venta de canecas usadas…"></div>
+          <button class="btn btn-primary" onclick="agregarIngresoExtra()">+ Registrar ingreso</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">Resumen — estado de resultados</div></div>
+        <div class="panel-body">
+          <div class="report-line"><span><strong>Ingresos totales</strong></span><strong class="amount-pos" id="ingfin-total">$0</strong></div>
+          <div class="report-line"><span>(−) Nómina</span><strong class="amount-neg" id="ingfin-nomina">$0</strong></div>
+          <div class="report-line"><span><strong>= Después de nómina</strong></span><strong id="ingfin-despues-nomina">$0</strong></div>
+          <div class="report-line"><span>(−) Gastos operativos (servicios + arriendo)</span><strong class="amount-neg" id="ingfin-operativos">$0</strong></div>
+          <div class="divider"></div>
+          <div class="report-line"><span><strong>= Después de gastos operativos</strong></span><strong id="ingfin-despues-operativos">$0</strong></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Historial de ingresos <span style="color:var(--text3);font-size:11px;">— cierres guardados + ingresos adicionales</span></div>
+        <div class="filter-bar" style="margin-bottom:0;">
+          <button class="filter-btn" onclick="setFIngFin('hoy',this)">Hoy</button>
+          <button class="filter-btn active" onclick="setFIngFin('semana',this)">Semana</button>
+          <button class="filter-btn" onclick="setFIngFin('mes',this)">Mes</button>
+          <button class="filter-btn" onclick="setFIngFin('todo',this)">Todo</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Origen</th><th>Detalle</th><th>Efectivo</th><th>Transferencia</th><th>Monto</th><th></th></tr></thead><tbody id="ingfin-body"></tbody></table></div>
+    </div>
   </div>
-  <div style="margin-bottom:12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;">🎯 Drivers de mejora</span></div>
-  <div id="drivers-zone"></div>
 </section>
 
 <!-- ===== DÍA A DÍA ===== -->
@@ -931,7 +981,8 @@
 
   <!-- Se muestra cuando este turno ya está cerrado y no se está viendo desde el historial -->
   <div class="alert ok" id="dd-cerrado-banner" style="display:none;margin-bottom:20px;">
-    <div style="flex:1;">🔒 Este turno ya está cerrado. Los valores quedaron guardados — usa "Ver" en el historial para revisarlo, o abre un turno nuevo para seguir registrando.</div>
+    <div style="flex:1;">🔒 Este turno ya está cerrado. Los valores quedaron guardados.</div>
+    <button type="button" class="btn btn-outline" style="margin-right:8px;" onclick="corregirCierreActual()">✏️ Corregir cierre</button>
     <button type="button" class="btn-abrir-turno" onclick="abrirModalTurno()">🔓 Abrir turno</button>
   </div>
 
@@ -940,12 +991,21 @@
       <div class="panel-header"><div class="panel-title">Gastos / valores extra del día</div></div>
       <div class="panel-body">
         <div class="form-row mb">
-          <div class="form-group"><label>Nombre</label><input type="text" id="dd-gasto-nombre" placeholder="ej: Comida del día…"></div>
+          <div class="form-group"><label>Categoría</label>
+            <select id="dd-gasto-cat">
+              <option value="nomina">Nómina de empleados</option>
+              <option value="proveedor">Proveedores</option>
+              <option value="otro">Otro</option>
+              <option value="prestamo">Préstamos (no cuenta como egreso)</option>
+            </select>
+          </div>
           <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="dd-gasto-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
         </div>
+        <div class="form-group mb"><label>Detalle</label><input type="text" id="dd-gasto-nombre" placeholder="ej: Comida del día…"></div>
         <button class="btn btn-primary" onclick="agregarGastoDia()">+ Agregar gasto</button>
+        <div style="font-size:11px;color:var(--text3);margin:8px 0 0;">💡 "Préstamos" es para cuando pones dinero propio (ej: para dar vuelto) — se resta de la caja del día, pero no se cuenta en Egresos ni afecta el total del mes por categoría.</div>
         <div class="divider"></div>
-        <div class="table-wrap"><table><thead><tr><th>Nombre</th><th>Monto</th><th></th></tr></thead><tbody id="dd-gastos-body"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>Detalle</th><th>Categoría</th><th>Monto</th><th></th></tr></thead><tbody id="dd-gastos-body"></tbody></table></div>
       </div>
     </div>
     <div class="panel">
@@ -991,21 +1051,46 @@
     </div>
   </div>
   <div class="panel">
-    <div class="panel-header">
-      <div class="panel-title">Historial de cierres</div>
-      <div class="filter-bar" style="margin-bottom:0;" id="dd-historial-filters">
-        <button class="filter-btn active" onclick="setFDD('hoy',this)">Hoy</button>
-        <button class="filter-btn" onclick="setFDD('semana',this)">Semana</button>
-        <button class="filter-btn" onclick="setFDD('mes',this)">Mes</button>
-        <button class="filter-btn" onclick="setFDD('todo',this)">Todo</button>
+    <div class="panel-header"><div class="panel-title">🔒 Historial completo de cierres</div></div>
+    <div class="panel-body" id="dd-historial-login">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Para ver o corregir cierres de otros días necesitas la contraseña.</div>
+      <div style="display:flex;gap:8px;max-width:400px;">
+        <input type="password" id="dd-historial-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('dd-historial-password')">
+        <button class="btn btn-primary" onclick="intentarAccesoAdmin('dd-historial-password')">Entrar</button>
       </div>
     </div>
-    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th>Gastos</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
+    <div id="dd-historial-contenido" style="display:none;">
+      <div class="panel-header">
+        <div class="filter-bar" style="margin-bottom:0;" id="dd-historial-filters">
+          <button class="filter-btn active" onclick="setFDD('hoy',this)">Hoy</button>
+          <button class="filter-btn" onclick="setFDD('semana',this)">Semana</button>
+          <button class="filter-btn" onclick="setFDD('mes',this)">Mes</button>
+          <button class="filter-btn" onclick="setFDD('todo',this)">Todo</button>
+        </div>
+        <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
+      </div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th>Gastos</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
+    </div>
   </div>
 </section>
 
-<!-- ===== CAJA ===== -->
+<!-- ===== CAJA (acceso con contraseña) ===== -->
 <section class="section" id="tab-caja">
+  <div id="caja-login" class="panel" style="max-width:400px;margin:60px auto;">
+    <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
+    <div class="panel-body">
+      <div class="form-group mb">
+        <label>Contraseña</label>
+        <input type="password" id="caja-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('caja-password')">
+      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('caja-password')">Entrar</button>
+    </div>
+  </div>
+
+  <div id="caja-contenido" style="display:none;">
+  <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+    <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
+  </div>
   <div class="filter-bar">
     <button class="filter-btn" onclick="setFCaja('hoy',this)">Hoy</button>
     <button class="filter-btn" onclick="setFCaja('semana',this)">Semana</button>
@@ -1050,6 +1135,7 @@
     <div class="panel-header"><div class="panel-title">Movimientos de caja (gastos y aportes de capital)</div></div>
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Monto</th><th></th></tr></thead><tbody id="caja-movimientos-body"></tbody></table></div>
   </div>
+  </div>
 </section>
 
 <!-- ===== AUDITORÍA (acceso con contraseña) ===== -->
@@ -1060,9 +1146,9 @@
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Esta sección muestra todos los ajustes manuales hechos en los cierres.</div>
       <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="auditoria-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAuditoria()">
+        <input type="password" id="auditoria-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('auditoria-password')">
       </div>
-      <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAuditoria()">Entrar</button>
+      <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('auditoria-password')">Entrar</button>
     </div>
   </div>
 
@@ -1070,7 +1156,7 @@
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">📋 Ajustes manuales registrados en cierres</div>
-        <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAuditoria()">🔒 Cerrar sesión</button>
+        <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -1409,7 +1495,8 @@ let ST = {
   cierresDia: [],   // cierres guardados
   aperturasTurno: [], // aperturas de turno (caja inicial + venta desayuno)
   notasDia:   [],   // notas/recordatorios del día
-  movimientosCaja: [] // gastos generales y aportes de capital (sección Caja)
+  movimientosCaja: [], // gastos generales y aportes de capital (sección Caja)
+  ingresosExtra: [] // ingresos adicionales personalizados (sección Ingresos)
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -1451,7 +1538,7 @@ function showToast(msg, tipo = 'info', accion = null) {
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja] = await Promise.all([
+    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra] = await Promise.all([
       sbGet('pedidos',     'order=created_at.desc'),
       sbGet('egresos',     'order=created_at.desc'),
       sbGet('inventario',  'order=nombre.asc'),
@@ -1461,7 +1548,8 @@ async function loadState() {
       sbGet('cierres_dia', 'order=fecha.desc').catch(() => []),
       sbGet('aperturas_turno', 'order=created_at.desc').catch(() => []),
       sbGet('notas_dia',   'order=created_at.desc').catch(() => []),
-      sbGet('movimientos_caja', 'order=created_at.desc').catch(() => [])
+      sbGet('movimientos_caja', 'order=created_at.desc').catch(() => []),
+      sbGet('ingresos_extra', 'order=fecha.desc').catch(() => [])
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
@@ -1475,6 +1563,7 @@ async function loadState() {
     ST.aperturasTurno = aperturasTurno;
     ST.notasDia   = notasDia;
     ST.movimientosCaja = movimientosCaja;
+    ST.ingresosExtra   = ingresosExtra;
 
     setSyncBadge('ok');
   } catch (e) {
@@ -1554,7 +1643,8 @@ function turnoFromHora(h) {
 }
 
 const metC = m => m==='efectivo'?'badge-green':'badge-accent';
-const catC = c => c==='ingredientes'?'badge-accent':c==='nomina'?'badge-blue':['arriendo','servicios'].includes(c)?'badge-gray':'badge-red';
+const catC = c => c==='nomina'?'badge-blue':['arriendo','servicios'].includes(c)?'badge-gray':c==='prestamo'?'badge-purple':'badge-red';
+const CAT_LABELS = { nomina:'Nómina', proveedor:'Proveedores', arriendo:'Arriendo', servicios:'Servicios', otro:'Otro', prestamo:'Préstamo' };
 
 // ── Exportar / Importar ───────────────────────────────────────────────
 function exportarDatos() {
@@ -1662,7 +1752,7 @@ let ddTurno = 'almuerzo';
 document.getElementById('ing-hora').value = nowTime();
 
 // ── Filtros activos ───────────────────────────────────────────────────
-let fI = 'hoy', fE = 'hoy', fInv = 'todos', fR = 'semana';
+let fI = 'todos', fE = 'hoy', fInv = 'todos', fTablero = 'mes', fIngFin = 'semana';
 let ddEditId = null;
 
 // ── Autocomplete índices ──────────────────────────────────────────────
@@ -2003,7 +2093,6 @@ function seleccionarTurnoManual(t) {
   rebuildPedidoSelect();
   actualizarMontoDisplay();
   validarRegistro();
-  renderPedidosTurno();
 }
 
 function pintarTurnoManual() {
@@ -2403,10 +2492,36 @@ function agregarAlmuerzoAlPedido() {
 }
 
 // ── Modal detalle ingreso ─────────────────────────────────────────────
-function verDetalleIngreso(id) {
-  const i = ST.ingresos.find(x => x.id === id);
-  if (!i) return;
-  mostrarDetallePedidoModal(i);
+// Detalle de un pedido completo (puede ser varias filas de "pedidos" con el
+// mismo grupo_pedido: varios almuerzos + extras). Si solo hay una, reusa el
+// modal normal; si hay varias, muestra cada ítem con su valor y el total.
+function verDetalleGrupoIngreso(ids) {
+  const idArr = Array.isArray(ids) ? ids : [ids];
+  const orders = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
+  if (!orders.length) return;
+  if (orders.length === 1) { mostrarDetallePedidoModal(orders[0]); return; }
+
+  const primero = orders[0];
+  const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
+  let html = `<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:var(--accent);margin-bottom:16px;">
+    ${primero.turno === 'cena' ? '🌙' : '☀️'} Pedido completo — ${orders.length} ítems
+  </div>`;
+  html += `<div class="modal-field">
+      <div class="modal-field-label">Ubicación</div>
+      <div class="modal-field-value">${primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Domicilio':primero.mesa?`Mesa ${primero.mesa}`:'—'}</div>
+    </div>`;
+  html += orders.map(o => `
+    <div class="modal-field">
+      <div class="modal-field-label">${LABELS[o.pedido]||o.pedido}${(o.cantidad||1) > 1 ? ' × ' + o.cantidad : ''}</div>
+      <div class="modal-field-value">${o.detalle ? o.detalle + ' — ' : ''}${fmt(o.monto_total||0)}</div>
+    </div>`).join('');
+  html += `<div class="modal-field">
+      <div class="modal-field-label">Total</div>
+      <div class="modal-field-value"><span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(total)}</span></div>
+    </div>`;
+
+  document.getElementById('detalle-modal-content').innerHTML = html;
+  document.getElementById('detalle-modal').style.display = 'flex';
 }
 
 // Usado desde la sección "Pedidos": busca tanto en pendientes como en pagados.
@@ -2467,39 +2582,43 @@ function cerrarModalDetalle(e) {
   }
 }
 
-// ── Eliminar ingreso pagado ────────────────────────────────────────────
-async function eliminarIngreso(id) {
-  if (!confirm('¿Eliminar este ingreso?')) return;
+// ── Eliminar ingreso(s) pagado(s) — un pedido completo puede ser varias filas ─
+async function eliminarGrupoIngreso(ids) {
+  const idArr = Array.isArray(ids) ? ids : [ids];
+  if (!confirm(idArr.length > 1 ? '¿Eliminar este pedido completo (todos sus ítems)?' : '¿Eliminar este ingreso?')) return;
   try {
-    await sbDelete('pedidos', `id=eq.${id}`);
-    ST.ingresos = ST.ingresos.filter(i => i.id !== id);
+    await sbDelete('pedidos', `id=in.(${idArr.join(',')})`);
+    ST.ingresos = ST.ingresos.filter(i => !idArr.includes(i.id));
     renderAll();
     showToast('Ingreso eliminado', 'info');
   } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
 }
 
 // ── Cambiar método de pago de un ingreso ya registrado como pagado ─────
-let metodoEditId = null;
+// (un pedido completo puede ser varias filas con el mismo grupo_pedido —
+// se cambian todas juntas, ya que comparten un único método de pago).
+let metodoEditGroupIds = null;
 
-function editarMetodoIngreso(id) {
-  metodoEditId = id;
+function editarMetodoIngreso(ids) {
+  metodoEditGroupIds = Array.isArray(ids) ? ids : [ids];
   renderIngresos();
 }
 
 function cancelarEdicionMetodo() {
-  metodoEditId = null;
+  metodoEditGroupIds = null;
   renderIngresos();
 }
 
-async function guardarMetodoIngreso(id) {
-  const sel = document.getElementById(`metodo-edit-${id}`);
+async function guardarMetodoIngreso(ids) {
+  const idArr = Array.isArray(ids) ? ids : [ids];
+  const groupKey = idArr.join('-');
+  const sel = document.getElementById(`metodo-edit-${groupKey}`);
   if (!sel) return;
   const metodo = sel.value;
   try {
-    await sbPatch('pedidos', `id=eq.${id}`, { metodo });
-    const i = ST.ingresos.find(x => x.id === id);
-    if (i) i.metodo = metodo;
-    metodoEditId = null;
+    await sbPatch('pedidos', `id=in.(${idArr.join(',')})`, { metodo });
+    idArr.forEach(id => { const i = ST.ingresos.find(x => x.id === id); if (i) i.metodo = metodo; });
+    metodoEditGroupIds = null;
     setSyncBadge('ok');
     renderAll();
     showToast('✅ Método de pago actualizado', 'ok');
@@ -2967,45 +3086,71 @@ function renderPendientes() {
 }
 
 // ── Render INGRESOS (solo pagados) ─────────────────────────────────────
+// Agrupa una lista de pedidos pagados por "pedido completo" (mismo grupo_pedido)
+// en vez de por fila de la tabla pedidos — así 2 asados + 1 botella de agua
+// del mismo pedido aparecen como UN solo ingreso, no como dos separados.
+// Se usa un Map para conservar el orden en el que ya vienen (más reciente primero).
+function agruparPorPedido(list) {
+  const map = new Map();
+  list.forEach(p => {
+    const key = p.grupo_pedido || `legacy-${p.id}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(p);
+  });
+  return [...map.values()];
+}
+
 function renderIngresos() {
-  let list = ST.ingresos.filter(i => {
+  // Esta pestaña ahora es "Pedidos" — siempre es el día actual, solo se filtra por turno.
+  const hoy = ST.ingresos.filter(i => i.fecha === today());
+  let list = hoy.filter(i => {
     if (fI === 'almuerzo') return i.turno === 'almuerzo';
     if (fI === 'cena')     return i.turno === 'cena';
-    return inP(i.fecha, fI);
+    return true;
   });
 
+  const grupos = agruparPorPedido(list);
   const tbody = document.getElementById('ingresos-body');
-  tbody.innerHTML = list.length
-    ? list.map(i => `<tr>
-        <td>${i.fecha}</td>
-        <td>${i.hora||'—'}</td>
-        <td><span class="badge ${i.turno==='cena'?'badge-purple':'badge-accent'}">${i.turno==='cena'?'🌙 CR':'☀️ Alm'}</span></td>
-        <td style="font-size:11px;color:var(--text3);">${i.es_fiar?'📒 Fiado':i.es_sin_mesa?'🧍 Sin mesa':i.es_domicilio?'🛵 Dom':i.mesa?`Mesa ${i.mesa}`:'—'}</td>
-        <td style="color:var(--text);font-size:12px;">${LABELS[i.pedido]||i.pedido}</td>
-        <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i.detalle||'—'}</td>
-        <td>${metodoEditId === i.id ? `
+  tbody.innerHTML = grupos.length
+    ? grupos.map(orders => {
+        const primero = orders[0];
+        const idsGrupo = orders.map(o => o.id);
+        const groupKey = idsGrupo.join('-');
+        const hora = orders.map(o => o.hora || '').filter(Boolean).sort()[0] || '—';
+        const resumenPedido = orders.map(o => `${(o.cantidad||1) > 1 ? (o.cantidad+'× ') : ''}${LABELS[o.pedido]||o.pedido}`).join(', ');
+        const resumenDetalle = orders.map(o => o.detalle).filter(Boolean).join(' · ') || '—';
+        const cantidadTotal = orders.reduce((a,o) => a + (o.cantidad||1), 0);
+        const montoTotal    = orders.reduce((a,o) => a + (o.monto_total||0), 0);
+        const editandoEsteGrupo = metodoEditGroupIds && metodoEditGroupIds.join('-') === groupKey;
+        return `<tr>
+        <td>${hora}</td>
+        <td><span class="badge ${primero.turno==='cena'?'badge-purple':'badge-accent'}">${primero.turno==='cena'?'🌙 CR':'☀️ Alm'}</span></td>
+        <td style="font-size:11px;color:var(--text3);">${primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
+        <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${resumenPedido}">${resumenPedido}</td>
+        <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resumenDetalle}</td>
+        <td>${editandoEsteGrupo ? `
           <div style="display:flex;gap:4px;align-items:center;">
-            <select id="metodo-edit-${i.id}" style="padding:4px 6px;width:auto;">
-              <option value="efectivo"${i.metodo==='efectivo'?' selected':''}>Efectivo</option>
-              <option value="transferencia"${i.metodo==='transferencia'?' selected':''}>Transferencia</option>
+            <select id="metodo-edit-${groupKey}" style="padding:4px 6px;width:auto;">
+              <option value="efectivo"${primero.metodo==='efectivo'?' selected':''}>Efectivo</option>
+              <option value="transferencia"${primero.metodo==='transferencia'?' selected':''}>Transferencia</option>
             </select>
-            <button class="btn btn-primary" style="padding:4px 8px;font-size:11px;" onclick="guardarMetodoIngreso(${i.id})">✓</button>
+            <button class="btn btn-primary" style="padding:4px 8px;font-size:11px;" onclick="guardarMetodoIngreso([${idsGrupo.join(',')}])">✓</button>
             <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="cancelarEdicionMetodo()">✕</button>
           </div>`
-          : `<span class="badge ${metC(i.metodo)}" style="cursor:pointer;" onclick="editarMetodoIngreso(${i.id})" title="Clic para cambiar el método de pago">${i.metodo} ✏</span>`
+          : `<span class="badge ${metC(primero.metodo)}" style="cursor:pointer;" onclick="editarMetodoIngreso([${idsGrupo.join(',')}])" title="Clic para cambiar el método de pago">${primero.metodo} ✏</span>`
         }</td>
-        <td>${i.cantidad||1}</td>
-        <td class="amount-pos">${fmt(i.monto_total||0)}</td>
+        <td>${cantidadTotal}</td>
+        <td class="amount-pos">${fmt(montoTotal)}</td>
         <td style="display:flex;gap:4px;">
-          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetalleIngreso(${i.id})">👁</button>
-          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="revertirPago(${i.id})" title="Revertir a pendiente">↩</button>
-          <button class="btn btn-danger" onclick="eliminarIngreso(${i.id})">✕</button>
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetalleGrupoIngreso([${idsGrupo.join(',')}])">👁</button>
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="revertirPago([${idsGrupo.join(',')}])" title="Revertir a pendiente">↩</button>
+          <button class="btn btn-danger" onclick="eliminarGrupoIngreso([${idsGrupo.join(',')}])">✕</button>
         </td>
-      </tr>`).join('')
-    : `<tr><td colspan="10"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin registros pagados en este período</div></div></td></tr>`;
+      </tr>`;
+      }).join('')
+    : `<tr><td colspan="9"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin pedidos pagados hoy en este filtro</div></div></td></tr>`;
 
   // Resumen (solo pagados hoy)
-  const hoy = ST.ingresos.filter(i => i.fecha === today());
   const alm = hoy.filter(i => i.turno === 'almuerzo');
   const cr  = hoy.filter(i => i.turno === 'cena');
   const cnt = (arr, t) => arr.filter(i => i.pedido === t).reduce((a,b) => a + (b.cantidad||1), 0);
@@ -3039,11 +3184,9 @@ function renderIngresos() {
     crBody.innerHTML = html;
   }
 
-  // Suma la venta de desayuno del período (no está en pedidos, solo en la apertura del turno)
-  const sM = f => ST.ingresos.filter(i=>inP(i.fecha,f)).reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo(f);
-  document.getElementById('ing-hoy').textContent     = fmt(sM('hoy'));
-  document.getElementById('ing-semana').textContent  = fmt(sM('semana'));
-  document.getElementById('ing-mes').textContent     = fmt(sM('mes'));
+  // Suma la venta de desayuno de hoy (no está en pedidos, solo en la apertura del turno)
+  const totalHoy = hoy.reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy');
+  document.getElementById('ing-hoy').textContent  = fmt(totalHoy);
   document.getElementById('ing-ef').textContent    = fmt(hoy.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy'));
   document.getElementById('ing-trans').textContent = fmt(hoy.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0));
 
@@ -3703,107 +3846,19 @@ async function guardarEdicionPedido() {
   }
 }
 
-// ── Sección PEDIDOS (seguimiento de cocina del turno actual) ───────────
 // Completo/Asado son los tipos que estructuralmente llevan sopa — se define
 // por el TIPO de pedido, no por si el cajero alcanzó a escribir cuál sopa era
 // (ese campo es opcional y puede quedar vacío sin que el pedido deje de llevar sopa).
+// Se sigue usando en el modal de detalle del pedido (campo "Entrega en cocina").
 const TIPOS_CON_SOPA_Y_SECO = ['completo', 'asado130', 'asado200'];
 
 // Domicilio o para llevar → el pedido sale completo de una sola vez, así tenga
 // sopa: no tiene sentido distinguir "sopa entregada" de "seco entregado" ahí,
-// solo importa si ya salió o no (check "Entregado/Recogido"). Los pedidos en
-// mesa/sin mesa con sopa sí necesitan las 2 marcas porque la sopa llega
-// primero y el seco después.
+// solo importa si ya salió o no. Los pedidos en mesa/sin mesa con sopa sí
+// necesitan las 2 marcas porque la sopa llega primero y el seco después.
 function requiereEntregaDoble(p) {
   const esTipoConSopa = TIPOS_CON_SOPA_Y_SECO.includes(p.pedido);
   return esTipoConSopa && !p.es_domicilio && !p.para_llevar;
-}
-
-async function toggleEntrega(pedidoId, campo, valor) {
-  try {
-    await sbPatch('pedidos', `id=eq.${pedidoId}`, { [campo]: valor });
-    const p = ST.pendientes.find(x => x.id === pedidoId) || ST.ingresos.find(x => x.id === pedidoId);
-    if (p) p[campo] = valor;
-    setSyncBadge('ok');
-    renderPedidosTurno();
-  } catch (e) {
-    console.error(e);
-    showToast('⚠ No se pudo actualizar la entrega — ¿ya agregaste las columnas entrega_sopa/entrega_plato en Supabase?', 'warning');
-    renderPedidosTurno();
-  }
-}
-
-// Eliminar/cancelar un pedido desde la sección Pedidos (por si se registró algo
-// que no es, sin importar si ya está pagado o sigue pendiente).
-function eliminarPedidoTurno(id) {
-  const p = ST.pendientes.find(x => x.id === id) || ST.ingresos.find(x => x.id === id);
-  if (!p) return;
-  if (p.estado === 'pagado') eliminarIngreso(id);
-  else cancelarPendiente(id);
-}
-
-// ¿Ya se entregó por completo este pedido? (ambos checks si aplica, o el único check si no)
-function pedidoEntregadoCompleto(p) {
-  return requiereEntregaDoble(p) ? !!(p.entrega_sopa && p.entrega_plato) : !!p.entrega_plato;
-}
-
-function renderPedidosTurno() {
-  const labelEl = document.getElementById('pedidos-turno-label');
-  const tbody   = document.getElementById('pedidos-turno-body');
-  if (!labelEl || !tbody) return;
-
-  const turnoHoy = turnoManual;
-  labelEl.textContent = turnoHoy === 'almuerzo' ? '☀️ Almuerzo' : '🌙 Comidas Rápidas';
-
-  // Los que faltan por entregar quedan arriba (siempre a la vista); los ya
-  // entregados bajan al final. Dentro de cada grupo, orden por hora.
-  const lista = [...ST.pendientes, ...ST.ingresos]
-    .filter(p => p.fecha === today() && p.turno === turnoHoy)
-    .sort((a, b) => {
-      const ca = pedidoEntregadoCompleto(a), cb = pedidoEntregadoCompleto(b);
-      if (ca !== cb) return ca ? 1 : -1;
-      return (a.hora || '').localeCompare(b.hora || '');
-    });
-
-  if (!lista.length) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div class="empty-icon">🍽</div><div class="empty-text">Sin pedidos en este turno todavía</div></div></td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = lista.map(p => {
-    const ubic = p.es_fiar ? '📒 Fiado' : p.es_sin_mesa ? '🧍 Sin mesa' : p.es_domicilio ? '🛵 Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
-    const dosCheckbox = requiereEntregaDoble(p);
-    let entregaHtml;
-    if (dosCheckbox) {
-      entregaHtml = `
-        <label style="display:flex;align-items:center;gap:5px;margin-bottom:4px;cursor:pointer;white-space:nowrap;">
-          <input type="checkbox" ${p.entrega_sopa ? 'checked' : ''} onchange="toggleEntrega(${p.id},'entrega_sopa',this.checked)"> 🍲 Sopa
-        </label>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;">
-          <input type="checkbox" ${p.entrega_plato ? 'checked' : ''} onchange="toggleEntrega(${p.id},'entrega_plato',this.checked)"> 🍽 Seco
-        </label>`;
-    } else {
-      entregaHtml = `
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;">
-          <input type="checkbox" ${p.entrega_plato ? 'checked' : ''} onchange="toggleEntrega(${p.id},'entrega_plato',this.checked)"> ✅ ${(p.es_domicilio || p.para_llevar) ? 'Entregado/Recogido' : 'Entregado'}
-        </label>`;
-    }
-    const completo = pedidoEntregadoCompleto(p);
-    const detalleConNota = [p.detalle || '—', p.para_llevar ? '<span style="color:var(--accent);">· Para llevar</span>' : ''].filter(Boolean).join(' ');
-    return `<tr style="${completo ? 'opacity:0.5;' : ''}">
-      <td>${p.hora || '—'}</td>
-      <td style="font-size:11px;color:var(--text3);">${ubic}</td>
-      <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido] || p.pedido}</td>
-      <td style="color:var(--text3);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detalleConNota}</td>
-      <td>${p.cantidad || 1}</td>
-      <td><span class="badge ${p.estado === 'pagado' ? 'badge-green' : 'badge-orange'}">${p.estado === 'pagado' ? 'Pagado' : 'Pendiente'}</span></td>
-      <td>${entregaHtml}</td>
-      <td style="display:flex;gap:4px;white-space:nowrap;">
-        <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
-        <button class="btn btn-danger" onclick="eliminarPedidoTurno(${p.id})" title="Eliminar este pedido">✕</button>
-      </td>
-    </tr>`;
-  }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -3845,26 +3900,46 @@ function setFE(f, btn) {
   renderEgresos();
 }
 
+// Egresos "de verdad" (los que cargas tú directo aquí, ej: arriendo, servicios)
+// + los gastos categorizados que se registran día a día en Cierre (nómina,
+// proveedores, otros) — así el total del mes por categoría queda completo en
+// un solo lugar. Los de categoría "prestamo" quedan afuera a propósito: solo
+// restan de la caja del día, nunca cuentan como egreso del negocio.
+function egresosCombinados() {
+  const deEgresos = ST.egresos.map(e => ({
+    id: e.id, fecha: e.fecha, cat: e.cat, descripcion: e.descripcion, monto: e.monto, origen: 'egresos'
+  }));
+  const deCierre = ST.gastosDia
+    .filter(g => g.categoria && g.categoria !== 'prestamo')
+    .map(g => ({
+      id: g.id, fecha: g.fecha, cat: g.categoria, descripcion: g.nombre, monto: g.monto, origen: 'cierre', turno: g.turno
+    }));
+  return [...deEgresos, ...deCierre];
+}
+
 function renderEgresos() {
-  const list  = ST.egresos.filter(e => inP(e.fecha, fE));
+  const todos = egresosCombinados();
+  const list  = todos.filter(e => inP(e.fecha, fE)).sort((a,b) => b.fecha.localeCompare(a.fecha));
   const tbody = document.getElementById('egresos-body');
   tbody.innerHTML = list.length
     ? list.map(e => `<tr>
         <td>${e.fecha}</td>
         <td style="color:var(--text)">${e.descripcion||'—'}</td>
-        <td><span class="badge ${catC(e.cat)}">${e.cat}</span></td>
+        <td><span class="badge ${catC(e.cat)}">${CAT_LABELS[e.cat]||e.cat}</span></td>
+        <td style="font-size:11px;color:var(--text3);">${e.origen==='cierre' ? '🧾 Cierre' : '✍ Manual'}</td>
         <td class="amount-neg">${fmt(e.monto)}</td>
-        <td><button class="btn btn-danger" onclick="eliminarEgreso(${e.id})">✕</button></td>
+        <td><button class="btn btn-danger" onclick="${e.origen==='cierre' ? `eliminarGastoDia(${e.id})` : `eliminarEgreso(${e.id})`}">✕</button></td>
       </tr>`).join('')
-    : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin registros</div></div></td></tr>`;
+    : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin registros</div></div></td></tr>`;
 
-  const sE = f => ST.egresos.filter(e=>inP(e.fecha,f)).reduce((a,b)=>a+b.monto,0);
+  const sE = f => todos.filter(e=>inP(e.fecha,f)).reduce((a,b)=>a+b.monto,0);
   document.getElementById('egr-hoy').textContent    = fmt(sE('hoy'));
   document.getElementById('egr-semana').textContent = fmt(sE('semana'));
   document.getElementById('egr-mes').textContent    = fmt(sE('mes'));
-  document.getElementById('egr-ing').textContent    = fmt(ST.egresos.filter(e=>e.cat==='ingredientes').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('egr-nom').textContent    = fmt(ST.egresos.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('egr-arr').textContent    = fmt(ST.egresos.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0));
+  document.getElementById('egr-nom').textContent    = fmt(todos.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
+  document.getElementById('egr-prov').textContent   = fmt(todos.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
+  document.getElementById('egr-arr').textContent    = fmt(todos.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0));
+  document.getElementById('egr-otros').textContent  = fmt(todos.filter(e=>e.cat==='otro').reduce((a,b)=>a+b.monto,0));
 }
 
 // ── INVENTARIO ────────────────────────────────────────────────────────
@@ -3966,22 +4041,67 @@ function renderInventario() {
   document.getElementById('total-vendidas').textContent  = ch.reduce((a,b) => a+b.cantidad, 0);
 }
 
-// ── REPORTES ──────────────────────────────────────────────────────────
-function setFR(f, btn) {
-  fR = f;
-  document.querySelectorAll('#tab-reportes .filter-btn').forEach(b => b.classList.remove('active'));
+// ── TABLERO (antes Dashboard + Reportes fusionados) ─────────────────────
+function setFTablero(f, btn) {
+  fTablero = f;
+  document.querySelectorAll('#tab-dashboard .filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  renderReportes();
+  renderTablero();
 }
 
-function renderReportes() {
-  const ings = ST.ingresos.filter(i => inP(i.fecha, fR));
-  const egrs = ST.egresos.filter(e  => inP(e.fecha, fR));
-  const desayunoPeriodo = desayunoEnPeriodo(fR);
+function renderTablero() {
+  const ings = ST.ingresos.filter(i => inP(i.fecha, fTablero));
+  const egrs = egresosCombinados().filter(e => inP(e.fecha, fTablero));
+  const desayunoPeriodo = desayunoEnPeriodo(fTablero);
   const tI   = ings.reduce((a,b) => a + (b.monto_total||0), 0) + desayunoPeriodo;
   const tE   = egrs.reduce((a,b) => a + b.monto, 0);
   const ut   = tI - tE;
   const mg   = tI > 0 ? ((ut/tI)*100).toFixed(1) : 0;
+  const totalPedidos = ings.reduce((a,b) => a + (b.cantidad||1), 0);
+  const diasConVentas = [...new Set(ings.map(i=>i.fecha))].length || 1;
+
+  document.getElementById('kpi-ingresos').textContent = fmt(tI);
+  document.getElementById('kpi-egresos').textContent  = fmt(tE);
+  document.getElementById('kpi-utilidad').textContent = fmt(ut);
+  document.getElementById('kpi-utilidad').style.color = ut >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('kpi-margen').textContent   = `Margen: ${mg}%`;
+  document.getElementById('kpi-ticket').textContent   = fmt(totalPedidos > 0 ? tI / totalPedidos : 0);
+  document.getElementById('kpi-promedio').textContent = fmt(tI / diasConVentas);
+  document.getElementById('kpi-stock').textContent    = ST.inventario.filter(p=>p.stock<=p.minimo).length;
+
+  // Alertas
+  const al = [];
+  const pendTotal = ST.pendientes.reduce((a,b)=>a+(b.monto_total||0),0);
+  if (ST.pendientes.length > 0) al.push({t:'info', m:`⏳ ${ST.pendientes.length} pedido(s) pendiente(s) de cobro · ${fmt(pendTotal)} por recaudar`});
+  if (tE > tI && tI > 0) al.push({t:'warning', m:`⚠ Gastos mayores a ingresos en este período. Egresos: ${fmt(tE)}`});
+  if (mg < 20 && tI > 0) al.push({t:'info',    m:`💡 Margen del ${mg}%. Un restaurante saludable apunta a 25%+`});
+  const bs = ST.inventario.filter(p=>p.stock<=p.minimo).length;
+  if (bs > 0) al.push({t:'warning', m:`📦 ${bs} producto(s) con stock bajo en inventario`});
+  if (tI > 0 && ut > 0) al.push({t:'ok', m:`✅ ¡Rentable! Utilidad del período: ${fmt(ut)} (${mg}% margen)`});
+  document.getElementById('alertZone').innerHTML = al.map(a=>`<div class="alert ${a.t}">${a.m}</div>`).join('');
+
+  renderBarChart();
+
+  // Últimos ingresos pagados
+  const r5i = ST.ingresos.slice(0, 5);
+  document.getElementById('dash-ingresos-body').innerHTML = r5i.length
+    ? r5i.map(i=>`<tr>
+        <td>${i.hora||'—'}</td>
+        <td><span class="badge ${i.turno==='cena'?'badge-purple':'badge-accent'}">${i.turno==='cena'?'🌙':'☀️'}</span></td>
+        <td style="color:var(--text);font-size:12px;">${LABELS[i.pedido]||i.pedido}</td>
+        <td class="amount-pos">${fmt(i.monto_total||0)}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="4" style="color:var(--text3);text-align:center;padding:20px;">Sin registros pagados</td></tr>`;
+
+  // Últimos egresos (Egresos manuales + gastos categorizados de Cierre)
+  const r5e = egresosCombinados().sort((a,b) => b.fecha.localeCompare(a.fecha)).slice(0, 5);
+  document.getElementById('dash-egresos-body').innerHTML = r5e.length
+    ? r5e.map(e=>`<tr>
+        <td>${e.fecha}</td>
+        <td><span class="badge ${catC(e.cat)}">${CAT_LABELS[e.cat]||e.cat}</span></td>
+        <td class="amount-neg">${fmt(e.monto)}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="3" style="color:var(--text3);text-align:center;padding:20px;">Sin registros</td></tr>`;
 
   const alm  = ings.filter(i => i.turno === 'almuerzo');
   const cnt  = t  => alm.filter(i=>i.pedido===t).reduce((a,b)=>a+(b.cantidad||1),0);
@@ -3998,19 +4118,11 @@ function renderReportes() {
   document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(b.monto_total||0),0));
   document.getElementById('rp-ting').textContent  = fmt(tI);
 
-  document.getElementById('rp-ingr').textContent  = fmt(egrs.filter(e=>e.cat==='ingredientes').reduce((a,b)=>a+b.monto,0));
   document.getElementById('rp-nom').textContent   = fmt(egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
+  document.getElementById('rp-prov').textContent  = fmt(egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
   document.getElementById('rp-arr').textContent   = fmt(egrs.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0));
-  document.getElementById('rp-otros').textContent = fmt(egrs.filter(e=>['proveedor','otro'].includes(e.cat)).reduce((a,b)=>a+b.monto,0));
+  document.getElementById('rp-otros').textContent = fmt(egrs.filter(e=>e.cat==='otro').reduce((a,b)=>a+b.monto,0));
   document.getElementById('rp-tegr').textContent  = fmt(tE);
-
-  document.getElementById('rp-util').textContent   = fmt(ut);
-  document.getElementById('rp-util').style.color   = ut >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('rp-margen').textContent = mg + '%';
-  document.getElementById('rp-margen').style.color = mg >= 25 ? 'var(--green)' : mg >= 15 ? 'var(--accent)' : 'var(--red)';
-  const fu = [...new Set(ings.map(i=>i.fecha))].length || 1;
-  document.getElementById('rp-prom').textContent   = fmt(tI / fu);
-  document.getElementById('rp-ped').textContent    = ings.reduce((a,b)=>a+(b.cantidad||1), 0);
 
   // Top por campo
   function topCat(campo, max) {
@@ -4084,8 +4196,8 @@ function renderReportes() {
     else if (mg>=25) drivers.push({tp:'positive',ti:'🟢 Margen saludable',bo:`Con ${mg}% de margen el negocio está en buena forma.`});
     else             drivers.push({tp:'neutral', ti:'🟡 Margen en zona media',bo:`${mg}% de margen. Un ajuste de precio del 5–10% puede mejorar la situación.`});
 
-    const ingIngr = egrs.filter(e=>e.cat==='ingredientes').reduce((a,b)=>a+b.monto,0);
-    if (ingIngr/tI > 0.35) drivers.push({tp:'negative',ti:'🍗 Costo de ingredientes alto',bo:'Ingredientes >35% de ingresos. Negocia con proveedores o revisa porciones.'});
+    const gastoProv = egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0);
+    if (gastoProv/tI > 0.35) drivers.push({tp:'negative',ti:'🍗 Costo de proveedores alto',bo:'Proveedores >35% de ingresos. Negocia precios o revisa porciones.'});
 
     const crT = ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(b.monto_total||0),0);
     if (tI > 0 && crT/tI < 0.2 && crT > 0) drivers.push({tp:'neutral',ti:'🌙 Potencial en comidas rápidas',bo:`Turno nocturno solo representa el ${((crT/tI)*100).toFixed(0)}% de los ingresos.`});
@@ -4097,6 +4209,87 @@ function renderReportes() {
   document.getElementById('drivers-zone').innerHTML = drivers.map(d =>
     `<div class="driver-card ${d.tp}"><div class="driver-title">${d.ti}</div><div class="driver-body">${d.bo}</div></div>`
   ).join('');
+}
+
+// ── INGRESOS (financiero — cierres guardados + ingresos adicionales) ───
+function setFIngFin(f, btn) {
+  fIngFin = f;
+  document.querySelectorAll('#tab-ingfin .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderIngresosFinanciero();
+}
+
+async function agregarIngresoExtra() {
+  const fecha = document.getElementById('ingext-fecha').value;
+  const desc  = document.getElementById('ingext-desc').value.trim();
+  const monto = valMiles('ingext-monto');
+  if (!fecha)  { showToast('⚠ Selecciona una fecha', 'warning'); return; }
+  if (!desc || !monto || monto <= 0) { showToast('⚠ Completa descripción y monto', 'warning'); return; }
+
+  try {
+    const [row] = await sbInsert('ingresos_extra', { fecha, descripcion: desc, monto });
+    ST.ingresosExtra.unshift(row);
+    setSyncBadge('ok');
+    document.getElementById('ingext-desc').value  = '';
+    document.getElementById('ingext-monto').value = '';
+    renderIngresosFinanciero();
+    showToast('✅ Ingreso adicional registrado', 'ok');
+  } catch(e) { showToast('⚠ Error al registrar ingreso', 'warning'); }
+}
+
+async function eliminarIngresoExtra(id) {
+  if (!confirm('¿Eliminar este ingreso?')) return;
+  try {
+    await sbDelete('ingresos_extra', `id=eq.${id}`);
+    ST.ingresosExtra = ST.ingresosExtra.filter(i => i.id !== id);
+    renderIngresosFinanciero();
+  } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
+}
+
+function renderIngresosFinanciero() {
+  const cierres = ST.cierresDia.filter(c => inP(c.fecha, fIngFin));
+  const extras  = ST.ingresosExtra.filter(i => inP(i.fecha, fIngFin));
+
+  const totalCierres = cierres.reduce((a,c) => a + (c.efectivo||0) + (c.transferencia||0), 0);
+  const totalExtras  = extras.reduce((a,i) => a + (i.monto||0), 0);
+  const totalIngresos = totalCierres + totalExtras;
+
+  const egrs      = egresosCombinados().filter(e => inP(e.fecha, fIngFin));
+  const nomina     = egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0);
+  const operativos = egrs.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0);
+
+  document.getElementById('ingfin-total').textContent            = fmt(totalIngresos);
+  document.getElementById('ingfin-nomina').textContent           = fmt(nomina);
+  document.getElementById('ingfin-despues-nomina').textContent   = fmt(totalIngresos - nomina);
+  document.getElementById('ingfin-operativos').textContent       = fmt(operativos);
+  document.getElementById('ingfin-despues-operativos').textContent = fmt(totalIngresos - nomina - operativos);
+
+  const filas = [
+    ...cierres.map(c => ({
+      fecha: c.fecha,
+      origen: `🧾 Cierre ${c.turno==='cena'?'Comida rápida':'Almuerzo'}`,
+      detalle: c.ajuste_manual ? `Incluye ajuste: ${c.ajuste_manual>0?'+':''}${fmt(c.ajuste_manual)}` : '—',
+      efectivo: c.efectivo||0, transferencia: c.transferencia||0, monto: (c.efectivo||0)+(c.transferencia||0),
+      id: c.id, tipo: 'cierre'
+    })),
+    ...extras.map(i => ({
+      fecha: i.fecha, origen: '➕ Adicional', detalle: i.descripcion,
+      efectivo: null, transferencia: null, monto: i.monto||0, id: i.id, tipo: 'extra'
+    }))
+  ].sort((a,b) => b.fecha.localeCompare(a.fecha));
+
+  const tbody = document.getElementById('ingfin-body');
+  tbody.innerHTML = filas.length
+    ? filas.map(f => `<tr>
+        <td>${f.fecha}</td>
+        <td style="font-size:11px;color:var(--text3);">${f.origen}</td>
+        <td style="color:var(--text);font-size:12px;">${f.detalle}</td>
+        <td>${f.efectivo !== null ? fmt(f.efectivo) : '—'}</td>
+        <td>${f.transferencia !== null ? fmt(f.transferencia) : '—'}</td>
+        <td class="amount-pos">${fmt(f.monto)}</td>
+        <td>${f.tipo === 'extra' ? `<button class="btn btn-danger" onclick="eliminarIngresoExtra(${f.id})">✕</button>` : ''}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ingresos en este período</div></div></td></tr>`;
 }
 
 // ── DÍA A DÍA ────────────────────────────────────────────────────────
@@ -4261,14 +4454,25 @@ async function guardarCierre() {
 }
 
 async function agregarGastoDia() {
-  const fecha  = document.getElementById('dd-fecha').value;
-  const nombre = document.getElementById('dd-gasto-nombre').value.trim();
-  const monto  = valMiles('dd-gasto-monto');
+  const fecha    = document.getElementById('dd-fecha').value;
+  const nombre   = document.getElementById('dd-gasto-nombre').value.trim();
+  const monto    = valMiles('dd-gasto-monto');
+  const categoria = document.getElementById('dd-gasto-cat').value;
   if (!fecha)           { showToast('⚠ Selecciona una fecha', 'warning'); return; }
-  if (!nombre || !monto || monto <= 0) { showToast('⚠ Completa nombre y monto', 'warning'); return; }
+  if (!nombre || !monto || monto <= 0) { showToast('⚠ Completa detalle y monto', 'warning'); return; }
 
   try {
-    const [row] = await sbInsert('gastos_dia', { fecha, turno: ddTurno, nombre, monto });
+    let row;
+    try {
+      [row] = await sbInsert('gastos_dia', { fecha, turno: ddTurno, nombre, monto, categoria });
+    } catch (e) {
+      if ((e.message || '').includes('categoria')) {
+        // Columna "categoria" aún no existe en Supabase — se guarda sin categorizar
+        // (no aparecerá en Egresos hasta que se agregue la columna, ver script SQL)
+        [row] = await sbInsert('gastos_dia', { fecha, turno: ddTurno, nombre, monto });
+        showToast('⚠ El gasto se guardó sin categoría — falta agregar esa columna en Supabase (ver script SQL)', 'warning');
+      } else { throw e; }
+    }
     ST.gastosDia.push(row);
     setSyncBadge('ok');
     document.getElementById('dd-gasto-nombre').value = '';
@@ -4300,14 +4504,17 @@ function cancelarEdicionGastoDia() {
 async function guardarEdicionGastoDia(id) {
   const nombreEl = document.getElementById(`dd-edit-nombre-${id}`);
   const montoEl  = document.getElementById(`dd-edit-monto-${id}`);
+  const catEl    = document.getElementById(`dd-edit-cat-${id}`);
   if (!nombreEl || !montoEl) return;
   const nombre = nombreEl.value.trim();
   const monto  = parseMiles(montoEl.value);
-  if (!nombre || !monto || monto <= 0) { showToast('⚠ Completa nombre y monto', 'warning'); return; }
+  const categoria = catEl ? catEl.value : undefined;
+  if (!nombre || !monto || monto <= 0) { showToast('⚠ Completa detalle y monto', 'warning'); return; }
   try {
-    await sbPatch('gastos_dia', `id=eq.${id}`, { nombre, monto });
+    const patch = categoria !== undefined ? { nombre, monto, categoria } : { nombre, monto };
+    await sbPatch('gastos_dia', `id=eq.${id}`, patch);
     const g = ST.gastosDia.find(g => g.id === id);
-    if (g) { g.nombre = nombre; g.monto = monto; }
+    if (g) Object.assign(g, patch);
     ddEditId = null;
     setSyncBadge('ok');
     renderDiaADia();
@@ -4376,7 +4583,7 @@ function renderDiaADia() {
     document.getElementById('dd-efectivo').textContent      = '$0';
     document.getElementById('dd-transferencia').textContent = '$0';
     renderNotasCierre(fecha);
-    renderHistorialCierres();
+    aplicarGateAdmin('dd-historial', renderHistorialCierres);
     return;
   }
 
@@ -4403,6 +4610,12 @@ function renderDiaADia() {
         if (ddEditId === g.id) {
           return `<tr>
             <td><input type="text"   id="dd-edit-nombre-${g.id}" value="${g.nombre.replace(/"/g,'&quot;')}" style="width:100%;"></td>
+            <td><select id="dd-edit-cat-${g.id}" style="width:100%;">
+              <option value="nomina"${g.categoria==='nomina'?' selected':''}>Nómina</option>
+              <option value="proveedor"${g.categoria==='proveedor'?' selected':''}>Proveedores</option>
+              <option value="otro"${g.categoria==='otro'?' selected':''}>Otro</option>
+              <option value="prestamo"${g.categoria==='prestamo'?' selected':''}>Préstamo</option>
+            </select></td>
             <td><input type="text" inputmode="numeric" id="dd-edit-monto-${g.id}" value="${Number(g.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
             <td style="white-space:nowrap;display:flex;gap:4px;">
               <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="guardarEdicionGastoDia(${g.id})">✓ Guardar</button>
@@ -4412,6 +4625,7 @@ function renderDiaADia() {
         }
         return `<tr>
           <td style="color:var(--text)">${g.nombre}</td>
+          <td>${g.categoria ? `<span class="badge ${catC(g.categoria)}">${CAT_LABELS[g.categoria]||g.categoria}</span>` : '<span style="color:var(--text3);font-size:11px;">sin categoría</span>'}</td>
           <td class="amount-neg">${fmt(g.monto)}</td>
           <td style="white-space:nowrap;display:flex;gap:4px;">
             <button class="btn btn-edit"   onclick="editarGastoDia(${g.id})">✏</button>
@@ -4419,11 +4633,11 @@ function renderDiaADia() {
           </td>
         </tr>`;
       }).join('')
-    : `<tr><td colspan="3"><div class="empty"><div class="empty-icon">🧾</div><div class="empty-text">Sin gastos agregados</div></div></td></tr>`;
+    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">🧾</div><div class="empty-text">Sin gastos agregados</div></div></td></tr>`;
 
   recalcularResultadoCierre();
   renderNotasCierre(fecha);
-  renderHistorialCierres();
+  aplicarGateAdmin('dd-historial', renderHistorialCierres);
 }
 
 function irADiaADia(fecha, turno) {
@@ -4434,6 +4648,15 @@ function irADiaADia(fecha, turno) {
   document.querySelectorAll('#tab-diaadia .filter-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(turno==='almuerzo'?'dd-btn-almuerzo':'dd-btn-cena').classList.add('active');
   renderDiaADia();
+}
+
+// Botón "Corregir cierre" del banner de turno cerrado — reabre en modo edición
+// el cierre del turno/fecha que se está viendo ahora mismo (sin contraseña,
+// es parte del flujo normal del día). Para ver/editar OTROS días hace falta
+// la contraseña del historial completo, más abajo en esta misma pestaña.
+function corregirCierreActual() {
+  const fecha = document.getElementById('dd-fecha').value || today();
+  irADiaADia(fecha, ddTurno);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -4548,36 +4771,54 @@ function renderCaja() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// AUDITORÍA — acceso con contraseña, lista de ajustes manuales en cierres
+// ACCESO ADMINISTRADOR — una sola contraseña compartida por Tablero,
+// Ingresos, Egresos, Caja, Auditoría y el historial completo de Cierre.
+// Autenticarse en cualquiera de ellas desbloquea las demás por el resto
+// de la sesión (hasta recargar la página o pulsar "Cerrar sesión").
 // (Nota: es un candado simple del lado del cliente, pensado para que no
 // cualquiera entre a curiosear — no es seguridad real de servidor, ya que
 // el código de la página es visible para quien sepa cómo mirarlo.)
 // ══════════════════════════════════════════════════════════════════════
-const AUDITORIA_PASSWORD = 'Chocolate1625@2004';
-let auditoriaAutenticado = false;
+const ADMIN_PASSWORD = 'Chocolate1625@2004';
+let adminAutenticado = false;
 
-function intentarAccesoAuditoria() {
-  const input = document.getElementById('auditoria-password');
-  if (input.value === AUDITORIA_PASSWORD) {
-    auditoriaAutenticado = true;
-    document.getElementById('auditoria-login').style.display    = 'none';
-    document.getElementById('auditoria-contenido').style.display = 'block';
+function intentarAccesoAdmin(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  if (input.value === ADMIN_PASSWORD) {
+    adminAutenticado = true;
     input.value = '';
-    renderAuditoria();
+    showToast('🔓 Acceso concedido', 'ok');
+    renderAll();
   } else {
     showToast('⚠ Contraseña incorrecta', 'warning');
     input.value = '';
   }
 }
 
-function cerrarSesionAuditoria() {
-  auditoriaAutenticado = false;
-  document.getElementById('auditoria-login').style.display    = 'block';
-  document.getElementById('auditoria-contenido').style.display = 'none';
+function cerrarSesionAdmin() {
+  adminAutenticado = false;
+  renderAll();
+}
+
+// Muestra el login o el contenido de una sección protegida según el estado
+// de adminAutenticado, y renderiza su contenido si corresponde.
+// Espera divs con id "{prefix}-login" y "{prefix}-contenido".
+function aplicarGateAdmin(prefix, renderFn) {
+  const login = document.getElementById(prefix + '-login');
+  const cont  = document.getElementById(prefix + '-contenido');
+  if (!login || !cont) return;
+  if (adminAutenticado) {
+    login.style.display = 'none';
+    cont.style.display  = '';
+    if (renderFn) renderFn();
+  } else {
+    login.style.display = '';
+    cont.style.display  = 'none';
+  }
 }
 
 function renderAuditoria() {
-  if (!auditoriaAutenticado) return;
   const body = document.getElementById('auditoria-body');
   if (!body) return;
   const ajustes = ST.cierresDia.filter(c => c.ajuste_manual).sort((a,b) => b.fecha.localeCompare(a.fecha));
@@ -4594,64 +4835,6 @@ function renderAuditoria() {
 // ══════════════════════════════════════════════════════════════════════
 // BLOQUE 4 — Dashboard, tabs, renderAll y arranque
 // ══════════════════════════════════════════════════════════════════════
-
-// ── DASHBOARD ────────────────────────────────────────────────────────
-function renderDashboard() {
-  // Solo pedidos pagados para los totales, más venta de desayuno (no es un pedido)
-  const mI = ST.ingresos.filter(i=>inP(i.fecha,'mes')).reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('mes');
-  const mE = ST.egresos.filter(e=>inP(e.fecha,'mes')).reduce((a,b)=>a+b.monto,0);
-  const ut = mI - mE;
-  const mg = mI > 0 ? ((ut/mI)*100).toFixed(1) : 0;
-
-  document.getElementById('kpi-ingresos').textContent = fmt(mI);
-  document.getElementById('kpi-egresos').textContent  = fmt(mE);
-  document.getElementById('kpi-utilidad').textContent = fmt(ut);
-  document.getElementById('kpi-utilidad').style.color = ut >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('kpi-margen').textContent   = `Margen: ${mg}%`;
-
-  const hoy = ST.ingresos.filter(i => i.fecha === today());
-  document.getElementById('kpi-almuerzos').textContent = hoy.filter(i=>i.turno==='almuerzo').reduce((a,b)=>a+(b.cantidad||1),0);
-  document.getElementById('kpi-cenas').textContent     = hoy.filter(i=>i.turno==='cena').reduce((a,b)=>a+(b.cantidad||1),0);
-  document.getElementById('kpi-stock').textContent     = ST.inventario.filter(p=>p.stock<=p.minimo).length;
-
-  // Alertas
-  const al = [];
-  const pendTotal = ST.pendientes.reduce((a,b)=>a+(b.monto_total||0),0);
-  if (ST.pendientes.length > 0) al.push({t:'info', m:`⏳ ${ST.pendientes.length} pedido(s) pendiente(s) de cobro · ${fmt(pendTotal)} por recaudar`});
-  if (mE > mI && mI > 0) al.push({t:'warning', m:`⚠ Gastos mayores a ingresos este mes. Egresos: ${fmt(mE)}`});
-  if (mg < 20 && mI > 0) al.push({t:'info',    m:`💡 Margen del ${mg}%. Un restaurante saludable apunta a 25%+`});
-  const bs = ST.inventario.filter(p=>p.stock<=p.minimo).length;
-  if (bs > 0) al.push({t:'warning', m:`📦 ${bs} producto(s) con stock bajo en inventario`});
-  if (mI > 0 && ut > 0) al.push({t:'ok', m:`✅ ¡Rentable! Utilidad del mes: ${fmt(ut)} (${mg}% margen)`});
-  document.getElementById('alertZone').innerHTML = al.map(a=>`<div class="alert ${a.t}">${a.m}</div>`).join('');
-
-  // Últimos ingresos pagados
-  const r5i = ST.ingresos.slice(0, 5);
-  document.getElementById('dash-ingresos-body').innerHTML = r5i.length
-    ? r5i.map(i=>`<tr>
-        <td>${i.hora||'—'}</td>
-        <td><span class="badge ${i.turno==='cena'?'badge-purple':'badge-accent'}">${i.turno==='cena'?'🌙':'☀️'}</span></td>
-        <td style="color:var(--text);font-size:12px;">${LABELS[i.pedido]||i.pedido}</td>
-        <td class="amount-pos">${fmt(i.monto_total||0)}</td>
-      </tr>`).join('')
-    : `<tr><td colspan="4" style="color:var(--text3);text-align:center;padding:20px;">Sin registros pagados</td></tr>`;
-
-  // Últimos egresos
-  const r5e = ST.egresos.slice(0, 5);
-  document.getElementById('dash-egresos-body').innerHTML = r5e.length
-    ? r5e.map(e=>`<tr>
-        <td>${e.fecha}</td>
-        <td><span class="badge ${catC(e.cat)}">${e.cat}</span></td>
-        <td class="amount-neg">${fmt(e.monto)}</td>
-      </tr>`).join('')
-    : `<tr><td colspan="3" style="color:var(--text3);text-align:center;padding:20px;">Sin registros</td></tr>`;
-
-  // Estado del salón
-  renderSalonMap('dash-salon-grid', true);
-
-  // Gráfico de barras
-  renderBarChart();
-}
 
 function renderBarChart() {
   const days = [];
@@ -4688,16 +4871,17 @@ function showTab(id, el) {
 
 // ── RENDER ALL ────────────────────────────────────────────────────────
 function renderAll() {
-  renderDashboard();
+  // Operativas — sin contraseña
   renderIngresos();
   renderPendientes();
-  renderPedidosTurno();
-  renderEgresos();
-  renderInventario();
-  renderReportes();
   renderDiaADia();
-  renderCaja();
-  renderAuditoria();
+  renderInventario();
+  // Administrativas — todas detrás de la misma contraseña compartida
+  aplicarGateAdmin('tablero', renderTablero);
+  aplicarGateAdmin('ingfin',  renderIngresosFinanciero);
+  aplicarGateAdmin('egresos', renderEgresos);
+  aplicarGateAdmin('caja',    renderCaja);
+  aplicarGateAdmin('auditoria', renderAuditoria);
   renderPendientesNotasBadge();
 }
 
