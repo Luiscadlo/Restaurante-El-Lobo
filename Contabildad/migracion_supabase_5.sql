@@ -28,3 +28,11 @@ create table if not exists pedidos_eliminados (
 alter table pedidos_eliminados enable row level security;
 drop policy if exists "allow all pedidos_eliminados" on pedidos_eliminados;
 create policy "allow all pedidos_eliminados" on pedidos_eliminados for all using (true) with check (true);
+
+
+-- 2) Columna nueva en "aperturas_turno" -----------------------------------
+-- Antes toda la venta de desayuno se guardaba en "venta_desayuno" y se
+-- contaba 100% como efectivo. Esta columna separa cuánto de esa venta fue
+-- por transferencia, para que Cierre, Caja, Ingresos y Tablero repartan el
+-- dinero en la columna correcta.
+alter table aperturas_turno add column if not exists venta_desayuno_transferencia numeric default 0;

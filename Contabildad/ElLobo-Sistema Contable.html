@@ -1018,7 +1018,7 @@
         <div class="report-line"><span>Caja inicial del turno</span><strong id="dd-res-caja-inicial">$0</strong></div>
         <div class="report-line" id="dd-res-desayuno-row"><span>Venta desayuno</span><strong id="dd-res-desayuno">$0</strong></div>
         <div class="report-line"><span>Efectivo recibido (pedidos)</span><strong class="amount-pos" id="dd-res-efectivo">$0</strong></div>
-        <div class="report-line"><span>Transferencia recibida</span><strong class="amount-pos" id="dd-res-transferencia">$0</strong></div>
+        <div class="report-line"><span>Transferencia recibida (pedidos)</span><strong class="amount-pos" id="dd-res-transferencia">$0</strong></div>
         <div class="report-line"><span>Total gastos extra</span><strong class="amount-neg" id="dd-res-gastos">$0</strong></div>
         <div class="report-line" id="dd-res-ajuste-row" style="display:none;"><span>Ajuste</span><strong id="dd-res-ajuste">$0</strong></div>
 
@@ -1207,9 +1207,15 @@
       <input type="text" inputmode="numeric" id="apertura-caja-inicial" placeholder="0" oninput="formatMilesInput(this)">
     </div>
 
-    <div class="form-group mb" id="apertura-desayuno-wrap" style="display:none;">
-      <label>¿Cuánto se vendió en desayuno? ($)</label>
-      <input type="text" inputmode="numeric" id="apertura-venta-desayuno" placeholder="0" oninput="formatMilesInput(this)">
+    <div id="apertura-desayuno-wrap" style="display:none;">
+      <div class="form-group mb">
+        <label>Venta de desayuno — Efectivo ($)</label>
+        <input type="text" inputmode="numeric" id="apertura-venta-desayuno" placeholder="0" oninput="formatMilesInput(this)">
+      </div>
+      <div class="form-group mb">
+        <label>Venta de desayuno — Transferencia ($)</label>
+        <input type="text" inputmode="numeric" id="apertura-venta-desayuno-transferencia" placeholder="0" oninput="formatMilesInput(this)">
+      </div>
     </div>
 
     <button class="btn btn-success" id="apertura-btn-guardar" style="width:100%;" onclick="guardarAperturaTurno()">✅ Abrir turno</button>
@@ -1651,10 +1657,12 @@ function inP(fecha, p) {
 // Venta de desayuno del período: no es un "pedido" (no está en la tabla
 // pedidos), solo se registra al abrir el turno de almuerzo — hay que sumarla
 // aparte en cualquier total de ingresos para que cuadre con Cierre/Caja.
-function desayunoEnPeriodo(periodo) {
-  return ST.aperturasTurno
-    .filter(a => a.turno === 'almuerzo' && inP(a.fecha, periodo))
-    .reduce((a, b) => a + (b.venta_desayuno || 0), 0);
+// metodo: 'efectivo' | 'transferencia' | sin especificar = ambos sumados.
+function desayunoEnPeriodo(periodo, metodo) {
+  const aperturas = ST.aperturasTurno.filter(a => a.turno === 'almuerzo' && inP(a.fecha, periodo));
+  if (metodo === 'efectivo')      return aperturas.reduce((a, b) => a + (b.venta_desayuno || 0), 0);
+  if (metodo === 'transferencia') return aperturas.reduce((a, b) => a + (b.venta_desayuno_transferencia || 0), 0);
+  return aperturas.reduce((a, b) => a + (b.venta_desayuno || 0) + (b.venta_desayuno_transferencia || 0), 0);
 }
 
 function turnoFromHora(h) {
@@ -3225,11 +3233,12 @@ function renderIngresos() {
     crBody.innerHTML = html;
   }
 
-  // Suma la venta de desayuno de hoy (no está en pedidos, solo en la apertura del turno)
+  // Suma la venta de desayuno de hoy (no está en pedidos, solo en la apertura del turno) —
+  // separada en efectivo/transferencia para que cada total quede en la columna correcta.
   const totalHoy = hoy.reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy');
   document.getElementById('ing-hoy').textContent  = fmt(totalHoy);
-  document.getElementById('ing-ef').textContent    = fmt(hoy.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy'));
-  document.getElementById('ing-trans').textContent = fmt(hoy.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('ing-ef').textContent    = fmt(hoy.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy','efectivo'));
+  document.getElementById('ing-trans').textContent = fmt(hoy.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy','transferencia'));
 
   // Regenerar mesas del formulario
   renderMesasForm();
@@ -3280,8 +3289,10 @@ function pintarSeleccionTurnoApertura() {
   const yaCerrado = ST.cierresDia.some(c => c.fecha === today() && c.turno === aperturaTurnoSel);
   const cajaEl = document.getElementById('apertura-caja-inicial');
   const desEl  = document.getElementById('apertura-venta-desayuno');
+  const desTransEl = document.getElementById('apertura-venta-desayuno-transferencia');
   cajaEl.value = existente && existente.caja_inicial != null ? Number(existente.caja_inicial).toLocaleString('es-CO') : '';
   desEl.value  = existente && existente.venta_desayuno != null ? Number(existente.venta_desayuno).toLocaleString('es-CO') : '';
+  desTransEl.value = existente && existente.venta_desayuno_transferencia != null ? Number(existente.venta_desayuno_transferencia).toLocaleString('es-CO') : '';
 
   const tituloEl = document.getElementById('apertura-modal-titulo');
   const btnEl    = document.getElementById('apertura-btn-guardar');
@@ -3302,6 +3313,7 @@ async function guardarAperturaTurno() {
   const turno = aperturaTurnoSel;
   const cajaInicial = valMiles('apertura-caja-inicial');
   const ventaDesayuno = turno === 'almuerzo' ? valMiles('apertura-venta-desayuno') : 0;
+  const ventaDesayunoTransferencia = turno === 'almuerzo' ? valMiles('apertura-venta-desayuno-transferencia') : 0;
 
   if (!turno) { showToast('⚠ Selecciona el turno a abrir', 'warning'); return; }
   if (!document.getElementById('apertura-caja-inicial').value.trim()) { showToast('⚠ Ingresa la caja inicial', 'warning'); return; }
@@ -3316,21 +3328,39 @@ async function guardarAperturaTurno() {
       ST.cierresDia = ST.cierresDia.filter(c => !(c.fecha === fecha && c.turno === turno));
     }
 
+    const datosApertura = { caja_inicial: cajaInicial, venta_desayuno: ventaDesayuno, venta_desayuno_transferencia: ventaDesayunoTransferencia };
     const existente = ST.aperturasTurno.find(a => a.fecha === fecha && a.turno === turno);
-    if (existente) {
-      await sbPatch('aperturas_turno', `fecha=eq.${fecha}&turno=eq.${turno}`, { caja_inicial: cajaInicial, venta_desayuno: ventaDesayuno });
-      Object.assign(existente, { caja_inicial: cajaInicial, venta_desayuno: ventaDesayuno });
-      showToast(
-        cierrePrevio
-          ? `✅ Turno de ${turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} reabierto`
-          : `✅ Apertura de ${turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} corregida`,
-        'ok'
-      );
-    } else {
-      const [row] = await sbInsert('aperturas_turno', { fecha, turno, caja_inicial: cajaInicial, venta_desayuno: ventaDesayuno });
-      ST.aperturasTurno.unshift(row);
-      showToast(`✅ Turno de ${turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} abierto`, 'ok');
+    try {
+      if (existente) {
+        await sbPatch('aperturas_turno', `fecha=eq.${fecha}&turno=eq.${turno}`, datosApertura);
+        Object.assign(existente, datosApertura);
+      } else {
+        const [row] = await sbInsert('aperturas_turno', { fecha, turno, ...datosApertura });
+        ST.aperturasTurno.unshift(row);
+      }
+    } catch (e) {
+      if ((e.message || '').includes('venta_desayuno_transferencia')) {
+        // Columna aún no existe en Supabase — reintenta sin ella
+        const { venta_desayuno_transferencia, ...datosBase } = datosApertura;
+        if (existente) {
+          await sbPatch('aperturas_turno', `fecha=eq.${fecha}&turno=eq.${turno}`, datosBase);
+          Object.assign(existente, datosBase);
+        } else {
+          const [row] = await sbInsert('aperturas_turno', { fecha, turno, ...datosBase });
+          ST.aperturasTurno.unshift(row);
+        }
+        showToast('⚠ La transferencia de desayuno no se guardó — falta agregar esa columna en Supabase (ver script SQL)', 'warning');
+      } else { throw e; }
     }
+
+    showToast(
+      existente
+        ? (cierrePrevio
+            ? `✅ Turno de ${turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} reabierto`
+            : `✅ Apertura de ${turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} corregida`)
+        : `✅ Turno de ${turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas'} abierto`,
+      'ok'
+    );
     setSyncBadge('ok');
     // Si estaban viendo este mismo turno en Cierre, que vuelva a la vista en vivo
     if (document.getElementById('dd-fecha') && document.getElementById('dd-fecha').value === fecha && ddTurno === turno) {
@@ -4101,6 +4131,8 @@ function renderTablero() {
   const ings = ST.ingresos.filter(i => inP(i.fecha, fTablero));
   const egrs = egresosCombinados().filter(e => inP(e.fecha, fTablero));
   const desayunoPeriodo = desayunoEnPeriodo(fTablero);
+  const desayunoPeriodoEfectivo = desayunoEnPeriodo(fTablero, 'efectivo');
+  const desayunoPeriodoTransferencia = desayunoEnPeriodo(fTablero, 'transferencia');
   const tI   = ings.reduce((a,b) => a + (b.monto_total||0), 0) + desayunoPeriodo;
   const tE   = egrs.reduce((a,b) => a + b.monto, 0);
   const ut   = tI - tE;
@@ -4140,8 +4172,8 @@ function renderTablero() {
   document.getElementById('rp-parroz').textContent= cnt('porcion-arroz');
   document.getElementById('rp-tal').textContent   = fmt(alm.reduce((a,b)=>a+(b.monto_total||0),0));
 
-  document.getElementById('rp-ef').textContent    = fmt(ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoPeriodo);
-  document.getElementById('rp-trans').textContent = fmt(ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('rp-ef').textContent    = fmt(ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoPeriodoEfectivo);
+  document.getElementById('rp-trans').textContent = fmt(ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoPeriodoTransferencia);
   document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(b.monto_total||0),0));
   document.getElementById('rp-ting').textContent  = fmt(tI);
 
@@ -4375,13 +4407,23 @@ function resetearCamposAjusteCierre() {
 }
 
 // Suma fija de los pedidos ya registrados (no editable) para una fecha/turno.
+// La venta de desayuno se reparte entre efectivo y transferencia por separado
+// (cada una a su columna correspondiente), en vez de asumir que todo es efectivo.
 function calcularVentasFijas(fecha, turno) {
-  const apertura      = ST.aperturasTurno.find(a => a.fecha === fecha && a.turno === turno);
-  const ventaDesayuno = (turno === 'almuerzo' && apertura) ? (apertura.venta_desayuno || 0) : 0;
+  const apertura = ST.aperturasTurno.find(a => a.fecha === fecha && a.turno === turno);
+  const ventaDesayunoEfectivo      = (turno === 'almuerzo' && apertura) ? (apertura.venta_desayuno || 0) : 0;
+  const ventaDesayunoTransferencia = (turno === 'almuerzo' && apertura) ? (apertura.venta_desayuno_transferencia || 0) : 0;
+  const ventaDesayuno = ventaDesayunoEfectivo + ventaDesayunoTransferencia;
   const ings = ST.ingresos.filter(i => i.fecha === fecha && i.turno === turno);
-  const efectivoPedidos = ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0);
-  const transferencia   = ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0);
-  return { efectivo: efectivoPedidos + ventaDesayuno, transferencia, cajaInicial: apertura ? (apertura.caja_inicial||0) : 0, ventaDesayuno, tieneApertura: !!apertura };
+  const efectivoPedidos      = ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0);
+  const transferenciaPedidos = ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0);
+  return {
+    efectivo: efectivoPedidos + ventaDesayunoEfectivo,
+    transferencia: transferenciaPedidos + ventaDesayunoTransferencia,
+    cajaInicial: apertura ? (apertura.caja_inicial||0) : 0,
+    ventaDesayuno, ventaDesayunoEfectivo, ventaDesayunoTransferencia,
+    tieneApertura: !!apertura
+  };
 }
 
 // Gastos del turno separados en dos totales: "reales" (todo menos préstamos,
@@ -4401,7 +4443,7 @@ function calcularGastosTurno(fecha, turno) {
 // transferencia son siempre la suma fija de los pedidos; solo el Ajuste es editable.
 function recalcularResultadoCierre() {
   const fecha = document.getElementById('dd-fecha').value || today();
-  const { efectivo, transferencia, cajaInicial, ventaDesayuno, tieneApertura } = calcularVentasFijas(fecha, ddTurno);
+  const { efectivo, transferencia, cajaInicial, ventaDesayuno, ventaDesayunoEfectivo, ventaDesayunoTransferencia, tieneApertura } = calcularVentasFijas(fecha, ddTurno);
   const total = efectivo + transferencia;
 
   const { reales: gastos, conPrestamos: gastosConPrestamos } = calcularGastosTurno(fecha, ddTurno);
@@ -4415,8 +4457,8 @@ function recalcularResultadoCierre() {
     : `$0 <span style="color:var(--text3);font-weight:400;">(sin abrir turno)</span>`;
   document.getElementById('dd-res-desayuno-row').style.display = ddTurno === 'almuerzo' ? 'flex' : 'none';
   document.getElementById('dd-res-desayuno').textContent = fmt(ventaDesayuno);
-  document.getElementById('dd-res-efectivo').textContent = fmt(efectivo - ventaDesayuno);
-  document.getElementById('dd-res-transferencia').textContent = fmt(transferencia);
+  document.getElementById('dd-res-efectivo').textContent = fmt(efectivo - ventaDesayunoEfectivo);
+  document.getElementById('dd-res-transferencia').textContent = fmt(transferencia - ventaDesayunoTransferencia);
 
   document.getElementById('dd-total').textContent         = fmt(total);
   document.getElementById('dd-efectivo').textContent      = fmt(efectivo);
