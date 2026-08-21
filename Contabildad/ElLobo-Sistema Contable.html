@@ -445,6 +445,7 @@
         <div class="report-line"><span>Asado 200g</span><strong id="rp-a200">0</strong></div>
         <div class="report-line"><span>Porción sopa</span><strong id="rp-psopa">0</strong></div>
         <div class="report-line"><span>Porción arroz</span><strong id="rp-parroz">0</strong></div>
+        <div class="report-line"><span>Porción proteína</span><strong id="rp-pprot">0</strong></div>
         <div class="report-line"><span><strong>Total almuerzos</strong></span><strong class="amount-pos" id="rp-tal">$0</strong></div>
       </div>
       <div class="report-block">
@@ -696,6 +697,7 @@
           <div class="report-line"><span>Asado 200g</span><strong id="rc-a200">0</strong></div>
           <div class="report-line"><span>Porción sopa</span><strong id="rc-psopa">0</strong></div>
           <div class="report-line"><span>Porción arroz</span><strong id="rc-parroz">0</strong></div>
+          <div class="report-line"><span>Porción proteína</span><strong id="rc-pprot">0</strong></div>
           <div class="divider" style="margin:8px 0;"></div>
           <div class="report-line"><span><strong>Total almuerzos</strong></span><strong class="amount-pos" id="rc-total-alm">$0</strong></div>
         </div>
@@ -1480,12 +1482,13 @@ const LABELS = {
   completo:'Almuerzo Completo', seco:'Almuerzo Seco',
   asado130:'Asado 130g', asado200:'Asado 200g',
   'porcion-sopa':'Porción de Sopa', 'porcion-arroz':'Porción de Arroz',
+  'porcion-proteina':'Porción de Proteína',
   'sopa-y-arroz':'Sopa y Arroz',
   extra: 'Producto adicional',
   ...Object.fromEntries(PL.comidaRapida.map(p => [p.c, p.n]))
 };
 
-const PRECIOS = {completo:14000,seco:12000,asado130:17000,asado200:20000,'porcion-sopa':6000,'porcion-arroz':4000,'sopa-y-arroz':11000};
+const PRECIOS = {completo:14000,seco:12000,asado130:17000,asado200:20000,'porcion-sopa':6000,'porcion-arroz':4000,'porcion-proteina':8000,'sopa-y-arroz':11000};
 
 // Catálogo de productos extra con precio conocido — se irá ampliando.
 // Autocompleta descripción + valor unitario en el pop-up "Agregar producto";
@@ -2172,6 +2175,7 @@ function rebuildPedidoSelect() {
         <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
         <option value="porcion-sopa"  data-monto="6000">Porción de Sopa · $6.000</option>
         <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
+        <option value="porcion-proteina" data-monto="8000">Porción de Proteína · $8.000</option>
         <option value="sopa-y-arroz"  data-monto="11000">Sopa y Arroz · $11.000</option>
       </optgroup>`;
   } else {
@@ -2300,6 +2304,8 @@ function onPedidoChange() {
     document.getElementById('ing-sopa').disabled = false;
   } else if (val === 'porcion-arroz') {
     document.getElementById('ing-arroz').disabled = false;
+  } else if (val === 'porcion-proteina') {
+    document.getElementById('ing-proteina').disabled = false;
   } else if (val === 'sopa-y-arroz') {
     ['sopa','arroz'].forEach(f => document.getElementById('ing-'+f).disabled = false);
   } else {
@@ -3306,6 +3312,7 @@ function renderIngresos() {
   document.getElementById('rc-a200').textContent     = cnt(alm,'asado200');
   document.getElementById('rc-psopa').textContent    = cnt(alm,'porcion-sopa');
   document.getElementById('rc-parroz').textContent   = cnt(alm,'porcion-arroz');
+  document.getElementById('rc-pprot').textContent    = cnt(alm,'porcion-proteina');
   document.getElementById('rc-total-alm').textContent = fmt(alm.reduce((a,b)=>a+(b.monto_total||0),0));
 
   // CR breakdown por categoría
@@ -4065,6 +4072,7 @@ function rebuildEditarPedidoSelect(turno) {
         <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
         <option value="porcion-sopa"  data-monto="6000">Porción de Sopa · $6.000</option>
         <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
+        <option value="porcion-proteina" data-monto="8000">Porción de Proteína · $8.000</option>
         <option value="sopa-y-arroz"  data-monto="11000">Sopa y Arroz · $11.000</option>
       </optgroup>`;
   } else {
@@ -4450,6 +4458,7 @@ function renderTablero() {
   document.getElementById('rp-a200').textContent  = cnt('asado200');
   document.getElementById('rp-psopa').textContent = cnt('porcion-sopa');
   document.getElementById('rp-parroz').textContent= cnt('porcion-arroz');
+  document.getElementById('rp-pprot').textContent = cnt('porcion-proteina');
   document.getElementById('rp-tal').textContent   = fmt(alm.reduce((a,b)=>a+(b.monto_total||0),0));
 
   document.getElementById('rp-ef').textContent    = fmt(totalEfectivoCierres);
