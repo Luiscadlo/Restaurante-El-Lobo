@@ -555,7 +555,7 @@
         <!-- Para llevar (solo si hay mesa seleccionada) -->
         <div id="para-llevar-section" style="display:none;" class="para-llevar-row">
           <input type="checkbox" id="ing-para-llevar" onchange="onParaLlevarChange()">
-          <label for="ing-para-llevar" style="cursor:pointer;">¿Es para llevar? <strong style="color:var(--accent);">+$1.000</strong> <span style="color:var(--text3);font-size:11px;">(aplica solo en almuerzo)</span></label>
+          <label for="ing-para-llevar" style="cursor:pointer;">¿Es para llevar? <strong style="color:var(--accent);">+$1.000</strong></label>
         </div>
 
         <!-- Valor domicilio (solo si domicilio seleccionado) -->
@@ -1918,7 +1918,7 @@ function leerAlmuerzoActualDelFormulario() {
     : 0;
   const montoUnit = baseAlm + montoBebida;
   const chkPL = document.getElementById('ing-para-llevar');
-  const esPL  = puedeParaLlevar(selectedUbicacion) && chkPL && chkPL.checked && turnoManual === 'almuerzo';
+  const esPL  = puedeParaLlevar(selectedUbicacion) && chkPL && chkPL.checked;
   const monto_almuerzo = (montoUnit + (esPL ? 1000 : 0)) * cantidad;
   if (monto_almuerzo <= 0) return null;
 
@@ -2017,15 +2017,15 @@ function renderMesasForm() {
   }
 }
 
-// Muestra/oculta el checkbox "para llevar": solo aplica en almuerzo (nunca en
-// comidas rápidas) y con ubicación mesa/sin-mesa (domicilio y fiado nunca lo
-// muestran). Se llama tanto al cambiar de ubicación como al cambiar de turno.
+// Muestra/oculta el checkbox "para llevar": igual en almuerzo y en comidas
+// rápidas, solo depende de la ubicación (mesa/sin-mesa sí, domicilio/fiado
+// nunca lo muestran). Se llama tanto al cambiar de ubicación como al cambiar
+// de turno.
 function actualizarVisibilidadParaLlevar() {
   const paraLlevarSection = document.getElementById('para-llevar-section');
   const chkPL = document.getElementById('ing-para-llevar');
   if (!paraLlevarSection || !chkPL) return;
-  const ubicacionValida = selectedUbicacion === 'sinmesa' || (selectedUbicacion && selectedUbicacion.startsWith('mesa_'));
-  const mostrar = ubicacionValida && turnoManual === 'almuerzo';
+  const mostrar = selectedUbicacion === 'sinmesa' || (selectedUbicacion && selectedUbicacion.startsWith('mesa_'));
   paraLlevarSection.style.display = mostrar ? 'flex' : 'none';
   if (!mostrar) chkPL.checked = false;
 }
@@ -2339,19 +2339,17 @@ function calcularTotalPedido() {
   const cant     = parseInt(document.getElementById('ing-cantidad').value) || 1;
   const chkPL    = document.getElementById('ing-para-llevar');
   const paraLlevar = puedeParaLlevar(selectedUbicacion)
-                     && chkPL && chkPL.checked
-                     && turnoManual === 'almuerzo';
+                     && chkPL && chkPL.checked;
 
   const montoActual   = (montoUnit + (paraLlevar ? 1000 : 0)) * cant;
   const colaTotal     = almuerzosEnCola.reduce((a, it) => a + it.monto_almuerzo, 0);
   const montoAlmTotal = colaTotal + montoActual; // todos los almuerzos del pedido: en cola + el actual
 
-  // El envío (domicilio + empaque) se cobra una sola vez por pedido. El
-  // empaque de $1.000 ("porta para llevar") solo aplica en almuerzo — en
-  // comida rápida no se cobra aparte.
+  // El envío (domicilio + empaque) se cobra una sola vez por pedido — igual
+  // en almuerzo y en comidas rápidas.
   const hayAlgoParaEnviar = almuerzosEnCola.length > 0 || montoActual > 0 || extrasIngresoPendientes.length > 0;
   const cobrarEnvio = selectedUbicacion === 'domicilio' && hayAlgoParaEnviar;
-  const empaqueDomicilio = (cobrarEnvio && turnoManual === 'almuerzo') ? EMPAQUE_DOMICILIO : 0;
+  const empaqueDomicilio = cobrarEnvio ? EMPAQUE_DOMICILIO : 0;
   const domValRaw = cobrarEnvio ? valMiles('ing-domicilio-valor') : 0;
   const domVal = domValRaw + empaqueDomicilio; // valor del domicilio + empaque desechable
 
@@ -2479,14 +2477,13 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     // El envío (domicilio + empaque) se cobra una sola vez, en el primer ítem
     // que se inserte del pedido completo — sea un almuerzo o, si el pedido es
     // solo de extras (ej. alguien que solo lleva una botella), el primer extra.
-    // El empaque de $1.000 ("porta para llevar") solo aplica en almuerzo.
+    // Igual en almuerzo y en comidas rápidas.
     let domicilioPendienteDeCobrar = selectedUbicacion === 'domicilio';
-    const empaqueDomicilioTurno = turno === 'almuerzo' ? EMPAQUE_DOMICILIO : 0;
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const monto_domicilio = domicilioPendienteDeCobrar
-        ? (valMiles('ing-domicilio-valor') + empaqueDomicilioTurno)
+        ? (valMiles('ing-domicilio-valor') + EMPAQUE_DOMICILIO)
         : 0;
       if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
       const monto_total = item.monto_almuerzo + monto_domicilio;
@@ -2535,7 +2532,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         // Si el pedido es solo de extras (sin almuerzo), el domicilio se cobra
         // aquí, en el primero — la bandera ya se apagó arriba si hubo ítems.
         const montoDomicilioExtra = domicilioPendienteDeCobrar
-          ? (valMiles('ing-domicilio-valor') + empaqueDomicilioTurno)
+          ? (valMiles('ing-domicilio-valor') + EMPAQUE_DOMICILIO)
           : 0;
         if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
         const extraData = {
@@ -2690,7 +2687,7 @@ function mostrarDetallePedidoModal(i) {
     i.detalle           ? ['Detalle',        i.detalle]  : null,
     i.para_llevar       ? ['Para llevar',    '✓ Sí (+$1.000)'] : null,
     i.monto_almuerzo && i.es_domicilio ? ['Valor comida',    fmt(i.monto_almuerzo)] : null,
-    i.monto_domicilio && i.es_domicilio ? [`Valor domicilio${i.turno !== 'cena' ? ' (incl. $1.000 empaque)' : ''}`, fmt(i.monto_domicilio)] : null,
+    i.monto_domicilio && i.es_domicilio ? ['Valor domicilio (incl. $1.000 empaque)', fmt(i.monto_domicilio)] : null,
     ['Total', `<span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(i.monto_total || 0)}</span>`],
   ].filter(Boolean);
 
