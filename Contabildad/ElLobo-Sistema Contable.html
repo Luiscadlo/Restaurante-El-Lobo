@@ -1263,12 +1263,27 @@
         <label>Transferencia ($)</label>
         <input type="text" inputmode="numeric" id="cm-transferencia" placeholder="0" oninput="formatMilesInput(this)">
       </div>
-      <div class="form-group mb">
-        <label>Gastos ($)</label>
-        <input type="text" inputmode="numeric" id="cm-gastos" placeholder="0" oninput="formatMilesInput(this)">
-      </div>
+      <div class="divider"></div>
 
-      <button class="btn btn-success" style="width:100%;" onclick="guardarCierreManual()">✅ Guardar cierre manual</button>
+      <div class="form-group mb">
+        <label>Categoría del gasto</label>
+        <select id="cm-gasto-cat">
+          <option value="nomina">Nómina de empleados</option>
+          <option value="proveedor">Proveedores</option>
+          <option value="otro">Otro</option>
+          <option value="prestamo">Préstamos (no cuenta como egreso)</option>
+        </select>
+      </div>
+      <div class="form-row mb">
+        <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="cm-gasto-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
+        <div class="form-group"><label>Detalle <span style="color:var(--text3);font-weight:400;">(opcional)</span></label><input type="text" id="cm-gasto-nombre" placeholder="ej: Comida del día…"></div>
+      </div>
+      <button type="button" class="btn btn-outline" style="width:100%;margin-bottom:10px;" onclick="agregarGastoCierreManual()">+ Agregar gasto</button>
+      <div style="font-size:11px;color:var(--text3);margin:-4px 0 10px;">💡 Igual que en el cierre normal: "Préstamos" se resta de la caja del día, pero no cuenta como gasto ni afecta Egresos.</div>
+      <div id="cm-gastos-lista" style="margin-bottom:6px;"></div>
+      <div style="font-size:11px;color:var(--text2);text-align:right;margin-bottom:14px;">Total gastos (sin préstamos): <strong id="cm-gastos-total">$0</strong></div>
+
+      <button class="btn btn-success" style="width:100%;" id="cm-btn-guardar" onclick="guardarCierreManual()">✅ Guardar cierre manual</button>
     </div>
   </div>
 </div>
@@ -1964,6 +1979,7 @@ function quitarExtraIngreso(idx) {
   extrasIngresoPendientes.splice(idx, 1);
   renderExtrasIngresoLista();
   actualizarMontoDisplay();
+  validarRegistro();
 }
 
 function renderMesasForm() {
@@ -3355,6 +3371,10 @@ function cerrarModalTurnoClick(e) {
 // ── Cierre manual: respaldo por si el sistema no se pudo usar ese día y las
 // cuentas se llevaron aparte. Reutiliza la contraseña compartida de admin. ──
 let cierreManualTurno = 'almuerzo';
+// Gastos categorizados en cola, en memoria, hasta que se pulse "Guardar cierre
+// manual" — ahí se insertan como filas reales en gastos_dia (igual que
+// agregarGastoDia()), para que sumen correctamente en Egresos y el Tablero.
+let cierreManualGastos = [];
 
 function abrirModalCierreManual() {
   document.getElementById('modal-cierre-manual').style.display = 'flex';
@@ -3381,9 +3401,13 @@ function prepararFormCierreManual() {
   document.getElementById('cm-fecha').value = today();
   document.getElementById('cm-efectivo').value = '';
   document.getElementById('cm-transferencia').value = '';
-  document.getElementById('cm-gastos').value = '';
+  document.getElementById('cm-gasto-monto').value = '';
+  document.getElementById('cm-gasto-nombre').value = '';
+  document.getElementById('cm-gasto-cat').value = 'nomina';
   cierreManualTurno = 'almuerzo';
+  cierreManualGastos = [];
   pintarTurnoCierreManual();
+  renderGastosCierreManual();
 }
 
 function seleccionarTurnoCierreManual(t) {
@@ -3396,9 +3420,46 @@ function pintarTurnoCierreManual() {
   document.getElementById('cm-btn-cena').classList.toggle('active', cierreManualTurno === 'cena');
 }
 
+// Igual que agregarGastoDia(), pero se queda en cola local (cierreManualGastos)
+// hasta guardar el cierre completo — ahí sí se insertan como filas reales.
+function agregarGastoCierreManual() {
+  const categoria = document.getElementById('cm-gasto-cat').value;
+  const monto     = valMiles('cm-gasto-monto');
+  const nombre    = document.getElementById('cm-gasto-nombre').value.trim();
+  if (!monto || monto <= 0) { showToast('⚠ Ingresa el monto del gasto', 'warning'); return; }
+  cierreManualGastos.push({ categoria, monto, nombre });
+  document.getElementById('cm-gasto-monto').value = '';
+  document.getElementById('cm-gasto-nombre').value = '';
+  renderGastosCierreManual();
+}
+
+function quitarGastoCierreManual(idx) {
+  cierreManualGastos.splice(idx, 1);
+  renderGastosCierreManual();
+}
+
+function renderGastosCierreManual() {
+  const cont = document.getElementById('cm-gastos-lista');
+  cont.innerHTML = cierreManualGastos.length
+    ? cierreManualGastos.map((g, i) => `
+        <div class="report-line">
+          <span><span class="badge ${catC(g.categoria)}">${CAT_LABELS[g.categoria] || g.categoria}</span> ${g.nombre ? ' ' + g.nombre : ''}</span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <strong class="amount-neg">${fmt(g.monto)}</strong>
+            <button class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="quitarGastoCierreManual(${i})">✕</button>
+          </span>
+        </div>`).join('')
+    : '';
+  const total = cierreManualGastos.filter(g => g.categoria !== 'prestamo').reduce((a,b) => a + b.monto, 0);
+  document.getElementById('cm-gastos-total').textContent = fmt(total);
+}
+
 // Mismo shape que guardarCierre() (efectivo/transferencia/gastos/resultado),
 // pero con los valores escritos a mano en vez de calculados de los pedidos.
-// Se marca manual:true para distinguirlo en el historial.
+// Los gastos en cola se insertan como filas reales en gastos_dia (con su
+// categoría) para que sumen en Egresos y el Tablero igual que un gasto
+// cargado desde el cierre normal. Se marca manual:true para distinguirlo
+// en el historial.
 async function guardarCierreManual() {
   const fecha = document.getElementById('cm-fecha').value;
   const turno = cierreManualTurno;
@@ -3406,15 +3467,39 @@ async function guardarCierreManual() {
 
   const efectivo      = valMiles('cm-efectivo');
   const transferencia = valMiles('cm-transferencia');
-  const gastos         = valMiles('cm-gastos');
-  const resultado       = efectivo + transferencia - gastos;
+  const gastos = cierreManualGastos.filter(g => g.categoria !== 'prestamo').reduce((a,b) => a + b.monto, 0);
+  const resultado = efectivo + transferencia - gastos;
 
   const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
   if (existing && !confirm('Ya existe un cierre guardado para esa fecha/turno. ¿Sobrescribirlo con estos datos manuales?')) return;
 
   const datosGuardar = { efectivo, transferencia, gastos, resultado, manual: true };
+  const btnGuardar = document.getElementById('cm-btn-guardar');
 
   try {
+    if (btnGuardar) btnGuardar.disabled = true;
+
+    // 1) Insertar cada gasto de la cola como fila real en gastos_dia, igual
+    //    que agregarGastoDia(), para que Egresos/Tablero los sumen.
+    for (const g of cierreManualGastos) {
+      try {
+        let row;
+        try {
+          [row] = await sbInsert('gastos_dia', { fecha, turno, nombre: g.nombre, monto: g.monto, categoria: g.categoria });
+        } catch (e) {
+          if ((e.message || '').includes('categoria')) {
+            [row] = await sbInsert('gastos_dia', { fecha, turno, nombre: g.nombre, monto: g.monto });
+            showToast('⚠ Un gasto se guardó sin categoría — falta agregar esa columna en Supabase', 'warning');
+          } else { throw e; }
+        }
+        ST.gastosDia.push(row);
+      } catch (e) {
+        console.error(e);
+        showToast(`⚠ No se pudo guardar el gasto "${g.nombre || CAT_LABELS[g.categoria] || g.categoria}"`, 'warning');
+      }
+    }
+
+    // 2) Upsert del cierre en sí (mismo patrón que guardarCierre()).
     try {
       if (existing) {
         await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`, datosGuardar);
@@ -3446,6 +3531,8 @@ async function guardarCierreManual() {
   } catch (e) {
     console.error(e);
     showToast('⚠ Error al guardar cierre manual: ' + e.message, 'warning');
+  } finally {
+    if (btnGuardar) btnGuardar.disabled = false;
   }
 }
 
@@ -3879,6 +3966,7 @@ async function guardarProductoExtra() {
     renderExtrasIngresoLista();
     cerrarModalAgregarProducto();
     actualizarMontoDisplay();
+    validarRegistro();
     showToast(`✅ "${desc}" se agregará al registrar el pedido`, 'ok');
     return;
   }
