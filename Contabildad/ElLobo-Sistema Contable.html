@@ -2346,10 +2346,12 @@ function calcularTotalPedido() {
   const colaTotal     = almuerzosEnCola.reduce((a, it) => a + it.monto_almuerzo, 0);
   const montoAlmTotal = colaTotal + montoActual; // todos los almuerzos del pedido: en cola + el actual
 
-  // El envío (domicilio + empaque) se cobra una sola vez por pedido.
-  const hayAlgunAlmuerzo = almuerzosEnCola.length > 0 || montoActual > 0;
-  const cobrarEnvio = selectedUbicacion === 'domicilio' && hayAlgunAlmuerzo;
-  const empaqueDomicilio = cobrarEnvio ? EMPAQUE_DOMICILIO : 0;
+  // El envío (domicilio + empaque) se cobra una sola vez por pedido. El
+  // empaque de $1.000 ("porta para llevar") solo aplica en almuerzo — en
+  // comida rápida no se cobra aparte.
+  const hayAlgoParaEnviar = almuerzosEnCola.length > 0 || montoActual > 0 || extrasIngresoPendientes.length > 0;
+  const cobrarEnvio = selectedUbicacion === 'domicilio' && hayAlgoParaEnviar;
+  const empaqueDomicilio = (cobrarEnvio && turnoManual === 'almuerzo') ? EMPAQUE_DOMICILIO : 0;
   const domValRaw = cobrarEnvio ? valMiles('ing-domicilio-valor') : 0;
   const domVal = domValRaw + empaqueDomicilio; // valor del domicilio + empaque desechable
 
@@ -2375,7 +2377,7 @@ function actualizarMontoDisplay() {
       else if (montoBebida > 0) partes.push(`Este: comida ${fmt(baseAlm)} + bebida ${fmt(montoBebida)}`);
       else partes.push(`Este: ${fmt(montoActual)}${paraLlevar ? ' (+ para llevar)' : ''}`);
     }
-    if (selectedUbicacion === 'domicilio' && domVal > 0) partes.push(`Domicilio + empaque ${fmt(domVal)}`);
+    if (selectedUbicacion === 'domicilio' && domVal > 0) partes.push(`Domicilio${empaqueDomicilio > 0 ? ' + empaque' : ''} ${fmt(domVal)}`);
     if (extrasTotal > 0) partes.push(`Extras ${fmt(extrasTotal)}`);
     labelEl.textContent = partes.length ? partes.join(' + ') : 'Monto total del pedido';
   } else {
@@ -2477,12 +2479,14 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     // El envío (domicilio + empaque) se cobra una sola vez, en el primer ítem
     // que se inserte del pedido completo — sea un almuerzo o, si el pedido es
     // solo de extras (ej. alguien que solo lleva una botella), el primer extra.
+    // El empaque de $1.000 ("porta para llevar") solo aplica en almuerzo.
     let domicilioPendienteDeCobrar = selectedUbicacion === 'domicilio';
+    const empaqueDomicilioTurno = turno === 'almuerzo' ? EMPAQUE_DOMICILIO : 0;
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const monto_domicilio = domicilioPendienteDeCobrar
-        ? (valMiles('ing-domicilio-valor') + EMPAQUE_DOMICILIO)
+        ? (valMiles('ing-domicilio-valor') + empaqueDomicilioTurno)
         : 0;
       if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
       const monto_total = item.monto_almuerzo + monto_domicilio;
@@ -2531,7 +2535,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         // Si el pedido es solo de extras (sin almuerzo), el domicilio se cobra
         // aquí, en el primero — la bandera ya se apagó arriba si hubo ítems.
         const montoDomicilioExtra = domicilioPendienteDeCobrar
-          ? (valMiles('ing-domicilio-valor') + EMPAQUE_DOMICILIO)
+          ? (valMiles('ing-domicilio-valor') + empaqueDomicilioTurno)
           : 0;
         if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
         const extraData = {
@@ -2686,7 +2690,7 @@ function mostrarDetallePedidoModal(i) {
     i.detalle           ? ['Detalle',        i.detalle]  : null,
     i.para_llevar       ? ['Para llevar',    '✓ Sí (+$1.000)'] : null,
     i.monto_almuerzo && i.es_domicilio ? ['Valor comida',    fmt(i.monto_almuerzo)] : null,
-    i.monto_domicilio && i.es_domicilio ? ['Valor domicilio (incl. $1.000 empaque)', fmt(i.monto_domicilio)] : null,
+    i.monto_domicilio && i.es_domicilio ? [`Valor domicilio${i.turno !== 'cena' ? ' (incl. $1.000 empaque)' : ''}`, fmt(i.monto_domicilio)] : null,
     ['Total', `<span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(i.monto_total || 0)}</span>`],
   ].filter(Boolean);
 
@@ -4908,7 +4912,11 @@ function renderNotasCierre(fecha) {
 }
 
 function renderHistorialCierres() {
-  const histData = ST.cierresDia.filter(c => inP(c.fecha, fDD));
+  // Los cierres nuevos entran al arreglo con unshift() sin importar su fecha
+  // (esto pasa siempre que se guarda uno — incluido un cierre manual de un
+  // día pasado), así que hay que reordenar por fecha aquí para que la tabla
+  // quede en orden calendario y no en orden de creación.
+  const histData = ST.cierresDia.filter(c => inP(c.fecha, fDD)).sort((a,b) => b.fecha.localeCompare(a.fecha) || a.turno.localeCompare(b.turno));
   const histBody = document.getElementById('dd-historial-body');
   if (!histBody) return;
   histBody.innerHTML = histData.length
@@ -5136,7 +5144,7 @@ function renderCaja() {
     : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Sin cierres en este período</div></div></td></tr>`;
 
   // Movimientos de caja (gastos y aportes), filtrados por el mismo período
-  const movs = ST.movimientosCaja.filter(m => inP(m.fecha, fCaja));
+  const movs = ST.movimientosCaja.filter(m => inP(m.fecha, fCaja)).sort((a,b) => b.fecha.localeCompare(a.fecha));
   const movBody = document.getElementById('caja-movimientos-body');
   movBody.innerHTML = movs.length
     ? movs.map(m => `<tr>
