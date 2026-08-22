@@ -35,7 +35,12 @@
     .btn-label { display: none; }
   }
 
-  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 4px; overflow-x: auto; }
+  /* Barra de pestañas fija justo debajo del header, incluso al bajar en el
+     celular. --header-h la calcula el JS al cargar (el header mide 60px fijos
+     en escritorio, pero en móvil su alto cambia según si el contenido hace
+     wrap a una o dos filas) — el valor 60px de acá es solo el respaldo
+     mientras el JS todavía no corrió. */
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 4px; overflow-x: auto; position: sticky; top: var(--header-h, 60px); z-index: 90; }
   .tab { padding: 14px 18px; cursor: pointer; color: var(--text3); font-size: 12px; font-family: 'Syne', sans-serif; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid transparent; transition: all 0.2s; text-transform: uppercase; white-space: nowrap; }
   .tab:hover { color: var(--text2); }
   .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
@@ -381,6 +386,7 @@
   <div class="tab" onclick="showTab('pendientes',this)" id="tab-nav-pendientes">Pendientes <span id="pend-badge" style="display:none;background:var(--orange);color:#0f0e0c;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
   <div class="tab" onclick="showTab('diaadia',this)">Cierre</div>
   <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
+  <div class="tab" onclick="showTab('menu',this)">Menú</div>
   <!-- Administrativas — todas piden la misma contraseña -->
   <div class="tab" onclick="showTab('dashboard',this)">🔒 Tablero</div>
   <div class="tab" onclick="showTab('ingfin',this)">🔒 Ingresos</div>
@@ -889,6 +895,19 @@
       </div>
     </div>
     <div class="table-wrap"><table><thead><tr><th>Producto</th><th>Stock</th><th>Mínimo</th><th>Estado</th><th>Costo unit.</th><th>Valor total</th><th></th></tr></thead><tbody id="inventario-body"></tbody></table></div>
+  </div>
+</section>
+
+<!-- ===== MENÚ (generador de imagen del menú del día — app aparte, cargada en iframe
+     para no mezclar su HTML/CSS/JS con los de este sistema) ===== -->
+<section class="section" id="tab-menu">
+  <div class="panel" style="overflow:hidden;">
+    <div class="panel-header">
+      <div class="panel-title">🍽 Menú del día</div>
+      <a href="../Menu/Men%C3%BA%20diario-El%20Lobo.html" target="_blank" rel="noopener" class="btn btn-outline" style="font-size:11px;">↗ Abrir en pestaña aparte</a>
+    </div>
+    <iframe src="../Menu/Men%C3%BA%20diario-El%20Lobo.html" title="Generador de menú del día — El Lobo"
+      style="width:100%;height:85vh;min-height:600px;border:none;display:block;"></iframe>
   </div>
 </section>
 
@@ -1854,6 +1873,18 @@ function refrescarHoraPedido() {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     }) + ' · ' + hora;
 })();
+
+// La barra de pestañas (<nav>) queda fija justo debajo del header al hacer
+// scroll (ver CSS: nav { position:sticky; top: var(--header-h) }). El alto
+// del header es fijo en escritorio (60px) pero varía en celular según haga
+// wrap a una o dos filas — por eso se mide de verdad en vez de asumir un
+// valor, y se vuelve a medir si cambia el tamaño de pantalla u orientación.
+function ajustarAltoHeaderSticky() {
+  const header = document.querySelector('header');
+  if (header) document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
+}
+ajustarAltoHeaderSticky();
+window.addEventListener('resize', ajustarAltoHeaderSticky);
 
 ['ing-fecha','egr-fecha','venta-fecha','dd-fecha','caja-mov-fecha'].forEach(id => {
   const el = document.getElementById(id);
