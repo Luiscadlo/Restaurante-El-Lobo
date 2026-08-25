@@ -967,6 +967,52 @@
       </div>
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Origen</th><th>Detalle</th><th>Efectivo</th><th>Transferencia</th><th>Monto</th><th></th></tr></thead><tbody id="ingfin-body"></tbody></table></div>
     </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Historial de pedidos <span style="color:var(--text3);font-size:11px;">— detalle pedido por pedido, cualquier fecha</span></div>
+      </div>
+      <div class="panel-body" style="padding-bottom:0;">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:4px;">
+          <div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:600;margin-bottom:6px;">Período</div>
+            <div class="filter-bar" style="margin-bottom:0;" id="ingfin-ped-filtros-periodo">
+              <button class="filter-btn" onclick="setFPedidosHist('periodo','hoy',this)">Hoy</button>
+              <button class="filter-btn" onclick="setFPedidosHist('periodo','semana',this)">Semana</button>
+              <button class="filter-btn active" onclick="setFPedidosHist('periodo','mes',this)">Mes</button>
+              <button class="filter-btn" onclick="setFPedidosHist('periodo','todo',this)">Todo</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:600;margin-bottom:6px;">Turno</div>
+            <div class="filter-bar" style="margin-bottom:0;" id="ingfin-ped-filtros-turno">
+              <button class="filter-btn active" onclick="setFPedidosHist('turno','todos',this)">Todos</button>
+              <button class="filter-btn" onclick="setFPedidosHist('turno','almuerzo',this)">☀️ Almuerzo</button>
+              <button class="filter-btn" onclick="setFPedidosHist('turno','cena',this)">🌙 Comida rápida</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:600;margin-bottom:6px;">Método</div>
+            <div class="filter-bar" style="margin-bottom:0;" id="ingfin-ped-filtros-metodo">
+              <button class="filter-btn active" onclick="setFPedidosHist('metodo','todos',this)">Todos</button>
+              <button class="filter-btn" onclick="setFPedidosHist('metodo','efectivo',this)">Efectivo</button>
+              <button class="filter-btn" onclick="setFPedidosHist('metodo','transferencia',this)">Transferencia</button>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:600;margin-bottom:6px;">Origen</div>
+            <div class="filter-bar" style="margin-bottom:0;" id="ingfin-ped-filtros-origen">
+              <button class="filter-btn active" onclick="setFPedidosHist('origen','todos',this)">Todos</button>
+              <button class="filter-btn" onclick="setFPedidosHist('origen','fiado',this)">📒 Solo fiados</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Fecha</th><th>Hora</th><th>Turno</th><th>Ubicación</th><th>Pedido</th><th>Detalle</th><th>Método</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
+        <tbody id="ingfin-pedidos-body"></tbody></table>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -1331,6 +1377,7 @@
     <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Elige la mesa a la que se reubica este pedido.</div>
     <div class="mesa-grid" id="cambiar-mesa-grid"></div>
     <button class="btn-sinmesa" onclick="moverPedidoASinMesa()">🧍 Sin mesa</button>
+    <button class="btn-fiar" onclick="moverPedidoAFiado()">📒 Fiar</button>
   </div>
 </div>
 
@@ -1415,6 +1462,64 @@
     </div>
 
     <button class="btn btn-primary" style="width:100%;" onclick="guardarEdicionPedido()">💾 Guardar cambios</button>
+  </div>
+</div>
+
+<!-- Modal: Agregar una comida completa a un pedido ya existente en Pendientes
+     (mesa, domicilio, sin mesa o fiado) — mismo catálogo que el registro
+     normal, pero para sumarla a un pedido que ya está en curso. -->
+<div id="modal-agregar-comida" class="modal-overlay" style="display:none;" onclick="cerrarModalAgregarComidaClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModalAgregarComida()">✕</button>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:8px;">🍽 Agregar comida</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:16px;">Turno: <span id="agregar-comida-turno-label">—</span></div>
+
+    <div class="form-group mb">
+      <label>Tipo de pedido</label>
+      <select id="agregar-comida-tipo" onchange="onAgregarComidaTipoChange()"></select>
+    </div>
+
+    <div id="agregar-comida-campos-almuerzo" style="display:none;">
+      <div class="form-row-3">
+        <div class="form-group"><label>Sopa</label><input type="text" id="agregar-comida-sopa" placeholder="Sopa de hueso…"></div>
+        <div class="form-group"><label>Arroz</label><input type="text" id="agregar-comida-arroz" placeholder="Arroz blanco…"></div>
+        <div class="form-group"><label>Proteína</label><input type="text" id="agregar-comida-proteina" placeholder="Pollo guisado…"></div>
+      </div>
+      <div class="form-group mb"><label>Acompañamiento</label><input type="text" id="agregar-comida-acomp" placeholder="Patacones…"></div>
+    </div>
+
+    <div id="agregar-comida-campos-cena" style="display:none;">
+      <div class="form-group mb">
+        <label>Bebida <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+        <select id="agregar-comida-bebida" onchange="recalcularAgregarComidaMonto()"></select>
+      </div>
+      <div class="form-group mb" id="agregar-comida-precio-manual" style="display:none;">
+        <label>Precio ($)</label>
+        <input type="text" inputmode="numeric" id="agregar-comida-precio" oninput="formatMilesInput(this); recalcularAgregarComidaMonto()">
+      </div>
+    </div>
+
+    <div class="form-group mb">
+      <label>Cantidad</label>
+      <input type="number" id="agregar-comida-cantidad" value="1" min="1" oninput="recalcularAgregarComidaMonto()">
+    </div>
+
+    <div class="para-llevar-row" id="agregar-comida-para-llevar-wrap" style="display:none;">
+      <input type="checkbox" id="agregar-comida-para-llevar" onchange="recalcularAgregarComidaMonto()">
+      <label for="agregar-comida-para-llevar" style="cursor:pointer;">¿Es para llevar? <strong style="color:var(--accent);">+$1.000</strong></label>
+    </div>
+
+    <div class="form-group mb">
+      <label>Nota / detalle adicional <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+      <input type="text" id="agregar-comida-nota" placeholder="ej: sin cebolla…">
+    </div>
+
+    <div class="monto-display" style="margin-bottom:16px;">
+      <div class="monto-val" id="agregar-comida-monto-display">$0</div>
+      <div class="monto-label">Valor de esta comida</div>
+    </div>
+
+    <button class="btn btn-primary" style="width:100%;" onclick="guardarAgregarComida()">+ Agregar al pedido</button>
   </div>
 </div>
 </main>
@@ -1895,6 +2000,9 @@ document.getElementById('ing-hora').value = nowTime();
 
 // ── Filtros activos ───────────────────────────────────────────────────
 let fI = 'todos', fE = 'hoy', fInv = 'todos', fTablero = 'mes', fIngFin = 'semana';
+// Filtros del "Historial de pedidos" en Ingresos — a diferencia de Pedidos
+// (siempre hoy), este mira cualquier fecha, filtrable por turno/método/fiado.
+let fPedidosHist = { periodo: 'mes', turno: 'todos', metodo: 'todos', origen: 'todos' };
 let ddEditId = null;
 
 // ── Autocomplete índices ──────────────────────────────────────────────
@@ -2382,13 +2490,17 @@ function calcularTotalPedido() {
   const colaTotal     = almuerzosEnCola.reduce((a, it) => a + it.monto_almuerzo, 0);
   const montoAlmTotal = colaTotal + montoActual; // todos los almuerzos del pedido: en cola + el actual
 
-  // El envío (domicilio + empaque) se cobra una sola vez por pedido — igual
-  // en almuerzo y en comidas rápidas.
+  // El valor del domicilio (envío) se cobra una sola vez por pedido. El
+  // empaque desechable ($1.000) es distinto: se cobra POR CADA almuerzo del
+  // pedido (en cola + el actual) — dos completos a domicilio son 2 empaques.
+  // Solo aplica en el turno de almuerzo; comidas rápidas a domicilio ya no
+  // llevan cargo de empaque.
+  const cantidadAlmuerzosPedido = almuerzosEnCola.reduce((a, it) => a + (it.cantidad||1), 0) + (montoActual > 0 ? cant : 0);
   const hayAlgoParaEnviar = almuerzosEnCola.length > 0 || montoActual > 0 || extrasIngresoPendientes.length > 0;
   const cobrarEnvio = selectedUbicacion === 'domicilio' && hayAlgoParaEnviar;
-  const empaqueDomicilio = cobrarEnvio ? EMPAQUE_DOMICILIO : 0;
+  const empaqueDomicilio = (cobrarEnvio && turnoManual === 'almuerzo') ? EMPAQUE_DOMICILIO * cantidadAlmuerzosPedido : 0;
   const domValRaw = cobrarEnvio ? valMiles('ing-domicilio-valor') : 0;
-  const domVal = domValRaw + empaqueDomicilio; // valor del domicilio + empaque desechable
+  const domVal = domValRaw + empaqueDomicilio; // valor del domicilio (una vez) + empaque (por almuerzo)
 
   const extrasTotal = extrasIngresoPendientes.reduce((a, ex) => a + ex.valorUnitario * ex.cantidad, 0);
 
@@ -2511,18 +2623,20 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   const mesaYaTienePendientes = mesa_numero !== null && ST.pendientes.some(p => p.mesa === mesa_numero);
   try {
     const pedidosInsertados = [];
-    // El envío (domicilio + empaque) se cobra una sola vez, en el primer ítem
+    // El valor del domicilio (envío) se cobra una sola vez, en el primer ítem
     // que se inserte del pedido completo — sea un almuerzo o, si el pedido es
     // solo de extras (ej. alguien que solo lleva una botella), el primer extra.
-    // Igual en almuerzo y en comidas rápidas.
+    // El empaque desechable ($1.000) es distinto: se cobra POR CADA almuerzo
+    // del pedido (nunca en extras/bebidas), y solo en el turno de almuerzo —
+    // comidas rápidas a domicilio ya no llevan cargo de empaque.
     let domicilioPendienteDeCobrar = selectedUbicacion === 'domicilio';
+    const empaquePorAlmuerzo = (selectedUbicacion === 'domicilio' && turno === 'almuerzo') ? EMPAQUE_DOMICILIO : 0;
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
-      const monto_domicilio = domicilioPendienteDeCobrar
-        ? (valMiles('ing-domicilio-valor') + EMPAQUE_DOMICILIO)
-        : 0;
+      const envio = domicilioPendienteDeCobrar ? valMiles('ing-domicilio-valor') : 0;
       if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
+      const monto_domicilio = envio + empaquePorAlmuerzo;
       const monto_total = item.monto_almuerzo + monto_domicilio;
 
       const pedidoData = {
@@ -2566,10 +2680,12 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     // Insertar los productos extra en cola (si hay), con el mismo grupo_pedido
     if (extrasIngresoPendientes.length) {
       for (const ex of extrasIngresoPendientes) {
-        // Si el pedido es solo de extras (sin almuerzo), el domicilio se cobra
-        // aquí, en el primero — la bandera ya se apagó arriba si hubo ítems.
+        // Si el pedido es solo de extras (sin almuerzo), el valor del domicilio
+        // se cobra aquí, en el primero — la bandera ya se apagó arriba si hubo
+        // ítems. Los extras (bebidas, botella de agua, etc.) NUNCA llevan
+        // empaque desechable, sin importar el turno.
         const montoDomicilioExtra = domicilioPendienteDeCobrar
-          ? (valMiles('ing-domicilio-valor') + EMPAQUE_DOMICILIO)
+          ? valMiles('ing-domicilio-valor')
           : 0;
         if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
         const extraData = {
@@ -2724,7 +2840,7 @@ function mostrarDetallePedidoModal(i) {
     i.detalle           ? ['Detalle',        i.detalle]  : null,
     i.para_llevar       ? ['Para llevar',    '✓ Sí (+$1.000)'] : null,
     i.monto_almuerzo && i.es_domicilio ? ['Valor comida',    fmt(i.monto_almuerzo)] : null,
-    i.monto_domicilio && i.es_domicilio ? ['Valor domicilio (incl. $1.000 empaque)', fmt(i.monto_domicilio)] : null,
+    i.monto_domicilio && i.es_domicilio ? ['Valor domicilio (incluye envío y/o empaque de este plato)', fmt(i.monto_domicilio)] : null,
     ['Total', `<span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(i.monto_total || 0)}</span>`],
   ].filter(Boolean);
 
@@ -2936,38 +3052,40 @@ async function marcarSinMesaPagado(pedidoId) {
   }
 }
 
-// ── Marcar fiado como pagado ───────────────────────────────────────────
-async function marcarFiadoPagado(pedidoId) {
-  const metodoEl = document.getElementById(`metodo-fiar-${pedidoId}`);
+// ── Marcar TODO un fiado (grupo) como pagado ───────────────────────────
+// Un fiado puede traer varios platos/extras (mismo grupo_pedido) — se pagan
+// todos juntos. Al pagar, la fecha de cada ítem pasa a HOY (se guarda la
+// fecha original en fecha_original, por si se revierte el pago) — igual
+// que antes se hacía con un solo plato.
+async function marcarGrupoFiadoPagado(ids, key) {
+  const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = metodoEl ? metodoEl.value : 'efectivo';
   const fechaHoy = today();
 
   try {
-    const pedOriginal = ST.pendientes.find(p => p.id === pedidoId);
-    const fechaOriginal = pedOriginal ? pedOriginal.fecha : null;
-
-    let patchData = { estado: 'pagado', metodo, fecha: fechaHoy, fecha_original: fechaOriginal };
-    try {
-      await sbPatch('pedidos', `id=eq.${pedidoId}`, patchData);
-    } catch (e) {
-      if ((e.message || '').includes('fecha_original')) {
-        delete patchData.fecha_original;
-        await sbPatch('pedidos', `id=eq.${pedidoId}`, patchData);
-      } else { throw e; }
+    const pedidosOriginales = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
+    for (const p of pedidosOriginales) {
+      let patchData = { estado: 'pagado', metodo, fecha: fechaHoy, fecha_original: p.fecha };
+      try {
+        await sbPatch('pedidos', `id=eq.${p.id}`, patchData);
+      } catch (e) {
+        if ((e.message || '').includes('fecha_original')) {
+          delete patchData.fecha_original;
+          await sbPatch('pedidos', `id=eq.${p.id}`, patchData);
+        } else { throw e; }
+      }
+      Object.assign(p, patchData);
     }
 
-    let ped = null;
-    const idx = ST.pendientes.findIndex(p => p.id === pedidoId);
-    if (idx !== -1) {
-      [ped] = ST.pendientes.splice(idx, 1);
-      Object.assign(ped, patchData);
-      ST.ingresos.unshift(ped);
-    }
+    ST.ingresos   = [...pedidosOriginales, ...ST.ingresos];
+    ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
+
     setSyncBadge('ok');
     showToast('✅ Fiado marcado como pagado', 'ok',
-      ped ? { label: '↩ Deshacer', onClick: () => revertirPago(ped.id) } : null);
+      ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
     renderAll();
   } catch (e) {
+    console.error(e);
     showToast('⚠ Error al procesar el pago', 'warning');
   }
 }
@@ -3028,14 +3146,17 @@ function renderPendientes() {
   // Agrupar — dentro de una misma mesa puede haber más de un pedido distinto
   // (mesa compartida por dos grupos de personas): se agrupa por mesa + grupo_pedido,
   // no solo por mesa. Los pedidos viejos sin grupo_pedido (antes de este cambio)
-  // se agrupan juntos por mesa como venían funcionando.
+  // se agrupan juntos por mesa como venían funcionando. Los fiados se agrupan
+  // igual que los domicilios — un fiado puede traer varios platos.
   const mesaGruposMap = {}; // "mesa::grupo" -> { mesa, orders: [] }
   const domicilioGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — un domicilio puede traer varios almuerzos
-  const fiados     = [];
+  const fiadoGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — un fiado puede traer varios platos
   const sinMesaList = [];
   ST.pendientes.forEach(p => {
     if (p.es_fiar === true) {
-      fiados.push(p);
+      const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
+      if (!fiadoGruposMap[grupoKey]) fiadoGruposMap[grupoKey] = { orders: [] };
+      fiadoGruposMap[grupoKey].orders.push(p);
     } else if (p.es_sin_mesa === true) {
       sinMesaList.push(p);
     } else if (p.es_domicilio || !p.mesa) {
@@ -3056,7 +3177,7 @@ function renderPendientes() {
   const fiadosZone  = document.getElementById('pendientes-fiados-zone');
   const sinMesaZone = document.getElementById('pendientes-sinmesa-zone');
 
-  if (!Object.keys(mesaGruposMap).length && !Object.keys(domicilioGruposMap).length && !fiados.length && !sinMesaList.length) {
+  if (!Object.keys(mesaGruposMap).length && !Object.keys(domicilioGruposMap).length && !Object.keys(fiadoGruposMap).length && !sinMesaList.length) {
     mesasZone.innerHTML = `<div class="empty"><div class="empty-icon">🍽</div><div class="empty-text">No hay pedidos pendientes</div></div>`;
     domZone.innerHTML   = '';
     if (fiadosZone)  fiadosZone.innerHTML  = '';
@@ -3125,8 +3246,9 @@ function renderPendientes() {
         <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
           style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
         <button class="btn btn-primary" onclick="marcarGrupoMesaPagado([${idsGrupo.join(',')}],${mn},'${key}')">✅ Marcar todo como pagado</button>
-        <button class="btn btn-outline" onclick="abrirModalAgregarProducto(${mn},'${grupoPedidoVal}')">+ Agregar producto</button>
-        <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Mueve este pedido completo (no los demás de la mesa)">🔄 Cambiar de mesa</button>
+        <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${grupoPedidoVal}')">+ Agregar producto</button>
+        <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${grupoPedidoVal}')">🍽 Agregar comida</button>
+        <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Mueve este pedido completo a otra mesa, sin mesa o a fiado">🔄 Cambiar de mesa</button>
         <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],${mn})" title="Cancela TODO este pedido (todos sus platos)">✕</button>
         <span style="font-size:11px;color:var(--text3);">Total: ${fmt(total)}</span>
         <span id="vuelto-${key}" class="vuelto-box"></span>
@@ -3190,7 +3312,9 @@ function renderPendientes() {
             style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
           <button class="btn btn-primary" onclick="marcarGrupoDomicilioPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
           <span class="pending-dom-detail">🍽 ${fmt(montoAlmuerzoTotal)} + 🛵 ${fmt(montoDomicilioTotal)}</span>
-          <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa">🔄 Ubicar en mesa</button>
+          <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
+          <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
+          <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa, sin mesa o a fiado">🔄 Ubicar en mesa</button>
           <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancela TODO este pedido">✕ Cancelar</button>
           <span id="vuelto-${key}" class="vuelto-box"></span>
         </div>
@@ -3221,7 +3345,9 @@ function renderPendientes() {
             <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
               style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${p.monto_total||0})">
             <button class="btn btn-primary" onclick="marcarSinMesaPagado(${p.id})">✅ Marcar como pagado</button>
-            <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${p.id}])" title="Ya hay mesa libre: reubicar">🔄 Ubicar en mesa</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${p.id}],'${p.grupo_pedido||''}')">+ Agregar producto</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${p.id}],'${p.grupo_pedido||''}')">🍽 Agregar comida</button>
+            <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${p.id}])" title="Reubicar en mesa o a fiado">🔄 Ubicar en mesa</button>
             <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
             <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
             <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕ Cancelar</button>
@@ -3233,31 +3359,64 @@ function renderPendientes() {
     }
   }
 
-  // Fiados
+  // Fiados — agrupados por grupo_pedido, igual que domicilios: un fiado puede
+  // traer varios platos y se pagan/editan/cancelan todos juntos, con las
+  // mismas capacidades que un pedido pendiente normal.
+  const gruposFiadoOrdenados = Object.values(fiadoGruposMap);
+  gruposFiadoOrdenados.forEach(g => g.orders.sort((a,b) => (a.hora||'').localeCompare(b.hora||'')));
+  gruposFiadoOrdenados.sort((a, b) => (a.orders[0].hora||'').localeCompare(b.orders[0].hora||''));
+
   if (fiadosZone) {
-    if (fiados.length) {
+    if (gruposFiadoOrdenados.length) {
       fiadosZone.innerHTML = `
         <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--purple);">📒 Fiados pendientes</span></div>
-        ${fiados.map(p => { const key = `fiar-${p.id}`; const metodoInicial = p.metodo === 'transferencia' ? 'transferencia' : 'efectivo'; return `
+        ${gruposFiadoOrdenados.map(grupo => {
+          const orders = grupo.orders;
+          const key = `fiar-${orders[0].grupo_pedido || orders[0].id}`;
+          const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
+          const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
+          const idsGrupo = orders.map(o => o.id);
+          const primero = orders[0];
+          return `
         <div class="pending-group">
           <div class="pending-group-hdr">
             <div>
-              <div class="pending-group-title" style="color:var(--purple);">Fiado — ${p.fecha||'—'} ${p.hora||''}</div>
-              <div class="pending-group-sub">${LABELS[p.pedido]||p.pedido} · ${p.detalle||'—'}</div>
+              <div class="pending-group-title" style="color:var(--purple);">Fiado — ${primero.fecha||'—'} ${primero.hora||''}</div>
+              <div class="pending-group-sub">${orders.length} pedido(s)</div>
             </div>
-            <div class="pending-group-total">${fmt(p.monto_total||0)}</div>
+            <div class="pending-group-total">${fmt(total)}</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Hora</th><th>Tipo</th><th>Detalle</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
+              <tbody>${orders.map(p => `
+                <tr>
+                  <td>${p.hora||'—'}</td>
+                  <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
+                  <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.detalle||'—'}</td>
+                  <td>${p.cantidad||1}</td>
+                  <td class="amount-pos">${fmt(p.monto_total||0)}</td>
+                  <td style="display:flex;gap:4px;white-space:nowrap;">
+                    <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
+                    <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
+                    <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕</button>
+                  </td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
           </div>
           <div class="pending-pay-bar">
-            <select id="metodo-fiar-${p.id}" onchange="onMetodoPendienteChange('${key}')">
+            <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')">
               <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
               <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
             </select>
             <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
-              style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${p.monto_total||0})">
-            <button class="btn btn-primary" onclick="marcarFiadoPagado(${p.id})">✅ Marcar como pagado</button>
-            <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
-            <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
-            <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕ Cancelar</button>
+              style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+            <button class="btn btn-primary" onclick="marcarGrupoFiadoPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
+            <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Pasa este fiado a una mesa o sin mesa">🔄 Ubicar en mesa</button>
+            <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancela TODO este fiado">✕ Cancelar</button>
             <span id="vuelto-${key}" class="vuelto-box"></span>
           </div>
         </div>`; }).join('')}`;
@@ -3896,8 +4055,8 @@ async function moverPedidoAMesa(nuevaMesa) {
   if (mesaAnterior === nuevaMesa) { cerrarModalCambiarMesa(); return; }
 
   try {
-    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: nuevaMesa, es_sin_mesa: false, es_domicilio: false });
-    pedidosMover.forEach(p => { p.mesa = nuevaMesa; p.es_sin_mesa = false; p.es_domicilio = false; });
+    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: nuevaMesa, es_sin_mesa: false, es_domicilio: false, es_fiar: false });
+    pedidosMover.forEach(p => { p.mesa = nuevaMesa; p.es_sin_mesa = false; p.es_domicilio = false; p.es_fiar = false; });
 
     if (mesaAnterior) {
       const quedan = ST.pendientes.filter(x => x.mesa === mesaAnterior).length;
@@ -3929,8 +4088,8 @@ async function moverPedidoASinMesa() {
   if (!mesaAnterior && pedidosMover.every(p => p.es_sin_mesa)) { cerrarModalCambiarMesa(); return; }
 
   try {
-    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: null, es_sin_mesa: true, es_domicilio: false });
-    pedidosMover.forEach(p => { p.mesa = null; p.es_sin_mesa = true; p.es_domicilio = false; });
+    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: null, es_sin_mesa: true, es_domicilio: false, es_fiar: false });
+    pedidosMover.forEach(p => { p.mesa = null; p.es_sin_mesa = true; p.es_domicilio = false; p.es_fiar = false; });
 
     if (mesaAnterior) {
       const quedan = ST.pendientes.filter(x => x.mesa === mesaAnterior).length;
@@ -3951,29 +4110,84 @@ async function moverPedidoASinMesa() {
   }
 }
 
+// Pasa un pedido pendiente (mesa, sin mesa o domicilio) a Fiado — libera la
+// mesa si tenía una. Se usa desde el mismo modal de "Cambiar de mesa".
+async function moverPedidoAFiado() {
+  const ids = cambioMesaIds;
+  const pedidosMover = ids.map(id => ST.pendientes.find(x => x.id === id)).filter(Boolean);
+  if (!pedidosMover.length) { cerrarModalCambiarMesa(); return; }
+  if (pedidosMover.every(p => p.es_fiar)) { cerrarModalCambiarMesa(); return; }
+  const mesaAnterior = pedidosMover[0].mesa;
+
+  try {
+    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, mesa: null });
+    pedidosMover.forEach(p => { p.es_fiar = true; p.es_domicilio = false; p.es_sin_mesa = false; p.mesa = null; });
+
+    if (mesaAnterior) {
+      const quedan = ST.pendientes.filter(x => x.mesa === mesaAnterior).length;
+      if (quedan === 0) {
+        await sbPatch('mesas', `numero=eq.${mesaAnterior}`, { estado: 'libre' });
+        const m = ST.mesas.find(m => m.numero === mesaAnterior);
+        if (m) m.estado = 'libre';
+      }
+    }
+
+    setSyncBadge('ok');
+    showToast(`✅ ${ids.length > 1 ? 'Pedido completo pasado' : 'Pedido pasado'} a Fiado`, 'ok');
+    cerrarModalCambiarMesa();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al pasar a fiado', 'warning');
+  }
+}
+
 // ── Agregar producto extra: modal compartido entre Pendientes e Ingresos ─
-// Pendientes (mesa ya registrada) → se inserta de una vez en Supabase.
-// Ingresos (pedido que se está armando) → se guarda en una cola local y se
-// inserta junto con el almuerzo cuando se registre el pedido.
-let mesaAgregarProductoActual = null;
+// Pendientes (pedido ya registrado, sea mesa/domicilio/sin mesa/fiado) → se
+// inserta de una vez en Supabase, con la misma ubicación que el resto del
+// grupo. Ingresos (pedido que se está armando) → se guarda en una cola local
+// y se inserta junto con el almuerzo cuando se registre el pedido.
+let idsAgregarProductoActual = null; // ids de TODOS los ítems del pedido al que se agrega (cualquier ubicación)
 let grupoAgregarProductoActual = null; // grupo_pedido del pedido específico al que se agrega (si aplica)
 let extraProductoContexto = 'pendientes'; // 'pendientes' | 'ingresos'
 
-function abrirModalAgregarProducto(mesaNum, grupoPedido) {
+// Etiqueta corta de ubicación para un pedido — se reutiliza en varios modales.
+function etiquetaUbicacionPedido(p) {
+  return p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
+}
+
+// Si el grupo al que se agrega algo todavía no tiene grupo_pedido (pedido
+// viejo, de antes de que existiera esa columna), le asigna uno nuevo a TODOS
+// sus ítems actuales para que lo que se agregue ahora quede agrupado con
+// ellos de una vez, en vez de aparecer como una tarjeta aparte.
+async function asegurarGrupoPedido(ids, grupoPedidoActual) {
+  if (grupoPedidoActual) return grupoPedidoActual;
+  const nuevo = `g_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  try {
+    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { grupo_pedido: nuevo });
+    ids.forEach(id => { const p = ST.pendientes.find(x => x.id === id); if (p) p.grupo_pedido = nuevo; });
+    return nuevo;
+  } catch (e) {
+    return null; // columna no existe todavía en Supabase — sigue agrupando como legacy
+  }
+}
+
+function abrirModalAgregarProducto(idsGrupo, grupoPedido) {
   extraProductoContexto = 'pendientes';
-  mesaAgregarProductoActual = mesaNum;
+  idsAgregarProductoActual = Array.isArray(idsGrupo) ? idsGrupo : [idsGrupo];
   grupoAgregarProductoActual = grupoPedido || null;
   document.getElementById('extra-producto-catalogo').value = '';
   document.getElementById('extra-producto-desc').value = '';
   document.getElementById('extra-producto-valor').value = '';
   document.getElementById('extra-producto-cantidad').value = '1';
-  document.getElementById('extra-producto-mesa-label').textContent = `— Mesa ${mesaNum}`;
+  const ref = ST.pendientes.find(p => idsAgregarProductoActual.includes(p.id));
+  document.getElementById('extra-producto-mesa-label').textContent = ref ? `— ${etiquetaUbicacionPedido(ref)}` : '';
   document.getElementById('modal-agregar-producto').style.display = 'flex';
 }
 
 function abrirModalAgregarExtraIngreso() {
   extraProductoContexto = 'ingresos';
-  mesaAgregarProductoActual = null;
+  idsAgregarProductoActual = null;
   document.getElementById('extra-producto-catalogo').value = '';
   document.getElementById('extra-producto-desc').value = '';
   document.getElementById('extra-producto-valor').value = '';
@@ -3984,7 +4198,7 @@ function abrirModalAgregarExtraIngreso() {
 
 function cerrarModalAgregarProducto() {
   document.getElementById('modal-agregar-producto').style.display = 'none';
-  mesaAgregarProductoActual = null;
+  idsAgregarProductoActual = null;
   grupoAgregarProductoActual = null;
 }
 
@@ -4010,26 +4224,25 @@ async function guardarProductoExtra() {
     return;
   }
 
-  // Contexto Pendientes: mesa ya registrada → se inserta de inmediato,
-  // etiquetado con el mismo grupo_pedido para que quede en ESE pedido y no
-  // se mezcle con otro pedido distinto que esté sentado en la misma mesa.
-  const mesaNum = mesaAgregarProductoActual;
-  if (!mesaNum) return;
+  // Contexto Pendientes: el pedido ya existe (mesa, domicilio, sin mesa o
+  // fiado) → se inserta de inmediato, con la misma ubicación y etiquetado
+  // con el mismo grupo_pedido para que quede en ESE pedido y no se mezcle
+  // con otro pedido distinto que comparta mesa/ubicación.
+  const ids = idsAgregarProductoActual;
+  if (!ids || !ids.length) return;
+  const ref = ST.pendientes.find(p => ids.includes(p.id));
+  if (!ref) return;
   const valorTotal = valorUnitario * cantidad;
-
-  const grupoObjetivo = grupoAgregarProductoActual || 'legacy';
-  const existentesGrupo = ST.pendientes.filter(p => p.mesa === mesaNum && (p.grupo_pedido || 'legacy') === grupoObjetivo);
-  const turno = existentesGrupo.length ? existentesGrupo[0].turno : turnoManual;
-  const fecha = existentesGrupo.length ? existentesGrupo[0].fecha : today();
+  const grupoPedido = await asegurarGrupoPedido(ids, grupoAgregarProductoActual || ref.grupo_pedido);
 
   const pedidoData = {
-    fecha, hora: nowTime(), turno, pedido: 'extra',
+    fecha: ref.fecha, hora: nowTime(), turno: ref.turno, pedido: 'extra',
     sopa: '', arroz: '', proteina: '', acomp: '',
-    detalle: desc, metodo: 'efectivo', cantidad,
+    detalle: desc, metodo: ref.metodo || 'efectivo', cantidad,
     monto_unit: valorUnitario, monto_almuerzo: valorTotal, monto_domicilio: 0, monto_total: valorTotal,
-    estado: 'pendiente', es_domicilio: false, mesa: mesaNum, para_llevar: false,
-    es_fiar: false, es_sin_mesa: false, direccion: '',
-    grupo_pedido: grupoAgregarProductoActual || null
+    estado: 'pendiente', es_domicilio: !!ref.es_domicilio, mesa: ref.mesa, para_llevar: false,
+    es_fiar: !!ref.es_fiar, es_sin_mesa: !!ref.es_sin_mesa, direccion: ref.direccion || '',
+    grupo_pedido: grupoPedido
   };
 
   try {
@@ -4039,25 +4252,215 @@ async function guardarProductoExtra() {
     } catch (e) {
       const msg = e.message || '';
       if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido')) {
-        const { es_fiar, direccion, es_sin_mesa, grupo_pedido, ...pedidoBase } = pedidoData;
+        const { es_fiar, direccion, es_sin_mesa, grupo_pedido: gV, ...pedidoBase } = pedidoData;
         [newPedido] = await sbInsert('pedidos', pedidoBase);
-        newPedido.es_fiar = false; newPedido.direccion = ''; newPedido.es_sin_mesa = false; newPedido.grupo_pedido = grupo_pedido;
+        newPedido.es_fiar = es_fiar; newPedido.direccion = direccion; newPedido.es_sin_mesa = es_sin_mesa; newPedido.grupo_pedido = gV;
       } else { throw e; }
     }
     ST.pendientes.unshift(newPedido);
 
     // La mesa ya estaba ocupada normalmente, pero por si acaso (mesa "reabierta" con este producto)
-    await sbPatch('mesas', `numero=eq.${mesaNum}`, { estado: 'ocupada' });
-    const mesa = ST.mesas.find(m => m.numero === mesaNum);
-    if (mesa) mesa.estado = 'ocupada';
+    if (ref.mesa) {
+      await sbPatch('mesas', `numero=eq.${ref.mesa}`, { estado: 'ocupada' });
+      const mesa = ST.mesas.find(m => m.numero === ref.mesa);
+      if (mesa) mesa.estado = 'ocupada';
+    }
 
     setSyncBadge('ok');
-    showToast(`✅ "${desc}" agregado a Mesa ${mesaNum}`, 'ok');
+    showToast(`✅ "${desc}" agregado al pedido`, 'ok');
     cerrarModalAgregarProducto();
     renderAll();
   } catch (e) {
     console.error(e);
     showToast('⚠ Error al agregar el producto', 'warning');
+  }
+}
+
+// ── Agregar una comida completa a un pedido ya registrado en Pendientes ──
+let agregarComidaContexto = null;
+
+// Devuelve el HTML de <optgroup> de tipos de pedido para un turno — igual
+// catálogo que usa el registro normal y la edición de un pedido.
+function construirOpcionesTipoPedido(turno) {
+  if (turno === 'almuerzo') {
+    return `<optgroup label="☀️ ALMUERZOS">
+        <option value="completo"      data-monto="14000">Almuerzo Completo (con sopa) · $14.000</option>
+        <option value="seco"          data-monto="12000">Almuerzo Seco (sin sopa) · $12.000</option>
+        <option value="asado130"      data-monto="17000">Asado 130g · $17.000</option>
+        <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
+        <option value="porcion-sopa"  data-monto="6000">Porción de Sopa · $6.000</option>
+        <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
+        <option value="porcion-proteina" data-monto="8000">Porción de Proteína · $8.000</option>
+        <option value="sopa-y-arroz"  data-monto="11000">Sopa y Arroz · $11.000</option>
+      </optgroup>`;
+  }
+  const cats = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS','SANDWICH CUBANO','AREPAS','SUIZOS'];
+  return cats.map(cat => {
+    const items = PL.comidaRapida.filter(p => p.cat === cat);
+    const opts  = items.map(p => `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`).join('');
+    return `<optgroup label="🌙 ${cat}">${opts}</optgroup>`;
+  }).join('');
+}
+
+function abrirModalAgregarComida(idsGrupo, grupoPedido) {
+  const idArr = Array.isArray(idsGrupo) ? idsGrupo : [idsGrupo];
+  const ref = ST.pendientes.find(p => idArr.includes(p.id));
+  if (!ref) { showToast('⚠ No se encontró el pedido', 'warning'); return; }
+  agregarComidaContexto = {
+    idsGrupo: idArr, grupoPedido: grupoPedido || ref.grupo_pedido || null,
+    fecha: ref.fecha, turno: ref.turno, mesa: ref.mesa,
+    es_domicilio: !!ref.es_domicilio, es_fiar: !!ref.es_fiar, es_sin_mesa: !!ref.es_sin_mesa,
+    direccion: ref.direccion || '', metodo: ref.metodo || 'efectivo'
+  };
+
+  document.getElementById('agregar-comida-turno-label').textContent = ref.turno === 'cena' ? '🌙 Comidas rápidas' : '☀️ Almuerzo';
+  document.getElementById('agregar-comida-tipo').innerHTML = construirOpcionesTipoPedido(ref.turno);
+  if (ref.turno !== 'almuerzo') {
+    const bebidaSel = document.getElementById('agregar-comida-bebida');
+    const bebidas = PL.comidaRapida.filter(p => p.cat === 'BEBIDAS');
+    bebidaSel.innerHTML = `<option value="" data-monto="0">— Sin bebida —</option>` +
+      bebidas.map(p => `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`).join('');
+  }
+  document.getElementById('agregar-comida-cantidad').value = '1';
+  document.getElementById('agregar-comida-nota').value = '';
+
+  const puedePL = !!ref.mesa || ref.es_sin_mesa;
+  const wrapPL = document.getElementById('agregar-comida-para-llevar-wrap');
+  const chkPL  = document.getElementById('agregar-comida-para-llevar');
+  if (wrapPL) wrapPL.style.display = puedePL ? 'flex' : 'none';
+  if (chkPL)  chkPL.checked = false;
+
+  onAgregarComidaTipoChange();
+  document.getElementById('modal-agregar-comida').style.display = 'flex';
+}
+
+function cerrarModalAgregarComida() {
+  document.getElementById('modal-agregar-comida').style.display = 'none';
+  agregarComidaContexto = null;
+}
+
+function cerrarModalAgregarComidaClick(e) {
+  if (e.target.id === 'modal-agregar-comida') cerrarModalAgregarComida();
+}
+
+function onAgregarComidaTipoChange() {
+  const val = document.getElementById('agregar-comida-tipo').value;
+  const camposAlm = document.getElementById('agregar-comida-campos-almuerzo');
+  const camposCR  = document.getElementById('agregar-comida-campos-cena');
+  const crItem = PL.comidaRapida.find(p => p.c === val);
+  if (crItem) {
+    camposAlm.style.display = 'none';
+    camposCR.style.display  = 'block';
+    const manualDiv = document.getElementById('agregar-comida-precio-manual');
+    const esEditable = crItem.cat === 'ADICIONALES';
+    manualDiv.style.display = esEditable ? 'block' : 'none';
+    if (esEditable) document.getElementById('agregar-comida-precio').value = crItem.precio.toLocaleString('es-CO');
+  } else {
+    camposAlm.style.display = 'block';
+    camposCR.style.display  = 'none';
+  }
+  recalcularAgregarComidaMonto();
+}
+
+function recalcularAgregarComidaMonto() {
+  const val = document.getElementById('agregar-comida-tipo').value;
+  const cantidad = parseInt(document.getElementById('agregar-comida-cantidad').value) || 1;
+  const crItem = PL.comidaRapida.find(p => p.c === val);
+  let montoUnit = 0;
+  if (crItem) {
+    const esEditable = crItem.cat === 'ADICIONALES';
+    montoUnit = esEditable ? valMiles('agregar-comida-precio') : crItem.precio;
+    const bebidaSel = document.getElementById('agregar-comida-bebida');
+    const montoBebida = (bebidaSel && bebidaSel.value)
+      ? (parseFloat(bebidaSel.options[bebidaSel.selectedIndex]?.getAttribute('data-monto')) || 0)
+      : 0;
+    montoUnit += montoBebida;
+  } else {
+    montoUnit = PRECIOS[val] || 0;
+  }
+  const chkPL = document.getElementById('agregar-comida-para-llevar');
+  const paraLlevar = !!(chkPL && chkPL.checked);
+  const total = (montoUnit + (paraLlevar ? 1000 : 0)) * cantidad;
+  document.getElementById('agregar-comida-monto-display').textContent = fmt(total);
+}
+
+async function guardarAgregarComida() {
+  const ctx = agregarComidaContexto;
+  if (!ctx) return;
+  const val = document.getElementById('agregar-comida-tipo').value;
+  if (!val) { showToast('⚠ Selecciona el tipo de pedido', 'warning'); return; }
+  const cantidad = parseInt(document.getElementById('agregar-comida-cantidad').value) || 1;
+  const nota = document.getElementById('agregar-comida-nota').value.trim();
+  const crItem = PL.comidaRapida.find(x => x.c === val);
+  const chkPL = document.getElementById('agregar-comida-para-llevar');
+  const paraLlevar = !!(chkPL && chkPL.checked);
+
+  let sopa = '', arroz = '', proteina = '', acomp = '', detalleBase = '', montoUnit = 0;
+  if (crItem) {
+    const esEditable = crItem.cat === 'ADICIONALES';
+    montoUnit = esEditable ? valMiles('agregar-comida-precio') : crItem.precio;
+    const bebidaSel  = document.getElementById('agregar-comida-bebida');
+    const bebidaItem = (bebidaSel && bebidaSel.value) ? PL.comidaRapida.find(x => x.c === bebidaSel.value) : null;
+    montoUnit += bebidaItem ? bebidaItem.precio : 0;
+    detalleBase = [crItem.n, bebidaItem?.n, ctx.direccion ? '📍 ' + ctx.direccion : ''].filter(Boolean).join(' · ');
+  } else {
+    montoUnit = PRECIOS[val] || 0;
+    sopa     = document.getElementById('agregar-comida-sopa').value.trim();
+    arroz    = document.getElementById('agregar-comida-arroz').value.trim();
+    proteina = document.getElementById('agregar-comida-proteina').value.trim();
+    acomp    = document.getElementById('agregar-comida-acomp').value.trim();
+    detalleBase = [sopa, arroz, proteina, acomp, ctx.direccion ? '📍 ' + ctx.direccion : ''].filter(Boolean).join(' · ');
+  }
+  if (montoUnit <= 0) { showToast('⚠ El monto debe ser mayor a $0', 'warning'); return; }
+
+  const detalle = [detalleBase, nota].filter(Boolean).join(' · ');
+  const monto_almuerzo = (montoUnit + (paraLlevar ? 1000 : 0)) * cantidad;
+
+  // Empaque desechable: solo almuerzo a domicilio, $1.000 POR CADA plato que
+  // se agregue (igual que al registrar el pedido) — comida rápida a domicilio
+  // ya no lleva empaque, y el valor del envío ya se cobró en el primer plato
+  // del pedido, así que aquí no se vuelve a sumar.
+  const monto_domicilio = (ctx.es_domicilio && ctx.turno === 'almuerzo') ? EMPAQUE_DOMICILIO : 0;
+  const monto_total = monto_almuerzo + monto_domicilio;
+
+  const grupoPedido = await asegurarGrupoPedido(ctx.idsGrupo, ctx.grupoPedido);
+
+  const pedidoData = {
+    fecha: ctx.fecha, hora: nowTime(), turno: ctx.turno, pedido: val,
+    sopa, arroz, proteina, acomp, detalle, metodo: ctx.metodo, cantidad,
+    monto_unit: montoUnit, monto_almuerzo, monto_domicilio, monto_total,
+    estado: 'pendiente', es_domicilio: ctx.es_domicilio, mesa: ctx.mesa, para_llevar: paraLlevar,
+    es_fiar: ctx.es_fiar, es_sin_mesa: ctx.es_sin_mesa, direccion: ctx.direccion,
+    grupo_pedido: grupoPedido
+  };
+
+  try {
+    let newPedido;
+    try {
+      [newPedido] = await sbInsert('pedidos', pedidoData);
+    } catch (e) {
+      const msg = e.message || '';
+      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido')) {
+        const { es_fiar, direccion, es_sin_mesa, grupo_pedido: gV, ...pedidoBase } = pedidoData;
+        [newPedido] = await sbInsert('pedidos', pedidoBase);
+        newPedido.es_fiar = es_fiar; newPedido.direccion = direccion; newPedido.es_sin_mesa = es_sin_mesa; newPedido.grupo_pedido = gV;
+      } else { throw e; }
+    }
+    ST.pendientes.unshift(newPedido);
+
+    if (ctx.mesa) {
+      await sbPatch('mesas', `numero=eq.${ctx.mesa}`, { estado: 'ocupada' });
+      const mesa = ST.mesas.find(m => m.numero === ctx.mesa);
+      if (mesa) mesa.estado = 'ocupada';
+    }
+
+    setSyncBadge('ok');
+    showToast('✅ Comida agregada al pedido', 'ok');
+    cerrarModalAgregarComida();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al agregar la comida', 'warning');
   }
 }
 
@@ -4593,9 +4996,56 @@ function renderTablero() {
 // ── INGRESOS (financiero — cierres guardados + ingresos adicionales) ───
 function setFIngFin(f, btn) {
   fIngFin = f;
-  document.querySelectorAll('#tab-ingfin .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderIngresosFinanciero();
+}
+
+// Filtros del "Historial de pedidos" (Ingresos) — cada dimensión (período,
+// turno, método, origen) es independiente de las demás, así que solo se
+// limpia el "active" dentro de SU propia barra de filtros.
+function setFPedidosHist(dimension, valor, btn) {
+  fPedidosHist[dimension] = valor;
+  btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderHistorialPedidosIngresos();
+}
+
+function renderHistorialPedidosIngresos() {
+  const tbody = document.getElementById('ingfin-pedidos-body');
+  if (!tbody) return;
+  const f = fPedidosHist;
+  const list = ST.ingresos.filter(i => {
+    if (!inP(i.fecha, f.periodo)) return false;
+    if (f.turno !== 'todos' && i.turno !== f.turno) return false;
+    if (f.metodo !== 'todos' && i.metodo !== f.metodo) return false;
+    if (f.origen === 'fiado' && !i.es_fiar) return false;
+    return true;
+  }).sort((a,b) => b.fecha === a.fecha ? (b.hora||'').localeCompare(a.hora||'') : b.fecha.localeCompare(a.fecha));
+
+  const grupos = agruparPorPedido(list);
+  tbody.innerHTML = grupos.length
+    ? grupos.map(orders => {
+        const primero = orders[0];
+        const idsGrupo = orders.map(o => o.id);
+        const resumenPedido = orders.map(o => `${(o.cantidad||1) > 1 ? (o.cantidad+'× ') : ''}${LABELS[o.pedido]||o.pedido}`).join(', ');
+        const resumenDetalle = orders.map(o => o.detalle).filter(Boolean).join(' · ') || '—';
+        const cantidadTotal = orders.reduce((a,o) => a + (o.cantidad||1), 0);
+        const montoTotal    = orders.reduce((a,o) => a + (o.monto_total||0), 0);
+        return `<tr>
+        <td>${primero.fecha}</td>
+        <td>${primero.hora||'—'}</td>
+        <td><span class="badge ${primero.turno==='cena'?'badge-purple':'badge-accent'}">${primero.turno==='cena'?'🌙 CR':'☀️ Alm'}</span></td>
+        <td style="font-size:11px;color:var(--text3);">${primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
+        <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${resumenPedido}">${resumenPedido}</td>
+        <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resumenDetalle}</td>
+        <td><span class="badge ${metC(primero.metodo)}">${primero.metodo}</span></td>
+        <td>${cantidadTotal}</td>
+        <td class="amount-pos">${fmt(montoTotal)}</td>
+        <td><button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetalleGrupoIngreso([${idsGrupo.join(',')}])">👁</button></td>
+      </tr>`;
+      }).join('')
+    : `<tr><td colspan="10"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin pedidos en este filtro</div></div></td></tr>`;
 }
 
 async function agregarIngresoExtra() {
@@ -4672,6 +5122,8 @@ function renderIngresosFinanciero() {
         <td>${f.tipo === 'extra' ? `<button class="btn btn-danger" onclick="eliminarIngresoExtra(${f.id})">✕</button>` : ''}</td>
       </tr>`).join('')
     : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ingresos en este período</div></div></td></tr>`;
+
+  renderHistorialPedidosIngresos();
 }
 
 // ── DÍA A DÍA ────────────────────────────────────────────────────────
