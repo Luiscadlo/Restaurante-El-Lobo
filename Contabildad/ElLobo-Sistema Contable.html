@@ -1516,7 +1516,7 @@
 
     <div class="monto-display" style="margin-bottom:16px;">
       <div class="monto-val" id="agregar-comida-monto-display">$0</div>
-      <div class="monto-label">Valor de esta comida</div>
+      <div class="monto-label" id="agregar-comida-monto-label">Valor de esta comida</div>
     </div>
 
     <button class="btn btn-primary" style="width:100%;" onclick="guardarAgregarComida()">+ Agregar al pedido</button>
@@ -2626,17 +2626,18 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     // El valor del domicilio (envío) se cobra una sola vez, en el primer ítem
     // que se inserte del pedido completo — sea un almuerzo o, si el pedido es
     // solo de extras (ej. alguien que solo lleva una botella), el primer extra.
-    // El empaque desechable ($1.000) es distinto: se cobra POR CADA almuerzo
-    // del pedido (nunca en extras/bebidas), y solo en el turno de almuerzo —
-    // comidas rápidas a domicilio ya no llevan cargo de empaque.
+    // El empaque desechable ($1.000) es distinto: se cobra POR CADA UNIDAD de
+    // almuerzo del pedido (dos completos en un mismo ítem con cantidad 2 son
+    // $2.000, no $1.000) — nunca en extras/bebidas, y solo en el turno de
+    // almuerzo — comidas rápidas a domicilio ya no llevan cargo de empaque.
     let domicilioPendienteDeCobrar = selectedUbicacion === 'domicilio';
-    const empaquePorAlmuerzo = (selectedUbicacion === 'domicilio' && turno === 'almuerzo') ? EMPAQUE_DOMICILIO : 0;
+    const empaquePorUnidad = (selectedUbicacion === 'domicilio' && turno === 'almuerzo') ? EMPAQUE_DOMICILIO : 0;
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       const envio = domicilioPendienteDeCobrar ? valMiles('ing-domicilio-valor') : 0;
       if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
-      const monto_domicilio = envio + empaquePorAlmuerzo;
+      const monto_domicilio = envio + empaquePorUnidad * (item.cantidad || 1);
       const monto_total = item.monto_almuerzo + monto_domicilio;
 
       const pedidoData = {
@@ -4380,8 +4381,16 @@ function recalcularAgregarComidaMonto() {
   }
   const chkPL = document.getElementById('agregar-comida-para-llevar');
   const paraLlevar = !!(chkPL && chkPL.checked);
-  const total = (montoUnit + (paraLlevar ? 1000 : 0)) * cantidad;
+
+  // Empaque desechable: $1.000 por cada unidad de este plato, solo si el
+  // pedido es a domicilio y del turno de almuerzo — igual que al guardar.
+  // Se muestra en la vista previa para que no haya sorpresas al agregar.
+  const ctx = agregarComidaContexto;
+  const empaque = (ctx && ctx.es_domicilio && ctx.turno === 'almuerzo') ? EMPAQUE_DOMICILIO * cantidad : 0;
+  const total = (montoUnit + (paraLlevar ? 1000 : 0)) * cantidad + empaque;
   document.getElementById('agregar-comida-monto-display').textContent = fmt(total);
+  const labelEl = document.getElementById('agregar-comida-monto-label');
+  if (labelEl) labelEl.textContent = empaque > 0 ? `Valor de esta comida (incluye ${fmt(empaque)} de empaque)` : 'Valor de esta comida';
 }
 
 async function guardarAgregarComida() {
@@ -4416,11 +4425,11 @@ async function guardarAgregarComida() {
   const detalle = [detalleBase, nota].filter(Boolean).join(' · ');
   const monto_almuerzo = (montoUnit + (paraLlevar ? 1000 : 0)) * cantidad;
 
-  // Empaque desechable: solo almuerzo a domicilio, $1.000 POR CADA plato que
-  // se agregue (igual que al registrar el pedido) — comida rápida a domicilio
+  // Empaque desechable: solo almuerzo a domicilio, $1.000 POR CADA unidad de
+  // este plato (igual que al registrar el pedido) — comida rápida a domicilio
   // ya no lleva empaque, y el valor del envío ya se cobró en el primer plato
   // del pedido, así que aquí no se vuelve a sumar.
-  const monto_domicilio = (ctx.es_domicilio && ctx.turno === 'almuerzo') ? EMPAQUE_DOMICILIO : 0;
+  const monto_domicilio = (ctx.es_domicilio && ctx.turno === 'almuerzo') ? EMPAQUE_DOMICILIO * cantidad : 0;
   const monto_total = monto_almuerzo + monto_domicilio;
 
   const grupoPedido = await asegurarGrupoPedido(ctx.idsGrupo, ctx.grupoPedido);
