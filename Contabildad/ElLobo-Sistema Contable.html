@@ -3429,6 +3429,7 @@ function renderPendientes() {
     const tituloMesa = varios ? `Mesa ${mn} · Pedido ${numeroPedido}` : `Mesa ${mn}`;
     const total  = orders.reduce((a,b) => a + (b.monto_total||0), 0);
     const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
+    const divididoPre = prellenadoDividido(orders);
     const key = `mesa-${mn}-${numeroPedido}`;
     const idsGrupo = orders.map(o => o.id);
     const grupoPedidoVal = orders[0].grupo_pedido || '';
@@ -3464,13 +3465,13 @@ function renderPendientes() {
         </table>
       </div>
       <div class="pending-pay-bar">
-        <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')">
+        <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')" style="${divididoPre?'display:none;':''}">
           <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
           <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
         </select>
         <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
-          style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
-        ${htmlPagoDividido(key, total)}
+          style="${divididoPre ? 'display:none;' : (metodoInicial==='efectivo'?'':'display:none;')}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+        ${htmlPagoDividido(key, total, divididoPre)}
         <button class="btn btn-primary" onclick="marcarGrupoMesaPagado([${idsGrupo.join(',')}],${mn},'${key}')">✅ Marcar todo como pagado</button>
         <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${grupoPedidoVal}')">+ Agregar producto</button>
         <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${grupoPedidoVal}')">🍽 Agregar comida</button>
@@ -3498,6 +3499,7 @@ function renderPendientes() {
         const montoAlmuerzoTotal = orders.reduce((a,b) => a + (b.monto_almuerzo||0), 0);
         const montoDomicilioTotal = orders.reduce((a,b) => a + (b.monto_domicilio||0), 0);
         const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
+        const divididoPre = prellenadoDividido(orders);
         const idsGrupo = orders.map(o => o.id);
         const primero = orders[0];
         return `
@@ -3530,13 +3532,13 @@ function renderPendientes() {
           </table>
         </div>
         <div class="pending-pay-bar">
-          <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')">
+          <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')" style="${divididoPre?'display:none;':''}">
             <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
             <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
           </select>
           <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
-            style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
-          ${htmlPagoDividido(key, total)}
+            style="${divididoPre ? 'display:none;' : (metodoInicial==='efectivo'?'':'display:none;')}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+          ${htmlPagoDividido(key, total, divididoPre)}
           <button class="btn btn-primary" onclick="marcarGrupoDomicilioPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
           <span class="pending-dom-detail">🍽 ${fmt(montoAlmuerzoTotal)} + 🛵 ${fmt(montoDomicilioTotal)}</span>
           <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
@@ -3555,7 +3557,7 @@ function renderPendientes() {
     if (sinMesaList.length) {
       sinMesaZone.innerHTML = `
         <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--text2);">🧍 Sin mesa — esperando de pie</span></div>
-        ${sinMesaList.map(p => { const key = `sinmesa-${p.id}`; const metodoInicial = p.metodo === 'transferencia' ? 'transferencia' : 'efectivo'; return `
+        ${sinMesaList.map(p => { const key = `sinmesa-${p.id}`; const metodoInicial = p.metodo === 'transferencia' ? 'transferencia' : 'efectivo'; const divididoPre = prellenadoDividido(p); return `
         <div class="pending-group">
           <div class="pending-group-hdr">
             <div>
@@ -3565,13 +3567,13 @@ function renderPendientes() {
             <div class="pending-group-total">${fmt(p.monto_total||0)}</div>
           </div>
           <div class="pending-pay-bar">
-            <select id="metodo-sinmesa-${p.id}" onchange="onMetodoPendienteChange('${key}')">
+            <select id="metodo-sinmesa-${p.id}" onchange="onMetodoPendienteChange('${key}')" style="${divididoPre?'display:none;':''}">
               <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
               <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
             </select>
             <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
-              style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${p.monto_total||0})">
-            ${htmlPagoDividido(key, p.monto_total||0)}
+              style="${divididoPre ? 'display:none;' : (metodoInicial==='efectivo'?'':'display:none;')}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${p.monto_total||0})">
+            ${htmlPagoDividido(key, p.monto_total||0, divididoPre)}
             <button class="btn btn-primary" onclick="marcarSinMesaPagado(${p.id})">✅ Marcar como pagado</button>
             <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${p.id}],'${p.grupo_pedido||''}')">+ Agregar producto</button>
             <button class="btn btn-outline" onclick="abrirModalAgregarComida([${p.id}],'${p.grupo_pedido||''}')">🍽 Agregar comida</button>
@@ -3603,6 +3605,7 @@ function renderPendientes() {
           const key = `fiar-${orders[0].grupo_pedido || orders[0].id}`;
           const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
           const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
+          const divididoPre = prellenadoDividido(orders);
           const idsGrupo = orders.map(o => o.id);
           const primero = orders[0];
           return `
@@ -3634,13 +3637,13 @@ function renderPendientes() {
             </table>
           </div>
           <div class="pending-pay-bar">
-            <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')">
+            <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')" style="${divididoPre?'display:none;':''}">
               <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
               <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
             </select>
             <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
-              style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
-            ${htmlPagoDividido(key, total)}
+              style="${divididoPre ? 'display:none;' : (metodoInicial==='efectivo'?'':'display:none;')}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+            ${htmlPagoDividido(key, total, divididoPre)}
             <button class="btn btn-primary" onclick="marcarGrupoFiadoPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
             <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
             <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
@@ -4205,19 +4208,45 @@ function leerPagoDividido(key, total) {
   return { efectivo, transferencia };
 }
 
+// Reconstruye el reparto de pago dividido ya guardado en un pedido/grupo
+// (solo el primer ítem del grupo carga el monto real, el resto va en 0 —
+// sumarlos todos recupera el total). Retorna null si no es un pago dividido.
+// Se usa para que la barra de pago en Pendientes NO pierda el pago dividido
+// que ya se había elegido al registrar el pedido: lo muestra precargado en
+// vez de arrancar siempre en blanco con el método normal seleccionado.
+function prellenadoDividido(orders) {
+  const arr = Array.isArray(orders) ? orders : [orders];
+  if (!arr.some(o => o.metodo === 'dividido')) return null;
+  return {
+    activo: true,
+    efectivo: arr.reduce((a,o) => a + (o.monto_efectivo||0), 0),
+    transferencia: arr.reduce((a,o) => a + (o.monto_transferencia||0), 0)
+  };
+}
+
 // HTML del checkbox + campos de pago dividido — se inserta junto a CUALQUIER
 // select de método de pago (registro, mesa, domicilio, sin mesa, fiado,
 // pago individual) para que la opción esté disponible en todos los casos.
-function htmlPagoDividido(key, total) {
+// prellenado (opcional): { activo, efectivo, transferencia } — si el pedido
+// ya venía marcado como dividido, se muestra activado y con los montos ya
+// guardados en vez de empezar en blanco.
+function htmlPagoDividido(key, total, prellenado) {
+  const activo = !!(prellenado && prellenado.activo);
+  const ef = activo ? prellenado.efectivo : total;
+  const tr = activo ? prellenado.transferencia : 0;
+  const restante = total - ef - tr;
+  const restanteHtml = !activo ? '' : (restante === 0
+    ? '<span style="color:var(--green);">✓ Cuadra</span>'
+    : `<span style="color:var(--red);">${restante > 0 ? 'Falta ' + fmt(restante) : 'Sobra ' + fmt(Math.abs(restante))}</span>`);
   return `
     <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;white-space:nowrap;">
-      <input type="checkbox" id="dividido-chk-${key}" onchange="toggleDividido('${key}',${total})" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;">
+      <input type="checkbox" id="dividido-chk-${key}" ${activo ? 'checked' : ''} onchange="toggleDividido('${key}',${total})" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;">
       💳 Dividido
     </label>
-    <span id="dividido-campos-${key}" style="display:none;gap:4px;align-items:center;">
-      <input type="text" inputmode="numeric" id="dividido-ef-${key}" placeholder="Efectivo $" class="vuelto-inline" style="width:100px;" oninput="formatMilesInput(this); actualizarDivididoRestante('${key}',${total})">
-      <input type="text" inputmode="numeric" id="dividido-tr-${key}" placeholder="Transf. $" class="vuelto-inline" style="width:100px;" oninput="formatMilesInput(this); actualizarDivididoRestante('${key}',${total})">
-      <span id="dividido-restante-${key}" style="font-size:10px;white-space:nowrap;"></span>
+    <span id="dividido-campos-${key}" style="display:${activo ? 'inline-flex' : 'none'};gap:4px;align-items:center;">
+      <input type="text" inputmode="numeric" id="dividido-ef-${key}" placeholder="Efectivo $" class="vuelto-inline" style="width:100px;" value="${activo ? Number(ef).toLocaleString('es-CO') : ''}" oninput="formatMilesInput(this); actualizarDivididoRestante('${key}',${total})">
+      <input type="text" inputmode="numeric" id="dividido-tr-${key}" placeholder="Transf. $" class="vuelto-inline" style="width:100px;" value="${activo ? Number(tr).toLocaleString('es-CO') : ''}" oninput="formatMilesInput(this); actualizarDivididoRestante('${key}',${total})">
+      <span id="dividido-restante-${key}" style="font-size:10px;white-space:nowrap;">${restanteHtml}</span>
     </span>`;
 }
 
