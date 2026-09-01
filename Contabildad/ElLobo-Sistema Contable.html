@@ -267,6 +267,17 @@
   .btn-sinmesa:hover { background: rgba(160,152,128,0.12); }
   .btn-sinmesa.selected { border-color: var(--accent); color: var(--accent); background: rgba(232,184,75,0.15); box-shadow: 0 0 0 2px rgba(232,184,75,0.3); }
 
+  .btn-gratis {
+    width: 100%; padding: 12px; border-radius: var(--radius-sm);
+    border: 2px solid var(--orange); color: var(--orange);
+    background: transparent; font-family: 'Syne', sans-serif;
+    font-weight: 700; font-size: 13px; cursor: pointer;
+    transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+  .btn-gratis:hover { background: rgba(224,124,58,0.12); }
+  .btn-gratis.selected { border-color: var(--accent); color: var(--accent); background: rgba(232,184,75,0.15); box-shadow: 0 0 0 2px rgba(232,184,75,0.3); }
+
   .btn-abrir-turno {
     border-radius: 20px; padding: 6px 14px; font-size: 11px; font-family: 'Syne', sans-serif; font-weight: 700;
     border: 1px solid rgba(76,175,125,0.4); background: rgba(76,175,125,0.12); color: var(--green);
@@ -549,14 +560,20 @@
           <button class="btn-domicilio" id="btn-domicilio" onclick="seleccionarUbicacion('domicilio')">
             🛵 Domicilio
           </button>
-          <button class="btn-fiar" id="btn-fiar" onclick="seleccionarUbicacion('fiar')">
-            📒 Fiar
-          </button>
           <button class="btn-sinmesa" id="btn-sinmesa" onclick="seleccionarUbicacion('sinmesa')">
             🧍 Sin mesa
           </button>
+          <button class="btn-fiar" id="btn-fiar" onclick="seleccionarUbicacion('fiar')">
+            📒 Fiar
+          </button>
+          <button class="btn-gratis" id="btn-gratis" onclick="seleccionarUbicacion('gratis')">
+            🎁 Gratis
+          </button>
           <div id="fiar-info-section" style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(155,127,212,0.08);border:1px solid rgba(155,127,212,0.3);font-size:12px;color:var(--purple);">
             ⚠ El ingreso se registrará en la fecha en que se marque como pagado
+          </div>
+          <div id="gratis-info-section" style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(240,180,40,0.08);border:1px solid rgba(240,180,40,0.3);font-size:12px;color:var(--orange);">
+            🎁 Este pedido NO se suma a los ingresos del día (regalo de la casa / consumo del dueño) — solo queda el registro de qué y cuánto se dio gratis.
           </div>
         </div>
 
@@ -645,7 +662,7 @@
 
         <!-- Método y cantidad -->
         <div class="form-row mb">
-          <div class="form-group">
+          <div class="form-group" id="ing-metodo-section">
             <label>Método de pago</label>
             <select id="ing-metodo" onchange="onMetodoChange()">
               <option value="efectivo">Efectivo</option>
@@ -659,7 +676,7 @@
         </div>
 
         <!-- Pago dividido: parte en efectivo, parte en transferencia -->
-        <div class="para-llevar-row mb">
+        <div class="para-llevar-row mb" id="ing-dividido-row">
           <input type="checkbox" id="ing-dividido-chk" onchange="toggleDivididoIngreso()">
           <label for="ing-dividido-chk" style="cursor:pointer;">💳 Pago dividido <span style="color:var(--text3);font-weight:400;">(parte efectivo, parte transferencia)</span></label>
         </div>
@@ -794,6 +811,9 @@
 
   <!-- Fiados pendientes -->
   <div id="pendientes-fiados-zone"></div>
+
+  <!-- Gratis pendientes -->
+  <div id="pendientes-gratis-zone"></div>
 </section>
 
 <!-- ===== EGRESOS (acceso con contraseña) ===== -->
@@ -1061,6 +1081,7 @@
             <div class="filter-bar" style="margin-bottom:0;" id="ingfin-ped-filtros-origen">
               <button class="filter-btn active" onclick="setFPedidosHist('origen','todos',this)">Todos</button>
               <button class="filter-btn" onclick="setFPedidosHist('origen','fiado',this)">📒 Solo fiados</button>
+              <button class="filter-btn" onclick="setFPedidosHist('origen','gratis',this)">🎁 Solo gratis</button>
             </div>
           </div>
         </div>
@@ -1949,7 +1970,7 @@ function turnoFromHora(h) {
   return (m >= 540 && m < 1020) ? 'almuerzo' : 'cena';
 }
 
-const metC = m => m==='efectivo'?'badge-green':m==='dividido'?'badge-purple':'badge-accent';
+const metC = m => m==='efectivo'?'badge-green':m==='dividido'?'badge-purple':m==='gratis'?'badge-gray':'badge-accent';
 const catC = c => c==='nomina'?'badge-blue':['arriendo','servicios'].includes(c)?'badge-gray':c==='prestamo'?'badge-purple':'badge-red';
 const CAT_LABELS = { nomina:'Nómina', proveedor:'Proveedores', arriendo:'Arriendo', servicios:'Servicios', otro:'Otro', prestamo:'Préstamo' };
 
@@ -1968,8 +1989,17 @@ function transferenciaDe(p) {
   return p.metodo === 'transferencia' ? (p.monto_total || 0) : 0;
 }
 function metodoLabel(p) {
+  if (p.metodo === 'gratis') return 'gratis (no ingresa)';
   if (p.metodo !== 'dividido') return p.metodo;
   return `dividido (efvo ${fmt(p.monto_efectivo||0)} · transf ${fmt(p.monto_transferencia||0)})`;
+}
+
+// ── Pedidos "Gratis" (regalo de la casa / consumo del dueño) ───────────
+// No generan ingreso: se usa esta función en vez de sumar monto_total
+// directamente en cualquier total de VENTAS/INGRESOS (no en conteos de
+// cantidad, esos sí deben incluir los gratis para saber cuántos se dieron).
+function montoIngreso(p) {
+  return p.es_gratis ? 0 : (p.monto_total || 0);
 }
 
 // ── Exportar / Importar ───────────────────────────────────────────────
@@ -2252,6 +2282,11 @@ function renderMesasForm() {
   if (btnSinMesa) {
     btnSinMesa.className = 'btn-sinmesa' + (selectedUbicacion === 'sinmesa' ? ' selected' : '');
   }
+  // Botón gratis
+  const btnGratis = document.getElementById('btn-gratis');
+  if (btnGratis) {
+    btnGratis.className = 'btn-gratis' + (selectedUbicacion === 'gratis' ? ' selected' : '');
+  }
 }
 
 // Muestra/oculta el checkbox "para llevar": igual en almuerzo y en comidas
@@ -2279,31 +2314,56 @@ function seleccionarUbicacion(ubicacion) {
   }
   selectedUbicacion = ubicacion;
 
-  const domSection  = document.getElementById('domicilio-valor-section');
-  const fiarSection = document.getElementById('fiar-info-section');
+  const domSection    = document.getElementById('domicilio-valor-section');
+  const fiarSection   = document.getElementById('fiar-info-section');
+  const gratisSection = document.getElementById('gratis-info-section');
 
   if (ubicacion === 'domicilio') {
     domSection.style.display        = 'block';
     if (fiarSection) fiarSection.style.display = 'none';
+    if (gratisSection) gratisSection.style.display = 'none';
   } else if (ubicacion === 'fiar') {
     domSection.style.display        = 'none';
     if (fiarSection) fiarSection.style.display = 'block';
+    if (gratisSection) gratisSection.style.display = 'none';
     document.getElementById('ing-domicilio-valor').value = '';
     const dirElF = document.getElementById('ing-direccion');
     if (dirElF) dirElF.value = '';
+  } else if (ubicacion === 'gratis') {
+    domSection.style.display        = 'none';
+    if (fiarSection) fiarSection.style.display = 'none';
+    if (gratisSection) gratisSection.style.display = 'block';
+    document.getElementById('ing-domicilio-valor').value = '';
+    const dirElG = document.getElementById('ing-direccion');
+    if (dirElG) dirElG.value = '';
   } else {
     // mesa_X y sin mesa
     domSection.style.display        = 'none';
     if (fiarSection) fiarSection.style.display = 'none';
+    if (gratisSection) gratisSection.style.display = 'none';
     document.getElementById('ing-domicilio-valor').value = '';
     const dirElM = document.getElementById('ing-direccion');
     if (dirElM) dirElM.value = '';
   }
 
   actualizarVisibilidadParaLlevar();
+  actualizarVisibilidadMetodoPago();
   renderMesasForm();
   validarRegistro();
   actualizarMontoDisplay();
+}
+
+// El pedido "Gratis" no tiene método de pago (no genera ingreso): se oculta
+// el select de método y el checkbox de pago dividido mientras esté seleccionado.
+function actualizarVisibilidadMetodoPago() {
+  const metodoSection = document.getElementById('ing-metodo-section');
+  if (metodoSection) metodoSection.style.display = selectedUbicacion === 'gratis' ? 'none' : '';
+  const divididoRow = document.getElementById('ing-dividido-row');
+  if (divididoRow) divididoRow.style.display = selectedUbicacion === 'gratis' ? 'none' : '';
+  if (selectedUbicacion === 'gratis') {
+    const chk = document.getElementById('ing-dividido-chk');
+    if (chk && chk.checked) { chk.checked = false; toggleDivididoIngreso(); }
+  }
 }
 
 function onParaLlevarChange() {
@@ -2757,10 +2817,13 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   const items = [...almuerzosEnCola, ...(itemActual ? [itemActual] : [])];
   if (!items.length && !extrasIngresoPendientes.length) { showToast('⚠ Agrega al menos un almuerzo o un producto extra', 'warning'); return; }
 
+  const esGratis = selectedUbicacion === 'gratis';
   const { total: totalPedidoCompleto } = calcularTotalPedido();
-  const dividido = leerPagoDivididoIngreso(totalPedidoCompleto);
+  const dividido = esGratis ? null : leerPagoDivididoIngreso(totalPedidoCompleto);
   if (dividido && dividido.error) { showToast('⚠ Pago dividido: efectivo + transferencia debe sumar exactamente el total', 'warning'); return; }
-  const metodo = dividido ? 'dividido' : document.getElementById('ing-metodo').value;
+  // "Gratis" no genera ingreso: metodo queda fijo en 'gratis' sin importar el
+  // select de método (que además está oculto para esta ubicación).
+  const metodo = esGratis ? 'gratis' : (dividido ? 'dividido' : document.getElementById('ing-metodo').value);
   // El reparto exacto del pago dividido se guarda una sola vez, en el primer
   // ítem que se inserte del pedido (almuerzo o extra) — igual que ya se hace
   // con el valor del domicilio, para que la suma del pedido cuadre exacto.
@@ -2808,6 +2871,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         mesa: mesa_numero, para_llevar: item.para_llevar,
         es_fiar: selectedUbicacion === 'fiar',
         es_sin_mesa: selectedUbicacion === 'sinmesa',
+        es_gratis: esGratis,
         direccion: direccionValue || '', grupo_pedido: grupoPedido
       };
 
@@ -2816,14 +2880,17 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         [newPedido] = await sbInsert('pedidos', pedidoData);
       } catch (e) {
         const msg = e.message || '';
-        if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
+        if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
           // Columnas opcionales aún no existen en Supabase — reintenta sin ellas
-          const { es_fiar: esFiarVal, direccion: dirVal, es_sin_mesa: esSinMesaVal, grupo_pedido: grupoVal, monto_efectivo: mEf, monto_transferencia: mTr, ...pedidoBase } = pedidoData;
+          const { es_fiar: esFiarVal, direccion: dirVal, es_sin_mesa: esSinMesaVal, es_gratis: esGratisVal, grupo_pedido: grupoVal, monto_efectivo: mEf, monto_transferencia: mTr, ...pedidoBase } = pedidoData;
           [newPedido] = await sbInsert('pedidos', pedidoBase);
           newPedido.es_fiar = esFiarVal; newPedido.direccion = dirVal;
-          newPedido.es_sin_mesa = esSinMesaVal; newPedido.grupo_pedido = grupoVal;
+          newPedido.es_sin_mesa = esSinMesaVal; newPedido.es_gratis = esGratisVal; newPedido.grupo_pedido = grupoVal;
           if (dividido && (msg.includes('monto_efectivo') || msg.includes('monto_transferencia'))) {
             showToast('⚠ El reparto del pago dividido no se guardó — falta agregar esas columnas en Supabase (ver script SQL)', 'warning');
+          }
+          if (esGratis && msg.includes('es_gratis')) {
+            showToast('⚠ Falta agregar la columna es_gratis en Supabase (ver script SQL) — por ahora este pedido SÍ contará en los ingresos', 'warning');
           }
         } else { throw e; }
       }
@@ -2864,6 +2931,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
           estado: estadoFinal, es_domicilio: selectedUbicacion === 'domicilio',
           mesa: mesa_numero, para_llevar: false,
           es_fiar: selectedUbicacion === 'fiar', es_sin_mesa: selectedUbicacion === 'sinmesa',
+          es_gratis: esGratis,
           direccion: '', grupo_pedido: grupoPedido
         };
         try {
@@ -2872,10 +2940,10 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
             [newExtra] = await sbInsert('pedidos', extraData);
           } catch (e) {
             const msg = e.message || '';
-            if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
-              const { es_fiar: efV, direccion: dV, es_sin_mesa: esmV, grupo_pedido: gV, monto_efectivo: mEf, monto_transferencia: mTr, ...extraBase } = extraData;
+            if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
+              const { es_fiar: efV, direccion: dV, es_sin_mesa: esmV, es_gratis: egV, grupo_pedido: gV, monto_efectivo: mEf, monto_transferencia: mTr, ...extraBase } = extraData;
               [newExtra] = await sbInsert('pedidos', extraBase);
-              newExtra.es_fiar = efV; newExtra.direccion = dV; newExtra.es_sin_mesa = esmV; newExtra.grupo_pedido = gV;
+              newExtra.es_fiar = efV; newExtra.direccion = dV; newExtra.es_sin_mesa = esmV; newExtra.es_gratis = egV; newExtra.grupo_pedido = gV;
             } else { throw e; }
           }
           pedidosInsertados.push(newExtra);
@@ -2891,6 +2959,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     const ubicLabel = selectedUbicacion === 'domicilio' ? 'Domicilio'
       : selectedUbicacion === 'fiar' ? 'Fiado'
       : selectedUbicacion === 'sinmesa' ? 'Sin mesa'
+      : selectedUbicacion === 'gratis' ? 'Gratis'
       : 'Mesa ' + mesa_numero;
     const idsInsertados = pedidosInsertados.map(p => p.id);
 
@@ -2922,6 +2991,9 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     document.getElementById('domicilio-valor-section').style.display = 'none';
     const fiarInfoEl = document.getElementById('fiar-info-section');
     if (fiarInfoEl) fiarInfoEl.style.display = 'none';
+    const gratisInfoEl = document.getElementById('gratis-info-section');
+    if (gratisInfoEl) gratisInfoEl.style.display = 'none';
+    actualizarVisibilidadMetodoPago();
     onHoraChange();
     renderAll();
   } catch (err) {
@@ -2962,7 +3034,7 @@ function verDetalleGrupoIngreso(ids) {
   </div>`;
   html += `<div class="modal-field">
       <div class="modal-field-label">Ubicación</div>
-      <div class="modal-field-value">${primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Domicilio':primero.mesa?`Mesa ${primero.mesa}`:'—'}</div>
+      <div class="modal-field-value">${primero.es_gratis?'🎁 Gratis':primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Domicilio':primero.mesa?`Mesa ${primero.mesa}`:'—'}</div>
     </div>`;
   html += orders.map(o => `
     <div class="modal-field">
@@ -2997,7 +3069,7 @@ function mostrarDetallePedidoModal(i) {
     ['Fecha',       i.fecha],
     ['Hora',        i.hora || '—'],
     ['Turno',       i.turno === 'cena' ? 'Comida Rápida' : 'Almuerzo'],
-    ['Ubicación',   i.es_fiar ? '📒 Fiado' : i.es_sin_mesa ? '🧍 Sin mesa' : i.es_domicilio ? '🛵 Domicilio' : i.mesa ? `Mesa ${i.mesa}` : '—'],
+    ['Ubicación',   i.es_gratis ? '🎁 Gratis' : i.es_fiar ? '📒 Fiado' : i.es_sin_mesa ? '🧍 Sin mesa' : i.es_domicilio ? '🛵 Domicilio' : i.mesa ? `Mesa ${i.mesa}` : '—'],
     i.es_domicilio && i.direccion ? ['Dirección', '📍 ' + i.direccion] : null,
     ['Estado de pago', i.estado === 'pagado' ? '✅ Pagado' : '⏳ Pendiente de pago'],
     ['Método',      metodoLabel(i)],
@@ -3041,7 +3113,7 @@ async function eliminarGrupoIngreso(ids) {
     const objetos = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
     try {
       for (const p of objetos) {
-        const ubicacion = p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
+        const ubicacion = p.es_gratis ? 'Gratis' : p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
         const [row] = await sbInsert('pedidos_eliminados', {
           pedido_id: p.id, fecha: p.fecha, hora: p.hora || '', turno: p.turno,
           pedido: p.pedido, detalle: p.detalle || '', ubicacion, metodo: p.metodo,
@@ -3237,28 +3309,27 @@ async function marcarGrupoDomicilioPagado(ids, key) {
 }
 
 // ── Marcar pedido "sin mesa" como pagado ────────────────────────────────
-async function marcarSinMesaPagado(pedidoId) {
-  const key = `sinmesa-${pedidoId}`;
-  const ped = ST.pendientes.find(p => p.id === pedidoId);
-  const total = ped ? (ped.monto_total||0) : 0;
+// Un cliente sin mesa puede pedir varios platos (mismo grupo_pedido) — se
+// pagan todos juntos de una vez, igual que un domicilio o un fiado.
+async function marcarGrupoSinMesaPagado(ids, key) {
+  const pedidosDelGrupo = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
+  const total = pedidosDelGrupo.reduce((a,p) => a + (p.monto_total||0), 0);
   const dividido = leerPagoDividido(key, total);
   if (dividido && dividido.error) { showToast('⚠ Efectivo + transferencia debe sumar exactamente el total', 'warning'); return; }
-  const metodoEl = document.getElementById(`metodo-sinmesa-${pedidoId}`);
+  const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
   try {
-    const patch = await patchPagoConFallback(pedidoId, armarPatchPago(metodo, dividido, true));
-
-    let pagado = null;
-    const idx = ST.pendientes.findIndex(p => p.id === pedidoId);
-    if (idx !== -1) {
-      [pagado] = ST.pendientes.splice(idx, 1);
-      Object.assign(pagado, patch);
-      ST.ingresos.unshift(pagado);
+    for (let i = 0; i < ids.length; i++) {
+      const patch = await patchPagoConFallback(ids[i], armarPatchPago(metodo, dividido, i === 0));
+      Object.assign(pedidosDelGrupo[i], patch);
     }
+    ST.ingresos   = [...pedidosDelGrupo, ...ST.ingresos];
+    ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
+
     setSyncBadge('ok');
     showToast('✅ Pedido (sin mesa) marcado como pagado', 'ok',
-      pagado ? { label: '↩ Deshacer', onClick: () => revertirPago(pagado.id) } : null);
+      ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
     renderAll();
   } catch (e) {
     showToast('⚠ Error al procesar el pago', 'warning');
@@ -3312,6 +3383,30 @@ async function marcarGrupoFiadoPagado(ids, key) {
   } catch (e) {
     console.error(e);
     showToast('⚠ Error al procesar el pago', 'warning');
+  }
+}
+
+// ── Marcar TODO un "gratis" (grupo) como entregado ─────────────────────
+// No hay barra de pago: no se cobra nada, así que solo se confirma la
+// entrega. metodo queda en 'gratis' (ya lo trae desde el registro) — así
+// efectivoDe/transferenciaDe y todos los totales de ingresos lo ignoran.
+async function marcarGrupoGratisPagado(ids) {
+  const pedidosDelGrupo = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
+  try {
+    for (const p of pedidosDelGrupo) {
+      const patch = await patchPagoConFallback(p.id, armarPatchPago('gratis', null, false));
+      Object.assign(p, patch);
+    }
+    ST.ingresos   = [...pedidosDelGrupo, ...ST.ingresos];
+    ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
+
+    setSyncBadge('ok');
+    showToast('🎁 Pedido gratis marcado como entregado', 'ok',
+      ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al confirmar la entrega', 'warning');
   }
 }
 
@@ -3371,19 +3466,28 @@ function renderPendientes() {
   // Agrupar — dentro de una misma mesa puede haber más de un pedido distinto
   // (mesa compartida por dos grupos de personas): se agrupa por mesa + grupo_pedido,
   // no solo por mesa. Los pedidos viejos sin grupo_pedido (antes de este cambio)
-  // se agrupan juntos por mesa como venían funcionando. Los fiados se agrupan
-  // igual que los domicilios — un fiado puede traer varios platos.
+  // se agrupan juntos por mesa como venían funcionando. Los fiados, "sin mesa"
+  // y "gratis" se agrupan igual que los domicilios — un mismo pedido puede
+  // traer varios platos y deben pagarse/confirmarse todos juntos, nunca
+  // separados (si no, el total del pedido se ve partido en el historial).
   const mesaGruposMap = {}; // "mesa::grupo" -> { mesa, orders: [] }
   const domicilioGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — un domicilio puede traer varios almuerzos
   const fiadoGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — un fiado puede traer varios platos
-  const sinMesaList = [];
+  const sinMesaGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — sin mesa puede traer varios platos
+  const gratisGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — gratis puede traer varios platos
   ST.pendientes.forEach(p => {
-    if (p.es_fiar === true) {
+    if (p.es_gratis === true) {
+      const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
+      if (!gratisGruposMap[grupoKey]) gratisGruposMap[grupoKey] = { orders: [] };
+      gratisGruposMap[grupoKey].orders.push(p);
+    } else if (p.es_fiar === true) {
       const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
       if (!fiadoGruposMap[grupoKey]) fiadoGruposMap[grupoKey] = { orders: [] };
       fiadoGruposMap[grupoKey].orders.push(p);
     } else if (p.es_sin_mesa === true) {
-      sinMesaList.push(p);
+      const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
+      if (!sinMesaGruposMap[grupoKey]) sinMesaGruposMap[grupoKey] = { orders: [] };
+      sinMesaGruposMap[grupoKey].orders.push(p);
     } else if (p.es_domicilio || !p.mesa) {
       const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
       if (!domicilioGruposMap[grupoKey]) domicilioGruposMap[grupoKey] = { orders: [] };
@@ -3401,12 +3505,14 @@ function renderPendientes() {
   const domZone     = document.getElementById('pendientes-domicilios-zone');
   const fiadosZone  = document.getElementById('pendientes-fiados-zone');
   const sinMesaZone = document.getElementById('pendientes-sinmesa-zone');
+  const gratisZone  = document.getElementById('pendientes-gratis-zone');
 
-  if (!Object.keys(mesaGruposMap).length && !Object.keys(domicilioGruposMap).length && !Object.keys(fiadoGruposMap).length && !sinMesaList.length) {
+  if (!Object.keys(mesaGruposMap).length && !Object.keys(domicilioGruposMap).length && !Object.keys(fiadoGruposMap).length && !Object.keys(sinMesaGruposMap).length && !Object.keys(gratisGruposMap).length) {
     mesasZone.innerHTML = `<div class="empty"><div class="empty-icon">🍽</div><div class="empty-text">No hay pedidos pendientes</div></div>`;
     domZone.innerHTML   = '';
     if (fiadosZone)  fiadosZone.innerHTML  = '';
     if (sinMesaZone) sinMesaZone.innerHTML = '';
+    if (gratisZone)  gratisZone.innerHTML  = '';
     return;
   }
 
@@ -3552,35 +3658,68 @@ function renderPendientes() {
     domZone.innerHTML = '';
   }
 
-  // Sin mesa
+  // Sin mesa — agrupado por grupo_pedido, igual que domicilios: un cliente sin
+  // mesa puede pedir varios platos y deben pagarse/confirmarse todos juntos
+  // (si no, el pedido se ve partido en el historial de ingresos).
+  const gruposSinMesaOrdenados = Object.values(sinMesaGruposMap);
+  gruposSinMesaOrdenados.forEach(g => g.orders.sort((a,b) => (a.hora||'').localeCompare(b.hora||'')));
+  gruposSinMesaOrdenados.sort((a, b) => (a.orders[0].hora||'').localeCompare(b.orders[0].hora||''));
+
   if (sinMesaZone) {
-    if (sinMesaList.length) {
+    if (gruposSinMesaOrdenados.length) {
       sinMesaZone.innerHTML = `
         <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--text2);">🧍 Sin mesa — esperando de pie</span></div>
-        ${sinMesaList.map(p => { const key = `sinmesa-${p.id}`; const metodoInicial = p.metodo === 'transferencia' ? 'transferencia' : 'efectivo'; const divididoPre = prellenadoDividido(p); return `
+        ${gruposSinMesaOrdenados.map(grupo => {
+          const orders = grupo.orders;
+          const key = `sinmesa-${orders[0].grupo_pedido || orders[0].id}`;
+          const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
+          const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
+          const divididoPre = prellenadoDividido(orders);
+          const idsGrupo = orders.map(o => o.id);
+          const primero = orders[0];
+          return `
         <div class="pending-group">
           <div class="pending-group-hdr">
             <div>
-              <div class="pending-group-title" style="color:var(--text);">Sin mesa — ${p.hora||'—'}</div>
-              <div class="pending-group-sub">${LABELS[p.pedido]||p.pedido} · ${p.detalle||'—'}</div>
+              <div class="pending-group-title" style="color:var(--text);">Sin mesa — ${primero.hora||'—'}</div>
+              <div class="pending-group-sub">${orders.length} pedido(s)</div>
             </div>
-            <div class="pending-group-total">${fmt(p.monto_total||0)}</div>
+            <div class="pending-group-total">${fmt(total)}</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Hora</th><th>Tipo</th><th>Detalle</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
+              <tbody>${orders.map(p => `
+                <tr>
+                  <td>${p.hora||'—'}</td>
+                  <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
+                  <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    ${p.detalle||'—'}${p.para_llevar ? ' <span style="color:var(--accent);">· Para llevar</span>' : ''}
+                  </td>
+                  <td>${p.cantidad||1}</td>
+                  <td class="amount-pos">${fmt(p.monto_total||0)}</td>
+                  <td style="display:flex;gap:4px;white-space:nowrap;">
+                    <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
+                    <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
+                    <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕</button>
+                  </td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
           </div>
           <div class="pending-pay-bar">
-            <select id="metodo-sinmesa-${p.id}" onchange="onMetodoPendienteChange('${key}')" style="${divididoPre?'display:none;':''}">
+            <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')" style="${divididoPre?'display:none;':''}">
               <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
               <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
             </select>
             <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
-              style="${divididoPre ? 'display:none;' : (metodoInicial==='efectivo'?'':'display:none;')}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${p.monto_total||0})">
-            ${htmlPagoDividido(key, p.monto_total||0, divididoPre)}
-            <button class="btn btn-primary" onclick="marcarSinMesaPagado(${p.id})">✅ Marcar como pagado</button>
-            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${p.id}],'${p.grupo_pedido||''}')">+ Agregar producto</button>
-            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${p.id}],'${p.grupo_pedido||''}')">🍽 Agregar comida</button>
-            <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${p.id}])" title="Reubicar en mesa o a fiado">🔄 Ubicar en mesa</button>
-            <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
-            <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
-            <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕ Cancelar</button>
+              style="${divididoPre ? 'display:none;' : (metodoInicial==='efectivo'?'':'display:none;')}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+            ${htmlPagoDividido(key, total, divididoPre)}
+            <button class="btn btn-primary" onclick="marcarGrupoSinMesaPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
+            <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa o a fiado">🔄 Ubicar en mesa</button>
+            <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancela TODO este pedido">✕ Cancelar</button>
             <span id="vuelto-${key}" class="vuelto-box"></span>
           </div>
         </div>`; }).join('')}`;
@@ -3656,6 +3795,64 @@ function renderPendientes() {
       fiadosZone.innerHTML = '';
     }
   }
+
+  // Gratis — agrupados por grupo_pedido igual que los demás. No tiene barra
+  // de pago (no hay método ni pago dividido: no genera ingreso), solo un
+  // botón para confirmar que ya se entregó.
+  const gruposGratisOrdenados = Object.values(gratisGruposMap);
+  gruposGratisOrdenados.forEach(g => g.orders.sort((a,b) => (a.hora||'').localeCompare(b.hora||'')));
+  gruposGratisOrdenados.sort((a, b) => (a.orders[0].hora||'').localeCompare(b.orders[0].hora||''));
+
+  if (gratisZone) {
+    if (gruposGratisOrdenados.length) {
+      gratisZone.innerHTML = `
+        <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--orange);">🎁 Gratis pendientes</span></div>
+        ${gruposGratisOrdenados.map(grupo => {
+          const orders = grupo.orders;
+          const key = `gratis-${orders[0].grupo_pedido || orders[0].id}`;
+          const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
+          const idsGrupo = orders.map(o => o.id);
+          const primero = orders[0];
+          return `
+        <div class="pending-group">
+          <div class="pending-group-hdr">
+            <div>
+              <div class="pending-group-title" style="color:var(--orange);">🎁 Gratis — ${primero.hora||'—'}</div>
+              <div class="pending-group-sub">${orders.length} pedido(s) · no suma a los ingresos</div>
+            </div>
+            <div class="pending-group-total">${fmt(total)}</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Hora</th><th>Tipo</th><th>Detalle</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
+              <tbody>${orders.map(p => `
+                <tr>
+                  <td>${p.hora||'—'}</td>
+                  <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
+                  <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.detalle||'—'}</td>
+                  <td>${p.cantidad||1}</td>
+                  <td class="amount-pos">${fmt(p.monto_total||0)}</td>
+                  <td style="display:flex;gap:4px;white-space:nowrap;">
+                    <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
+                    <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
+                    <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕</button>
+                  </td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="pending-pay-bar">
+            <button class="btn btn-primary" onclick="marcarGrupoGratisPagado([${idsGrupo.join(',')}])">✅ Marcar como entregado</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
+            <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa, sin mesa o a fiado">🔄 Ubicar en mesa</button>
+            <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancela TODO este pedido">✕ Cancelar</button>
+          </div>
+        </div>`; }).join('')}`;
+    } else {
+      gratisZone.innerHTML = '';
+    }
+  }
 }
 
 // ── Render INGRESOS (solo pagados) ─────────────────────────────────────
@@ -3698,7 +3895,7 @@ function renderIngresos() {
         return `<tr>
         <td>${hora}</td>
         <td><span class="badge ${primero.turno==='cena'?'badge-purple':'badge-accent'}">${primero.turno==='cena'?'🌙 CR':'☀️ Alm'}</span></td>
-        <td style="font-size:11px;color:var(--text3);">${primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
+        <td style="font-size:11px;color:var(--text3);">${primero.es_gratis?'🎁 Gratis':primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
         <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${resumenPedido}">${resumenPedido}</td>
         <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resumenDetalle}</td>
         <td>${editandoEsteGrupo ? `
@@ -3712,6 +3909,8 @@ function renderIngresos() {
           </div>`
           : (primero.metodo === 'dividido'
               ? `<span class="badge ${metC(primero.metodo)}" title="${metodoLabel(primero)} — no editable acá, revierte el pago si necesitas corregirlo">💳 dividido</span>`
+              : primero.metodo === 'gratis'
+              ? `<span class="badge ${metC(primero.metodo)}" title="No genera ingreso — no editable acá">🎁 gratis</span>`
               : `<span class="badge ${metC(primero.metodo)}" style="cursor:pointer;" onclick="editarMetodoIngreso([${idsGrupo.join(',')}])" title="Clic para cambiar el método de pago">${primero.metodo} ✏</span>`)
         }</td>
         <td>${cantidadTotal}</td>
@@ -3737,7 +3936,7 @@ function renderIngresos() {
   document.getElementById('rc-psopa').textContent    = cnt(alm,'porcion-sopa');
   document.getElementById('rc-parroz').textContent   = cnt(alm,'porcion-arroz');
   document.getElementById('rc-pprot').textContent    = cnt(alm,'porcion-proteina');
-  document.getElementById('rc-total-alm').textContent = fmt(alm.reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('rc-total-alm').textContent = fmt(alm.reduce((a,b)=>a+montoIngreso(b),0));
 
   // CR breakdown por categoría
   const crCats = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS','SANDWICH CUBANO','AREPAS','SUIZOS','ADICIONALES','BEBIDAS'];
@@ -3746,7 +3945,7 @@ function renderIngresos() {
     const item = PL.comidaRapida.find(p => p.c === i.pedido);
     if (item) crCounts[item.cat] = (crCounts[item.cat] || 0) + (i.cantidad || 1);
   });
-  const crTotal    = cr.reduce((a,b) => a+(b.monto_total||0), 0);
+  const crTotal    = cr.reduce((a,b) => a+montoIngreso(b), 0);
   const crTotalCnt = cr.reduce((a,b) => a+(b.cantidad||1), 0);
   const crBody = document.getElementById('cr-resumen-body');
   if (crBody) {
@@ -3762,7 +3961,7 @@ function renderIngresos() {
 
   // Suma la venta de desayuno de hoy (no está en pedidos, solo en la apertura del turno) —
   // separada en efectivo/transferencia para que cada total quede en la columna correcta.
-  const totalHoy = hoy.reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy');
+  const totalHoy = hoy.reduce((a,b)=>a+montoIngreso(b),0) + desayunoEnPeriodo('hoy');
   document.getElementById('ing-hoy').textContent  = fmt(totalHoy);
   document.getElementById('ing-ef').textContent    = fmt(hoy.reduce((a,b)=>a+efectivoDe(b),0) + desayunoEnPeriodo('hoy','efectivo'));
   document.getElementById('ing-trans').textContent = fmt(hoy.reduce((a,b)=>a+transferenciaDe(b),0) + desayunoEnPeriodo('hoy','transferencia'));
@@ -4388,8 +4587,14 @@ async function moverPedidoAMesa(nuevaMesa) {
   if (mesaAnterior === nuevaMesa) { cerrarModalCambiarMesa(); return; }
 
   try {
-    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: nuevaMesa, es_sin_mesa: false, es_domicilio: false, es_fiar: false });
-    pedidosMover.forEach(p => { p.mesa = nuevaMesa; p.es_sin_mesa = false; p.es_domicilio = false; p.es_fiar = false; });
+    try {
+      await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: nuevaMesa, es_sin_mesa: false, es_domicilio: false, es_fiar: false, es_gratis: false });
+    } catch (e) {
+      if ((e.message||'').includes('es_gratis')) {
+        await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: nuevaMesa, es_sin_mesa: false, es_domicilio: false, es_fiar: false });
+      } else { throw e; }
+    }
+    pedidosMover.forEach(p => { p.mesa = nuevaMesa; p.es_sin_mesa = false; p.es_domicilio = false; p.es_fiar = false; p.es_gratis = false; });
 
     if (mesaAnterior) {
       const quedan = ST.pendientes.filter(x => x.mesa === mesaAnterior).length;
@@ -4421,8 +4626,14 @@ async function moverPedidoASinMesa() {
   if (!mesaAnterior && pedidosMover.every(p => p.es_sin_mesa)) { cerrarModalCambiarMesa(); return; }
 
   try {
-    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: null, es_sin_mesa: true, es_domicilio: false, es_fiar: false });
-    pedidosMover.forEach(p => { p.mesa = null; p.es_sin_mesa = true; p.es_domicilio = false; p.es_fiar = false; });
+    try {
+      await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: null, es_sin_mesa: true, es_domicilio: false, es_fiar: false, es_gratis: false });
+    } catch (e) {
+      if ((e.message||'').includes('es_gratis')) {
+        await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { mesa: null, es_sin_mesa: true, es_domicilio: false, es_fiar: false });
+      } else { throw e; }
+    }
+    pedidosMover.forEach(p => { p.mesa = null; p.es_sin_mesa = true; p.es_domicilio = false; p.es_fiar = false; p.es_gratis = false; });
 
     if (mesaAnterior) {
       const quedan = ST.pendientes.filter(x => x.mesa === mesaAnterior).length;
@@ -4453,8 +4664,14 @@ async function moverPedidoAFiado() {
   const mesaAnterior = pedidosMover[0].mesa;
 
   try {
-    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, mesa: null });
-    pedidosMover.forEach(p => { p.es_fiar = true; p.es_domicilio = false; p.es_sin_mesa = false; p.mesa = null; });
+    try {
+      await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, es_gratis: false, mesa: null });
+    } catch (e) {
+      if ((e.message||'').includes('es_gratis')) {
+        await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, mesa: null });
+      } else { throw e; }
+    }
+    pedidosMover.forEach(p => { p.es_fiar = true; p.es_domicilio = false; p.es_sin_mesa = false; p.es_gratis = false; p.mesa = null; });
 
     if (mesaAnterior) {
       const quedan = ST.pendientes.filter(x => x.mesa === mesaAnterior).length;
@@ -4486,7 +4703,7 @@ let extraProductoContexto = 'pendientes'; // 'pendientes' | 'ingresos'
 
 // Etiqueta corta de ubicación para un pedido — se reutiliza en varios modales.
 function etiquetaUbicacionPedido(p) {
-  return p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
+  return p.es_gratis ? 'Gratis' : p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
 }
 
 // Si el grupo al que se agrega algo todavía no tiene grupo_pedido (pedido
@@ -4574,7 +4791,7 @@ async function guardarProductoExtra() {
     detalle: desc, metodo: ref.metodo || 'efectivo', cantidad,
     monto_unit: valorUnitario, monto_almuerzo: valorTotal, monto_domicilio: 0, monto_total: valorTotal,
     estado: 'pendiente', es_domicilio: !!ref.es_domicilio, mesa: ref.mesa, para_llevar: false,
-    es_fiar: !!ref.es_fiar, es_sin_mesa: !!ref.es_sin_mesa, direccion: ref.direccion || '',
+    es_fiar: !!ref.es_fiar, es_sin_mesa: !!ref.es_sin_mesa, es_gratis: !!ref.es_gratis, direccion: ref.direccion || '',
     grupo_pedido: grupoPedido
   };
 
@@ -4584,10 +4801,10 @@ async function guardarProductoExtra() {
       [newPedido] = await sbInsert('pedidos', pedidoData);
     } catch (e) {
       const msg = e.message || '';
-      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido')) {
-        const { es_fiar, direccion, es_sin_mesa, grupo_pedido: gV, ...pedidoBase } = pedidoData;
+      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido')) {
+        const { es_fiar, direccion, es_sin_mesa, es_gratis, grupo_pedido: gV, ...pedidoBase } = pedidoData;
         [newPedido] = await sbInsert('pedidos', pedidoBase);
-        newPedido.es_fiar = es_fiar; newPedido.direccion = direccion; newPedido.es_sin_mesa = es_sin_mesa; newPedido.grupo_pedido = gV;
+        newPedido.es_fiar = es_fiar; newPedido.direccion = direccion; newPedido.es_sin_mesa = es_sin_mesa; newPedido.es_gratis = es_gratis; newPedido.grupo_pedido = gV;
       } else { throw e; }
     }
     ST.pendientes.unshift(newPedido);
@@ -4642,7 +4859,7 @@ function abrirModalAgregarComida(idsGrupo, grupoPedido) {
   agregarComidaContexto = {
     idsGrupo: idArr, grupoPedido: grupoPedido || ref.grupo_pedido || null,
     fecha: ref.fecha, turno: ref.turno, mesa: ref.mesa,
-    es_domicilio: !!ref.es_domicilio, es_fiar: !!ref.es_fiar, es_sin_mesa: !!ref.es_sin_mesa,
+    es_domicilio: !!ref.es_domicilio, es_fiar: !!ref.es_fiar, es_sin_mesa: !!ref.es_sin_mesa, es_gratis: !!ref.es_gratis,
     direccion: ref.direccion || '', metodo: ref.metodo || 'efectivo'
   };
 
@@ -4771,7 +4988,7 @@ async function guardarAgregarComida() {
     sopa, arroz, proteina, acomp, detalle, metodo: ctx.metodo, cantidad,
     monto_unit: montoUnit, monto_almuerzo, monto_domicilio, monto_total,
     estado: 'pendiente', es_domicilio: ctx.es_domicilio, mesa: ctx.mesa, para_llevar: paraLlevar,
-    es_fiar: ctx.es_fiar, es_sin_mesa: ctx.es_sin_mesa, direccion: ctx.direccion,
+    es_fiar: ctx.es_fiar, es_sin_mesa: ctx.es_sin_mesa, es_gratis: ctx.es_gratis, direccion: ctx.direccion,
     grupo_pedido: grupoPedido
   };
 
@@ -4781,10 +4998,10 @@ async function guardarAgregarComida() {
       [newPedido] = await sbInsert('pedidos', pedidoData);
     } catch (e) {
       const msg = e.message || '';
-      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido')) {
-        const { es_fiar, direccion, es_sin_mesa, grupo_pedido: gV, ...pedidoBase } = pedidoData;
+      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido')) {
+        const { es_fiar, direccion, es_sin_mesa, es_gratis, grupo_pedido: gV, ...pedidoBase } = pedidoData;
         [newPedido] = await sbInsert('pedidos', pedidoBase);
-        newPedido.es_fiar = es_fiar; newPedido.direccion = direccion; newPedido.es_sin_mesa = es_sin_mesa; newPedido.grupo_pedido = gV;
+        newPedido.es_fiar = es_fiar; newPedido.direccion = direccion; newPedido.es_sin_mesa = es_sin_mesa; newPedido.es_gratis = es_gratis; newPedido.grupo_pedido = gV;
       } else { throw e; }
     }
     ST.pendientes.unshift(newPedido);
@@ -5196,9 +5413,13 @@ function renderTablero() {
 
   // Ticket promedio: solo almuerzos (excluye desayuno y comidas rápidas),
   // así que se necesita "alm" antes de calcularlo.
+  // "alm" incluye los gratis (para que las cantidades/top de la sección de
+  // abajo cuenten también los almuerzos regalados) — el ticket promedio, en
+  // cambio, solo debe mirar los que sí generaron ingreso.
   const alm = ings.filter(i => i.turno === 'almuerzo');
-  const almMonto    = alm.reduce((a,b) => a + (b.monto_total||0), 0);
-  const almCantidad = alm.reduce((a,b) => a + (b.cantidad||1), 0);
+  const almPagos    = alm.filter(i => !i.es_gratis);
+  const almMonto    = almPagos.reduce((a,b) => a + (b.monto_total||0), 0);
+  const almCantidad = almPagos.reduce((a,b) => a + (b.cantidad||1), 0);
 
   document.getElementById('kpi-ingresos').textContent = fmt(tI);
   document.getElementById('kpi-egresos').textContent  = fmt(tE);
@@ -5213,9 +5434,9 @@ function renderTablero() {
   const al = [];
   const pendienteDeCierre = ST.ingresos
     .filter(i => inP(i.fecha, fTablero) && !cerrados.has(`${i.fecha}::${i.turno}`))
-    .reduce((a,b)=>a+(b.monto_total||0),0);
+    .reduce((a,b)=>a+montoIngreso(b),0);
   if (pendienteDeCierre > 0) al.push({t:'info', m:`🔓 Hay ${fmt(pendienteDeCierre)} en pedidos pagados de turnos sin cerrar — no están incluidos en este panel. Ciérralos desde Cierre para que aparezcan aquí.`});
-  const pendTotal = ST.pendientes.reduce((a,b)=>a+(b.monto_total||0),0);
+  const pendTotal = ST.pendientes.reduce((a,b)=>a+montoIngreso(b),0);
   if (ST.pendientes.length > 0) al.push({t:'info', m:`⏳ ${ST.pendientes.length} pedido(s) pendiente(s) de cobro · ${fmt(pendTotal)} por recaudar`});
   if (tE > tI && tI > 0) al.push({t:'warning', m:`⚠ Gastos mayores a ingresos en este período. Egresos: ${fmt(tE)}`});
   if (mg < 20 && tI > 0) al.push({t:'info',    m:`💡 Margen del ${mg}%. Un restaurante saludable apunta a 25%+`});
@@ -5234,11 +5455,11 @@ function renderTablero() {
   document.getElementById('rp-psopa').textContent = cnt('porcion-sopa');
   document.getElementById('rp-parroz').textContent= cnt('porcion-arroz');
   document.getElementById('rp-pprot').textContent = cnt('porcion-proteina');
-  document.getElementById('rp-tal').textContent   = fmt(alm.reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('rp-tal').textContent   = fmt(almPagos.reduce((a,b)=>a+(b.monto_total||0),0));
 
   document.getElementById('rp-ef').textContent    = fmt(totalEfectivoCierres);
   document.getElementById('rp-trans').textContent = fmt(totalTransferenciaCierres);
-  document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+montoIngreso(b),0));
   document.getElementById('rp-ting').textContent  = fmt(tI);
 
   document.getElementById('rp-nom').textContent   = fmt(egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
@@ -5274,7 +5495,7 @@ function renderTablero() {
     const cat = item.cat;
     if (!crPorCat[cat]) crPorCat[cat] = { count: 0, total: 0, items: {} };
     crPorCat[cat].count += (pedido.cantidad || 1);
-    crPorCat[cat].total += (pedido.monto_total || 0);
+    crPorCat[cat].total += montoIngreso(pedido);
     crPorCat[cat].items[item.n] = (crPorCat[cat].items[item.n] || 0) + (pedido.cantidad || 1);
   });
   const crCatEl = document.getElementById('rp-cr-categorias');
@@ -5305,7 +5526,7 @@ function renderTablero() {
         </div>
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px;">
           <strong style="color:var(--text);">Total comidas rápidas</strong>
-          <strong style="color:var(--green);">${fmt(crIng.reduce((a, b) => a + (b.monto_total || 0), 0))}</strong>
+          <strong style="color:var(--green);">${fmt(crIng.reduce((a, b) => a + montoIngreso(b), 0))}</strong>
         </div>`;
     }
   }
@@ -5322,7 +5543,7 @@ function renderTablero() {
     const gastoProv = egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0);
     if (gastoProv/tI > 0.35) drivers.push({tp:'negative',ti:'🍗 Costo de proveedores alto',bo:'Proveedores >35% de ingresos. Negocia precios o revisa porciones.'});
 
-    const crT = ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(b.monto_total||0),0);
+    const crT = ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+montoIngreso(b),0);
     if (tI > 0 && crT/tI < 0.2 && crT > 0) drivers.push({tp:'neutral',ti:'🌙 Potencial en comidas rápidas',bo:`Turno nocturno solo representa el ${((crT/tI)*100).toFixed(0)}% de los ingresos.`});
 
     const bajS = ST.inventario.filter(p=>p.stock<=p.minimo);
@@ -5368,16 +5589,27 @@ function renderHistorialPedidosIngresos() {
   const tbody = document.getElementById('ingfin-pedidos-body');
   if (!tbody) return;
   const f = fPedidosHist;
-  const list = ST.ingresos.filter(i => {
+  // Se filtra por fecha/turno ANTES de agrupar, pero el método y el origen se
+  // evalúan sobre el GRUPO completo (un pedido puede traer varios ítems, o ser
+  // "dividido" con parte en cada método) — filtrar fila por fila antes de
+  // agrupar dejaba fuera del grupo los ítems que no calzaban, y el pedido se
+  // veía partido/incompleto en el historial.
+  const preFiltrados = ST.ingresos.filter(i => {
     if (!enFiltroFecha(i.fecha, f)) return false;
     if (f.turno !== 'todos' && i.turno !== f.turno) return false;
-    if (f.metodo === 'efectivo' && efectivoDe(i) <= 0) return false;
-    if (f.metodo === 'transferencia' && transferenciaDe(i) <= 0) return false;
-    if (f.origen === 'fiado' && !i.es_fiar) return false;
     return true;
-  }).sort((a,b) => b.fecha === a.fecha ? (b.hora||'').localeCompare(a.hora||'') : b.fecha.localeCompare(a.fecha));
+  });
+  let grupos = agruparPorPedido(preFiltrados);
+  if (f.metodo === 'efectivo')      grupos = grupos.filter(orders => orders.reduce((a,o)=>a+efectivoDe(o),0) > 0);
+  else if (f.metodo === 'transferencia') grupos = grupos.filter(orders => orders.reduce((a,o)=>a+transferenciaDe(o),0) > 0);
+  if (f.origen === 'fiado')  grupos = grupos.filter(orders => orders.some(o => o.es_fiar));
+  if (f.origen === 'gratis') grupos = grupos.filter(orders => orders.some(o => o.es_gratis));
+  grupos.sort((a,b) => {
+    const pa = a[0], pb = b[0];
+    return pb.fecha === pa.fecha ? (pb.hora||'').localeCompare(pa.hora||'') : pb.fecha.localeCompare(pa.fecha);
+  });
+  const list = grupos.flat();
 
-  const grupos = agruparPorPedido(list);
   tbody.innerHTML = grupos.length
     ? grupos.map(orders => {
         const primero = orders[0];
@@ -5390,7 +5622,7 @@ function renderHistorialPedidosIngresos() {
         <td>${primero.fecha}</td>
         <td>${primero.hora||'—'}</td>
         <td><span class="badge ${primero.turno==='cena'?'badge-purple':'badge-accent'}">${primero.turno==='cena'?'🌙 CR':'☀️ Alm'}</span></td>
-        <td style="font-size:11px;color:var(--text3);">${primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
+        <td style="font-size:11px;color:var(--text3);">${primero.es_gratis?'🎁 Gratis':primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
         <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${resumenPedido}">${resumenPedido}</td>
         <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resumenDetalle}</td>
         <td><span class="badge ${metC(primero.metodo)}" title="${metodoLabel(primero)}">${primero.metodo}</span></td>
@@ -5401,9 +5633,12 @@ function renderHistorialPedidosIngresos() {
       }).join('')
     : `<tr><td colspan="10"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin pedidos en este filtro</div></div></td></tr>`;
 
+  // El total de la derecha es "ingresos" — lo que dio gratis no ingresó nada,
+  // así que no se suma ahí (efectivo/transferencia ya lo excluyen solos,
+  // porque metodo='gratis' no es ni 'efectivo' ni 'transferencia').
   document.getElementById('ingfin-ped-sum-ef').textContent    = fmt(list.reduce((a,i)=>a+efectivoDe(i),0));
   document.getElementById('ingfin-ped-sum-tr').textContent    = fmt(list.reduce((a,i)=>a+transferenciaDe(i),0));
-  document.getElementById('ingfin-ped-sum-total').textContent = fmt(list.reduce((a,i)=>a+(i.monto_total||0),0));
+  document.getElementById('ingfin-ped-sum-total').textContent = fmt(list.reduce((a,i)=>a+(i.es_gratis?0:(i.monto_total||0)),0));
 }
 
 async function agregarIngresoExtra() {
@@ -6137,7 +6372,7 @@ function renderBarChart() {
     const lb = d.toLocaleDateString('es-CO', {weekday:'short'});
     days.push({
       lb,
-      ing: ST.ingresos.filter(x=>x.fecha===f).reduce((a,b)=>a+(b.monto_total||0),0),
+      ing: ST.ingresos.filter(x=>x.fecha===f).reduce((a,b)=>a+montoIngreso(b),0),
       egr: ST.egresos.filter(x=>x.fecha===f).reduce((a,b)=>a+b.monto,0)
     });
   }

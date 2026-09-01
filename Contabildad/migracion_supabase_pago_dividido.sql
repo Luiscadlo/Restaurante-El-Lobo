@@ -18,6 +18,13 @@ alter table pedidos add column if not exists monto_transferencia numeric default
 -- La tabla ya tenía un check constraint (pedidos_metodo_check) que solo
 -- permitía 'efectivo' o 'transferencia' — por eso el pago dividido fallaba
 -- con "violates check constraint". Se reemplaza para que también acepte
--- 'dividido'.
+-- 'dividido' y 'gratis'.
 alter table pedidos drop constraint if exists pedidos_metodo_check;
-alter table pedidos add constraint pedidos_metodo_check check (metodo in ('efectivo','transferencia','dividido'));
+alter table pedidos add constraint pedidos_metodo_check check (metodo in ('efectivo','transferencia','dividido','gratis'));
+
+-- Columna nueva para el botón "Gratis" de Pedidos -----------------------
+-- Un pedido "gratis" (regalo de la casa / consumo del dueño) queda con
+-- metodo='gratis' y NO suma a ningún total de ingresos/ventas, pero sí
+-- queda registrado (qué se dio, cantidad, valor de referencia) para llevar
+-- el conteo de cuánto se regala.
+alter table pedidos add column if not exists es_gratis boolean default false;
