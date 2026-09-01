@@ -156,6 +156,7 @@
   .amount-neg { color: var(--red); font-weight: 500; }
 
   .filter-bar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+  .filtro-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); font-family: 'Syne', sans-serif; font-weight: 600; margin-bottom: 6px; }
   .filter-btn { padding: 7px 14px; border-radius: 20px; border: 1px solid var(--border2); background: transparent; color: var(--text2); cursor: pointer; font-family: 'Syne', sans-serif; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; transition: all 0.2s; white-space: nowrap; }
   .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #0f0e0c; }
   .filter-btn:hover:not(.active) { border-color: var(--text2); color: var(--text); }
@@ -657,6 +658,23 @@
           </div>
         </div>
 
+        <!-- Pago dividido: parte en efectivo, parte en transferencia -->
+        <div class="para-llevar-row mb">
+          <input type="checkbox" id="ing-dividido-chk" onchange="toggleDivididoIngreso()">
+          <label for="ing-dividido-chk" style="cursor:pointer;">💳 Pago dividido <span style="color:var(--text3);font-weight:400;">(parte efectivo, parte transferencia)</span></label>
+        </div>
+        <div id="ing-dividido-campos" class="form-row mb" style="display:none;">
+          <div class="form-group">
+            <label>Efectivo ($)</label>
+            <input type="text" inputmode="numeric" id="ing-dividido-ef" placeholder="0" oninput="formatMilesInput(this); actualizarDivididoRestanteIngreso()">
+          </div>
+          <div class="form-group">
+            <label>Transferencia ($)</label>
+            <input type="text" inputmode="numeric" id="ing-dividido-tr" placeholder="0" oninput="formatMilesInput(this); actualizarDivididoRestanteIngreso()">
+          </div>
+        </div>
+        <div id="ing-dividido-restante" style="font-size:11px;margin:-6px 0 12px;"></div>
+
         <!-- Calculadora de vuelto (solo pantalla, no se guarda; solo en efectivo) -->
         <div id="vuelto-section" class="form-group mb">
           <label>¿Con cuánto pagó? ($) <span style="color:var(--text3);font-weight:400;">— opcional, solo calcula el vuelto</span></label>
@@ -958,14 +976,49 @@
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">Historial de ingresos <span style="color:var(--text3);font-size:11px;">— cierres guardados + ingresos adicionales</span></div>
-        <div class="filter-bar" style="margin-bottom:0;">
-          <button class="filter-btn" onclick="setFIngFin('hoy',this)">Hoy</button>
-          <button class="filter-btn active" onclick="setFIngFin('semana',this)">Semana</button>
-          <button class="filter-btn" onclick="setFIngFin('mes',this)">Mes</button>
-          <button class="filter-btn" onclick="setFIngFin('todo',this)">Todo</button>
+      </div>
+      <div class="panel-body" style="padding-bottom:0;">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:4px;">
+          <div>
+            <div class="filtro-label">Período</div>
+            <div class="filter-bar" style="margin-bottom:0;" id="ingresoshist-filtros-periodo">
+              <button class="filter-btn" onclick="setFIngresosHist('periodo','hoy',this)">Hoy</button>
+              <button class="filter-btn active" onclick="setFIngresosHist('periodo','semana',this)">Semana</button>
+              <button class="filter-btn" onclick="setFIngresosHist('periodo','mes',this)">Mes</button>
+              <button class="filter-btn" onclick="setFIngresosHist('periodo','todo',this)">Todo</button>
+            </div>
+          </div>
+          <div>
+            <div class="filtro-label">Día específico</div>
+            <input type="date" id="ingresoshist-fecha" style="padding:8px 10px;" onchange="setFIngresosHistFecha(this.value)">
+          </div>
+          <div>
+            <div class="filtro-label">Turno</div>
+            <div class="filter-bar" style="margin-bottom:0;" id="ingresoshist-filtros-turno">
+              <button class="filter-btn active" onclick="setFIngresosHist('turno','todos',this)">Todos</button>
+              <button class="filter-btn" onclick="setFIngresosHist('turno','almuerzo',this)">☀️ Almuerzo</button>
+              <button class="filter-btn" onclick="setFIngresosHist('turno','cena',this)">🌙 Comida rápida</button>
+            </div>
+          </div>
+          <div>
+            <div class="filtro-label">Método</div>
+            <div class="filter-bar" style="margin-bottom:0;" id="ingresoshist-filtros-metodo">
+              <button class="filter-btn active" onclick="setFIngresosHist('metodo','todos',this)">Todos</button>
+              <button class="filter-btn" onclick="setFIngresosHist('metodo','efectivo',this)">Efectivo</button>
+              <button class="filter-btn" onclick="setFIngresosHist('metodo','transferencia',this)">Transferencia</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Origen</th><th>Detalle</th><th>Efectivo</th><th>Transferencia</th><th>Monto</th><th></th></tr></thead><tbody id="ingfin-body"></tbody></table></div>
+      <div class="panel-body" style="padding-top:10px;border-top:1px solid var(--border);">
+        <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;">
+          <span>Efectivo <strong class="amount-pos" id="ingfin-sum-ef">$0</strong></span>
+          <span>Transferencia <strong class="amount-pos" id="ingfin-sum-tr">$0</strong></span>
+          <span>Total <strong class="amount-pos" id="ingfin-sum-total">$0</strong></span>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px;">Los ingresos adicionales cuentan en el total, pero no en el desglose efectivo/transferencia (no distinguen método).</div>
+      </div>
     </div>
 
     <div class="panel">
@@ -975,7 +1028,7 @@
       <div class="panel-body" style="padding-bottom:0;">
         <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:4px;">
           <div>
-            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:600;margin-bottom:6px;">Período</div>
+            <div class="filtro-label">Período</div>
             <div class="filter-bar" style="margin-bottom:0;" id="ingfin-ped-filtros-periodo">
               <button class="filter-btn" onclick="setFPedidosHist('periodo','hoy',this)">Hoy</button>
               <button class="filter-btn" onclick="setFPedidosHist('periodo','semana',this)">Semana</button>
@@ -984,7 +1037,11 @@
             </div>
           </div>
           <div>
-            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:600;margin-bottom:6px;">Turno</div>
+            <div class="filtro-label">Día específico</div>
+            <input type="date" id="ingfin-ped-fecha" style="padding:8px 10px;" onchange="setFPedidosHistFecha(this.value)">
+          </div>
+          <div>
+            <div class="filtro-label">Turno</div>
             <div class="filter-bar" style="margin-bottom:0;" id="ingfin-ped-filtros-turno">
               <button class="filter-btn active" onclick="setFPedidosHist('turno','todos',this)">Todos</button>
               <button class="filter-btn" onclick="setFPedidosHist('turno','almuerzo',this)">☀️ Almuerzo</button>
@@ -992,7 +1049,7 @@
             </div>
           </div>
           <div>
-            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:600;margin-bottom:6px;">Método</div>
+            <div class="filtro-label">Método</div>
             <div class="filter-bar" style="margin-bottom:0;" id="ingfin-ped-filtros-metodo">
               <button class="filter-btn active" onclick="setFPedidosHist('metodo','todos',this)">Todos</button>
               <button class="filter-btn" onclick="setFPedidosHist('metodo','efectivo',this)">Efectivo</button>
@@ -1000,7 +1057,7 @@
             </div>
           </div>
           <div>
-            <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'Syne',sans-serif;font-weight:600;margin-bottom:6px;">Origen</div>
+            <div class="filtro-label">Origen</div>
             <div class="filter-bar" style="margin-bottom:0;" id="ingfin-ped-filtros-origen">
               <button class="filter-btn active" onclick="setFPedidosHist('origen','todos',this)">Todos</button>
               <button class="filter-btn" onclick="setFPedidosHist('origen','fiado',this)">📒 Solo fiados</button>
@@ -1011,6 +1068,13 @@
       <div class="table-wrap">
         <table><thead><tr><th>Fecha</th><th>Hora</th><th>Turno</th><th>Ubicación</th><th>Pedido</th><th>Detalle</th><th>Método</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
         <tbody id="ingfin-pedidos-body"></tbody></table>
+      </div>
+      <div class="panel-body" style="padding-top:10px;border-top:1px solid var(--border);">
+        <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;">
+          <span>Efectivo <strong class="amount-pos" id="ingfin-ped-sum-ef">$0</strong></span>
+          <span>Transferencia <strong class="amount-pos" id="ingfin-ped-sum-tr">$0</strong></span>
+          <span>Total <strong class="amount-pos" id="ingfin-ped-sum-total">$0</strong></span>
+        </div>
       </div>
     </div>
   </div>
@@ -1859,6 +1923,14 @@ function inP(fecha, p) {
   return true;
 }
 
+// Igual que inP(), pero si el filtro trae una fecha específica (YYYY-MM-DD)
+// esta manda por encima del período — para poder ver "un día en particular"
+// sin importar hace cuánto fue, en los historiales de Ingresos.
+function enFiltroFecha(fecha, filtro) {
+  if (filtro.fecha) return fecha === filtro.fecha;
+  return inP(fecha, filtro.periodo);
+}
+
 // Venta de desayuno del período: no es un "pedido" (no está en la tabla
 // pedidos), solo se registra al abrir el turno de almuerzo — hay que sumarla
 // aparte en cualquier total de ingresos para que cuadre con Cierre/Caja.
@@ -1877,9 +1949,28 @@ function turnoFromHora(h) {
   return (m >= 540 && m < 1020) ? 'almuerzo' : 'cena';
 }
 
-const metC = m => m==='efectivo'?'badge-green':'badge-accent';
+const metC = m => m==='efectivo'?'badge-green':m==='dividido'?'badge-purple':'badge-accent';
 const catC = c => c==='nomina'?'badge-blue':['arriendo','servicios'].includes(c)?'badge-gray':c==='prestamo'?'badge-purple':'badge-red';
 const CAT_LABELS = { nomina:'Nómina', proveedor:'Proveedores', arriendo:'Arriendo', servicios:'Servicios', otro:'Otro', prestamo:'Préstamo' };
+
+// ── Pago dividido (efectivo + transferencia en un mismo pedido) ────────
+// metodo='dividido' guarda el reparto exacto en monto_efectivo/monto_transferencia
+// (0 en pedidos con método normal). Estas dos funciones son la ÚNICA forma
+// correcta de saber cuánto efectivo/transferencia aportó un pedido — se usan
+// en TODOS los cálculos de caja, cierre y reportes para que un pago dividido
+// nunca se pierda ni se cuente en la columna equivocada.
+function efectivoDe(p) {
+  if (p.metodo === 'dividido') return p.monto_efectivo || 0;
+  return p.metodo === 'efectivo' ? (p.monto_total || 0) : 0;
+}
+function transferenciaDe(p) {
+  if (p.metodo === 'dividido') return p.monto_transferencia || 0;
+  return p.metodo === 'transferencia' ? (p.monto_total || 0) : 0;
+}
+function metodoLabel(p) {
+  if (p.metodo !== 'dividido') return p.metodo;
+  return `dividido (efvo ${fmt(p.monto_efectivo||0)} · transf ${fmt(p.monto_transferencia||0)})`;
+}
 
 // ── Exportar / Importar ───────────────────────────────────────────────
 function exportarDatos() {
@@ -2002,7 +2093,11 @@ document.getElementById('ing-hora').value = nowTime();
 let fI = 'todos', fE = 'hoy', fInv = 'todos', fTablero = 'mes', fIngFin = 'semana';
 // Filtros del "Historial de pedidos" en Ingresos — a diferencia de Pedidos
 // (siempre hoy), este mira cualquier fecha, filtrable por turno/método/fiado.
-let fPedidosHist = { periodo: 'mes', turno: 'todos', metodo: 'todos', origen: 'todos' };
+// fecha: cuando tiene un valor (YYYY-MM-DD), filtra ESE día exacto y el
+// período (Hoy/Semana/Mes/Todo) se ignora — así se puede ver un día en
+// específico sin importar hace cuánto fue.
+let fPedidosHist = { periodo: 'mes', fecha: '', turno: 'todos', metodo: 'todos', origen: 'todos' };
+let fIngresosHist = { periodo: 'semana', fecha: '', turno: 'todos', metodo: 'todos' };
 let ddEditId = null;
 
 // ── Autocomplete índices ──────────────────────────────────────────────
@@ -2300,6 +2395,56 @@ function calcularVuelto() {
     : `<span style="color:var(--green);">Vuelto a entregar: ${fmt(vuelto)}</span>`;
 }
 
+// ── Pago dividido en el formulario de registro — el total cambia en vivo
+// mientras se arma el pedido, así que a diferencia de Pendientes (donde el
+// total ya es fijo) acá se relee calcularTotalPedido() cada vez.
+function toggleDivididoIngreso() {
+  const chk = document.getElementById('ing-dividido-chk');
+  const campos = document.getElementById('ing-dividido-campos');
+  const metodoSel = document.getElementById('ing-metodo');
+  const vueltoSec = document.getElementById('vuelto-section');
+  const activo = !!(chk && chk.checked);
+
+  if (campos)   campos.style.display   = activo ? 'grid' : 'none';
+  if (metodoSel) metodoSel.parentElement.style.display = activo ? 'none' : '';
+  if (vueltoSec) vueltoSec.style.display = activo ? 'none' : (document.getElementById('ing-metodo').value === 'efectivo' ? 'flex' : 'none');
+
+  if (activo) {
+    const { total } = calcularTotalPedido();
+    document.getElementById('ing-dividido-ef').value = Number(total).toLocaleString('es-CO');
+    document.getElementById('ing-dividido-tr').value = '0';
+    actualizarDivididoRestanteIngreso();
+  } else {
+    document.getElementById('ing-dividido-restante').textContent = '';
+  }
+}
+
+function actualizarDivididoRestanteIngreso() {
+  const el = document.getElementById('ing-dividido-restante');
+  const chk = document.getElementById('ing-dividido-chk');
+  if (!el || !chk || !chk.checked) { if (el) el.textContent = ''; return; }
+  const { total } = calcularTotalPedido();
+  const ef = valMiles('ing-dividido-ef');
+  const tr = valMiles('ing-dividido-tr');
+  const restante = total - ef - tr;
+  if (restante === 0) {
+    el.innerHTML = '<span style="color:var(--green);">✓ Cuadra con el total</span>';
+  } else {
+    el.innerHTML = `<span style="color:var(--red);">${restante > 0 ? 'Falta ' + fmt(restante) : 'Sobra ' + fmt(Math.abs(restante))}</span>`;
+  }
+}
+
+// Igual contrato que leerPagoDividido(key,total): null si no está activo,
+// {error:true} si no cuadra, o {efectivo, transferencia} si está listo.
+function leerPagoDivididoIngreso(total) {
+  const chk = document.getElementById('ing-dividido-chk');
+  if (!chk || !chk.checked) return null;
+  const efectivo      = valMiles('ing-dividido-ef');
+  const transferencia = valMiles('ing-dividido-tr');
+  if (efectivo + transferencia !== total) return { error: true };
+  return { efectivo, transferencia };
+}
+
 // ── Turno ─────────────────────────────────────────────────────────────
 function rebuildPedidoSelect() {
   const turno = turnoManual;
@@ -2533,6 +2678,7 @@ function actualizarMontoDisplay() {
   }
 
   calcularVuelto();
+  actualizarDivididoRestanteIngreso();
 }
 
 // ── Autocomplete ──────────────────────────────────────────────────────
@@ -2598,7 +2744,6 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   if (!selectedUbicacion) { showToast('⚠ Selecciona una mesa, domicilio, fiado o sin mesa', 'warning'); return; }
   const fecha  = document.getElementById('ing-fecha').value;
   const hora   = document.getElementById('ing-hora').value;
-  const metodo = document.getElementById('ing-metodo').value;
   const turno  = turnoManual;
 
   if (!fecha||!hora) { showToast('⚠ Completa fecha y hora', 'warning'); return; }
@@ -2611,6 +2756,15 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   const itemActual = leerAlmuerzoActualDelFormulario();
   const items = [...almuerzosEnCola, ...(itemActual ? [itemActual] : [])];
   if (!items.length && !extrasIngresoPendientes.length) { showToast('⚠ Agrega al menos un almuerzo o un producto extra', 'warning'); return; }
+
+  const { total: totalPedidoCompleto } = calcularTotalPedido();
+  const dividido = leerPagoDivididoIngreso(totalPedidoCompleto);
+  if (dividido && dividido.error) { showToast('⚠ Pago dividido: efectivo + transferencia debe sumar exactamente el total', 'warning'); return; }
+  const metodo = dividido ? 'dividido' : document.getElementById('ing-metodo').value;
+  // El reparto exacto del pago dividido se guarda una sola vez, en el primer
+  // ítem que se inserte del pedido (almuerzo o extra) — igual que ya se hace
+  // con el valor del domicilio, para que la suma del pedido cuadre exacto.
+  let divididoPendienteDeAsignar = !!dividido;
 
   const direccionValue = selectedUbicacion === 'domicilio'
     ? (document.getElementById('ing-direccion')?.value.trim() || '')
@@ -2640,11 +2794,16 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
       const monto_domicilio = envio + empaquePorUnidad * (item.cantidad || 1);
       const monto_total = item.monto_almuerzo + monto_domicilio;
 
+      const esPrimeroDividido = divididoPendienteDeAsignar;
+      if (divididoPendienteDeAsignar) divididoPendienteDeAsignar = false;
+
       const pedidoData = {
         fecha, hora, turno, pedido: item.pedido,
         sopa: item.sopa, arroz: item.arroz, proteina: item.proteina, acomp: item.acomp,
         detalle: item.detalle, metodo, cantidad: item.cantidad,
         monto_unit: item.monto_unit, monto_almuerzo: item.monto_almuerzo, monto_domicilio, monto_total,
+        monto_efectivo: esPrimeroDividido ? dividido.efectivo : 0,
+        monto_transferencia: esPrimeroDividido ? dividido.transferencia : 0,
         estado: estadoFinal, es_domicilio: selectedUbicacion === 'domicilio',
         mesa: mesa_numero, para_llevar: item.para_llevar,
         es_fiar: selectedUbicacion === 'fiar',
@@ -2657,12 +2816,15 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         [newPedido] = await sbInsert('pedidos', pedidoData);
       } catch (e) {
         const msg = e.message || '';
-        if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido')) {
+        if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
           // Columnas opcionales aún no existen en Supabase — reintenta sin ellas
-          const { es_fiar: esFiarVal, direccion: dirVal, es_sin_mesa: esSinMesaVal, grupo_pedido: grupoVal, ...pedidoBase } = pedidoData;
+          const { es_fiar: esFiarVal, direccion: dirVal, es_sin_mesa: esSinMesaVal, grupo_pedido: grupoVal, monto_efectivo: mEf, monto_transferencia: mTr, ...pedidoBase } = pedidoData;
           [newPedido] = await sbInsert('pedidos', pedidoBase);
           newPedido.es_fiar = esFiarVal; newPedido.direccion = dirVal;
           newPedido.es_sin_mesa = esSinMesaVal; newPedido.grupo_pedido = grupoVal;
+          if (dividido && (msg.includes('monto_efectivo') || msg.includes('monto_transferencia'))) {
+            showToast('⚠ El reparto del pago dividido no se guardó — falta agregar esas columnas en Supabase (ver script SQL)', 'warning');
+          }
         } else { throw e; }
       }
 
@@ -2689,12 +2851,16 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
           ? valMiles('ing-domicilio-valor')
           : 0;
         if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
+        const esPrimeroDividido = divididoPendienteDeAsignar;
+        if (divididoPendienteDeAsignar) divididoPendienteDeAsignar = false;
         const extraData = {
           fecha, hora, turno, pedido: 'extra',
           sopa: '', arroz: '', proteina: '', acomp: '',
           detalle: ex.descripcion, metodo, cantidad: ex.cantidad,
           monto_unit: ex.valorUnitario, monto_almuerzo: ex.valorUnitario * ex.cantidad,
           monto_domicilio: montoDomicilioExtra, monto_total: ex.valorUnitario * ex.cantidad + montoDomicilioExtra,
+          monto_efectivo: esPrimeroDividido ? dividido.efectivo : 0,
+          monto_transferencia: esPrimeroDividido ? dividido.transferencia : 0,
           estado: estadoFinal, es_domicilio: selectedUbicacion === 'domicilio',
           mesa: mesa_numero, para_llevar: false,
           es_fiar: selectedUbicacion === 'fiar', es_sin_mesa: selectedUbicacion === 'sinmesa',
@@ -2706,8 +2872,8 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
             [newExtra] = await sbInsert('pedidos', extraData);
           } catch (e) {
             const msg = e.message || '';
-            if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido')) {
-              const { es_fiar: efV, direccion: dV, es_sin_mesa: esmV, grupo_pedido: gV, ...extraBase } = extraData;
+            if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
+              const { es_fiar: efV, direccion: dV, es_sin_mesa: esmV, grupo_pedido: gV, monto_efectivo: mEf, monto_transferencia: mTr, ...extraBase } = extraData;
               [newExtra] = await sbInsert('pedidos', extraBase);
               newExtra.es_fiar = efV; newExtra.direccion = dV; newExtra.es_sin_mesa = esmV; newExtra.grupo_pedido = gV;
             } else { throw e; }
@@ -2747,6 +2913,8 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     document.getElementById('ing-hora').value = nowTime();
     document.getElementById('ing-pago-con').value = '';
     document.getElementById('vuelto-resultado').innerHTML = '';
+    document.getElementById('ing-dividido-chk').checked = false;
+    toggleDivididoIngreso();
     document.getElementById('ing-domicilio-valor').value = '';
     const dirResetEl = document.getElementById('ing-direccion');
     if (dirResetEl) dirResetEl.value = '';
@@ -2832,7 +3000,7 @@ function mostrarDetallePedidoModal(i) {
     ['Ubicación',   i.es_fiar ? '📒 Fiado' : i.es_sin_mesa ? '🧍 Sin mesa' : i.es_domicilio ? '🛵 Domicilio' : i.mesa ? `Mesa ${i.mesa}` : '—'],
     i.es_domicilio && i.direccion ? ['Dirección', '📍 ' + i.direccion] : null,
     ['Estado de pago', i.estado === 'pagado' ? '✅ Pagado' : '⏳ Pendiente de pago'],
-    ['Método',      i.metodo],
+    ['Método',      metodoLabel(i)],
     ['Cantidad',    i.cantidad || 1],
     !esCR && i.sopa     ? ['Sopa',           i.sopa]     : null,
     !esCR && i.arroz    ? ['Arroz',          i.arroz]    : null,
@@ -2972,18 +3140,53 @@ function scrollToMesa(mesaNum) {
   }
 }
 
+// Arma el patch de "pago" para UN pedido — incluye el reparto exacto de pago
+// dividido cuando aplica (solo en el índice 0 del grupo, los demás van en 0,
+// para que la suma del grupo cuadre exacto con lo que de verdad se recibió).
+function armarPatchPago(metodo, dividido, esPrimero, extra = {}) {
+  return {
+    estado: 'pagado', metodo,
+    monto_efectivo: (dividido && esPrimero) ? dividido.efectivo : 0,
+    monto_transferencia: (dividido && esPrimero) ? dividido.transferencia : 0,
+    ...extra
+  };
+}
+
+// PATCH de un pago con fallback si las columnas de pago dividido aún no
+// existen en Supabase — reintenta sin ellas y avisa (el pago igual se guarda,
+// solo que sin el reparto exacto).
+async function patchPagoConFallback(id, patch) {
+  try {
+    await sbPatch('pedidos', `id=eq.${id}`, patch);
+    return patch;
+  } catch (e) {
+    const msg = e.message || '';
+    if (msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
+      const { monto_efectivo, monto_transferencia, ...base } = patch;
+      await sbPatch('pedidos', `id=eq.${id}`, base);
+      showToast('⚠ El reparto del pago dividido no se guardó — falta agregar esas columnas en Supabase (ver script SQL)', 'warning');
+      return base;
+    }
+    throw e;
+  }
+}
+
 // ── Marcar como pagado UN pedido completo de una mesa (puede haber más de
 // uno en la misma mesa) — ids es la lista de pedidos de ese pedido específico.
 async function marcarGrupoMesaPagado(ids, mesaNum, key) {
+  const pedidosDelGrupo = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
+  const total = pedidosDelGrupo.reduce((a,p) => a + (p.monto_total||0), 0);
+  const dividido = leerPagoDividido(key, total);
+  if (dividido && dividido.error) { showToast('⚠ Efectivo + transferencia debe sumar exactamente el total', 'warning'); return; }
   const metodoEl = document.getElementById(`metodo-${key}`);
-  const metodo   = metodoEl ? metodoEl.value : 'efectivo';
+  const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
   try {
-    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { estado: 'pagado', metodo });
-
-    const ahora = ST.pendientes.filter(p => ids.includes(p.id));
-    ahora.forEach(p => { p.estado = 'pagado'; p.metodo = metodo; });
-    ST.ingresos   = [...ahora, ...ST.ingresos];
+    for (let i = 0; i < ids.length; i++) {
+      const patch = await patchPagoConFallback(ids[i], armarPatchPago(metodo, dividido, i === 0));
+      Object.assign(pedidosDelGrupo[i], patch);
+    }
+    ST.ingresos   = [...pedidosDelGrupo, ...ST.ingresos];
     ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
 
     // Solo se libera la mesa si ya no queda NINGÚN pedido pendiente ahí (de ningún grupo)
@@ -3008,15 +3211,19 @@ async function marcarGrupoMesaPagado(ids, mesaNum, key) {
 // Un domicilio puede traer varios almuerzos/extras (mismo grupo_pedido) —
 // se pagan todos juntos de una vez.
 async function marcarGrupoDomicilioPagado(ids, key) {
+  const pedidosDelGrupo = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
+  const total = pedidosDelGrupo.reduce((a,p) => a + (p.monto_total||0), 0);
+  const dividido = leerPagoDividido(key, total);
+  if (dividido && dividido.error) { showToast('⚠ Efectivo + transferencia debe sumar exactamente el total', 'warning'); return; }
   const metodoEl = document.getElementById(`metodo-${key}`);
-  const metodo   = metodoEl ? metodoEl.value : 'efectivo';
+  const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
   try {
-    await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { estado: 'pagado', metodo });
-
-    const ahora = ST.pendientes.filter(p => ids.includes(p.id));
-    ahora.forEach(p => { p.estado = 'pagado'; p.metodo = metodo; });
-    ST.ingresos   = [...ahora, ...ST.ingresos];
+    for (let i = 0; i < ids.length; i++) {
+      const patch = await patchPagoConFallback(ids[i], armarPatchPago(metodo, dividido, i === 0));
+      Object.assign(pedidosDelGrupo[i], patch);
+    }
+    ST.ingresos   = [...pedidosDelGrupo, ...ST.ingresos];
     ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
 
     setSyncBadge('ok');
@@ -3031,22 +3238,27 @@ async function marcarGrupoDomicilioPagado(ids, key) {
 
 // ── Marcar pedido "sin mesa" como pagado ────────────────────────────────
 async function marcarSinMesaPagado(pedidoId) {
+  const key = `sinmesa-${pedidoId}`;
+  const ped = ST.pendientes.find(p => p.id === pedidoId);
+  const total = ped ? (ped.monto_total||0) : 0;
+  const dividido = leerPagoDividido(key, total);
+  if (dividido && dividido.error) { showToast('⚠ Efectivo + transferencia debe sumar exactamente el total', 'warning'); return; }
   const metodoEl = document.getElementById(`metodo-sinmesa-${pedidoId}`);
-  const metodo   = metodoEl ? metodoEl.value : 'efectivo';
+  const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
   try {
-    await sbPatch('pedidos', `id=eq.${pedidoId}`, { estado: 'pagado', metodo });
+    const patch = await patchPagoConFallback(pedidoId, armarPatchPago(metodo, dividido, true));
 
-    let ped = null;
+    let pagado = null;
     const idx = ST.pendientes.findIndex(p => p.id === pedidoId);
     if (idx !== -1) {
-      [ped] = ST.pendientes.splice(idx, 1);
-      ped.estado = 'pagado'; ped.metodo = metodo;
-      ST.ingresos.unshift(ped);
+      [pagado] = ST.pendientes.splice(idx, 1);
+      Object.assign(pagado, patch);
+      ST.ingresos.unshift(pagado);
     }
     setSyncBadge('ok');
     showToast('✅ Pedido (sin mesa) marcado como pagado', 'ok',
-      ped ? { label: '↩ Deshacer', onClick: () => revertirPago(ped.id) } : null);
+      pagado ? { label: '↩ Deshacer', onClick: () => revertirPago(pagado.id) } : null);
     renderAll();
   } catch (e) {
     showToast('⚠ Error al procesar el pago', 'warning');
@@ -3059,24 +3271,36 @@ async function marcarSinMesaPagado(pedidoId) {
 // fecha original en fecha_original, por si se revierte el pago) — igual
 // que antes se hacía con un solo plato.
 async function marcarGrupoFiadoPagado(ids, key) {
+  const pedidosOriginales = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
+  const total = pedidosOriginales.reduce((a,p) => a + (p.monto_total||0), 0);
+  const dividido = leerPagoDividido(key, total);
+  if (dividido && dividido.error) { showToast('⚠ Efectivo + transferencia debe sumar exactamente el total', 'warning'); return; }
   const metodoEl = document.getElementById(`metodo-${key}`);
-  const metodo   = metodoEl ? metodoEl.value : 'efectivo';
+  const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
   const fechaHoy = today();
 
   try {
-    const pedidosOriginales = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
-    for (const p of pedidosOriginales) {
-      let patchData = { estado: 'pagado', metodo, fecha: fechaHoy, fecha_original: p.fecha };
+    let avisoDividido = false;
+    for (let i = 0; i < pedidosOriginales.length; i++) {
+      const p = pedidosOriginales[i];
+      const patchFull = armarPatchPago(metodo, dividido, i === 0, { fecha: fechaHoy, fecha_original: p.fecha });
+      let patchData = patchFull;
       try {
-        await sbPatch('pedidos', `id=eq.${p.id}`, patchData);
+        await sbPatch('pedidos', `id=eq.${p.id}`, patchFull);
       } catch (e) {
-        if ((e.message || '').includes('fecha_original')) {
-          delete patchData.fecha_original;
+        const msg = e.message || '';
+        if (msg.includes('fecha_original') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
+          // Alguna columna opcional aún no existe en Supabase — reintenta sin
+          // ninguna de las tres (más simple y seguro que adivinar cuál falta).
+          const { fecha_original, monto_efectivo, monto_transferencia, ...base } = patchFull;
+          patchData = base;
           await sbPatch('pedidos', `id=eq.${p.id}`, patchData);
+          if (dividido && i === 0) avisoDividido = true;
         } else { throw e; }
       }
       Object.assign(p, patchData);
     }
+    if (avisoDividido) showToast('⚠ El reparto del pago dividido no se guardó — falta agregar esas columnas en Supabase (ver script SQL)', 'warning');
 
     ST.ingresos   = [...pedidosOriginales, ...ST.ingresos];
     ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
@@ -3246,6 +3470,7 @@ function renderPendientes() {
         </select>
         <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
           style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+        ${htmlPagoDividido(key, total)}
         <button class="btn btn-primary" onclick="marcarGrupoMesaPagado([${idsGrupo.join(',')}],${mn},'${key}')">✅ Marcar todo como pagado</button>
         <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${grupoPedidoVal}')">+ Agregar producto</button>
         <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${grupoPedidoVal}')">🍽 Agregar comida</button>
@@ -3311,6 +3536,7 @@ function renderPendientes() {
           </select>
           <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
             style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+          ${htmlPagoDividido(key, total)}
           <button class="btn btn-primary" onclick="marcarGrupoDomicilioPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
           <span class="pending-dom-detail">🍽 ${fmt(montoAlmuerzoTotal)} + 🛵 ${fmt(montoDomicilioTotal)}</span>
           <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
@@ -3345,6 +3571,7 @@ function renderPendientes() {
             </select>
             <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
               style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${p.monto_total||0})">
+            ${htmlPagoDividido(key, p.monto_total||0)}
             <button class="btn btn-primary" onclick="marcarSinMesaPagado(${p.id})">✅ Marcar como pagado</button>
             <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${p.id}],'${p.grupo_pedido||''}')">+ Agregar producto</button>
             <button class="btn btn-outline" onclick="abrirModalAgregarComida([${p.id}],'${p.grupo_pedido||''}')">🍽 Agregar comida</button>
@@ -3413,6 +3640,7 @@ function renderPendientes() {
             </select>
             <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
               style="${metodoInicial==='efectivo'?'':'display:none;'}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
+            ${htmlPagoDividido(key, total)}
             <button class="btn btn-primary" onclick="marcarGrupoFiadoPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
             <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
             <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
@@ -3479,7 +3707,9 @@ function renderIngresos() {
             <button class="btn btn-primary" style="padding:4px 8px;font-size:11px;" onclick="guardarMetodoIngreso([${idsGrupo.join(',')}])">✓</button>
             <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="cancelarEdicionMetodo()">✕</button>
           </div>`
-          : `<span class="badge ${metC(primero.metodo)}" style="cursor:pointer;" onclick="editarMetodoIngreso([${idsGrupo.join(',')}])" title="Clic para cambiar el método de pago">${primero.metodo} ✏</span>`
+          : (primero.metodo === 'dividido'
+              ? `<span class="badge ${metC(primero.metodo)}" title="${metodoLabel(primero)} — no editable acá, revierte el pago si necesitas corregirlo">💳 dividido</span>`
+              : `<span class="badge ${metC(primero.metodo)}" style="cursor:pointer;" onclick="editarMetodoIngreso([${idsGrupo.join(',')}])" title="Clic para cambiar el método de pago">${primero.metodo} ✏</span>`)
         }</td>
         <td>${cantidadTotal}</td>
         <td class="amount-pos">${fmt(montoTotal)}</td>
@@ -3531,8 +3761,8 @@ function renderIngresos() {
   // separada en efectivo/transferencia para que cada total quede en la columna correcta.
   const totalHoy = hoy.reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy');
   document.getElementById('ing-hoy').textContent  = fmt(totalHoy);
-  document.getElementById('ing-ef').textContent    = fmt(hoy.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy','efectivo'));
-  document.getElementById('ing-trans').textContent = fmt(hoy.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0) + desayunoEnPeriodo('hoy','transferencia'));
+  document.getElementById('ing-ef').textContent    = fmt(hoy.reduce((a,b)=>a+efectivoDe(b),0) + desayunoEnPeriodo('hoy','efectivo'));
+  document.getElementById('ing-trans').textContent = fmt(hoy.reduce((a,b)=>a+transferenciaDe(b),0) + desayunoEnPeriodo('hoy','transferencia'));
 
   // Regenerar mesas del formulario
   renderMesasForm();
@@ -3922,6 +4152,75 @@ function calcularVueltoPendiente(key, total) {
     : `<span style="color:var(--green);">Vuelto a entregar: ${fmt(v)}</span>`;
 }
 
+// ── Pago dividido: cuando el cliente paga parte en efectivo y parte en
+// transferencia. Se activa con un checkbox junto al método de pago; al
+// marcarlo, se ocultan el select de método y la calculadora de vuelto (no
+// aplican) y aparecen dos campos que deben sumar EXACTO el total — así el
+// cierre de caja siempre cuadra, nunca se pierde ni se duplica dinero.
+function toggleDividido(key, total) {
+  const chk     = document.getElementById(`dividido-chk-${key}`);
+  const campos  = document.getElementById(`dividido-campos-${key}`);
+  const metodoSel = document.getElementById(`metodo-${key}`);
+  const pagoCon = document.getElementById(`pago-con-${key}`);
+  const vuelto  = document.getElementById(`vuelto-${key}`);
+  const activo = !!(chk && chk.checked);
+
+  if (campos)    campos.style.display    = activo ? 'inline-flex' : 'none';
+  if (metodoSel) metodoSel.style.display = activo ? 'none' : '';
+  if (pagoCon)   pagoCon.style.display   = activo ? 'none' : (pagoCon.style.display || '');
+  if (vuelto && activo) vuelto.innerHTML = '';
+
+  if (activo) {
+    document.getElementById(`dividido-ef-${key}`).value = Number(total).toLocaleString('es-CO');
+    document.getElementById(`dividido-tr-${key}`).value = '0';
+    actualizarDivididoRestante(key, total);
+  }
+}
+
+function actualizarDivididoRestante(key, total) {
+  const el = document.getElementById(`dividido-restante-${key}`);
+  if (!el) return;
+  const ef = valMiles(`dividido-ef-${key}`);
+  const tr = valMiles(`dividido-tr-${key}`);
+  const restante = total - ef - tr;
+  if (restante === 0) {
+    el.textContent = '✓ Cuadra';
+    el.style.color = 'var(--green)';
+  } else {
+    el.textContent = restante > 0 ? `Falta ${fmt(restante)}` : `Sobra ${fmt(Math.abs(restante))}`;
+    el.style.color = 'var(--red)';
+  }
+}
+
+// Lee el estado de pago dividido de una barra de pago.
+// Retorna: null (dividido no está activo — seguir con el método normal),
+// {error:true} (activo pero no cuadra con el total — bloquear el pago), o
+// {efectivo, transferencia} (activo y cuadra).
+function leerPagoDividido(key, total) {
+  const chk = document.getElementById(`dividido-chk-${key}`);
+  if (!chk || !chk.checked) return null;
+  const efectivo      = valMiles(`dividido-ef-${key}`);
+  const transferencia = valMiles(`dividido-tr-${key}`);
+  if (efectivo + transferencia !== total) return { error: true };
+  return { efectivo, transferencia };
+}
+
+// HTML del checkbox + campos de pago dividido — se inserta junto a CUALQUIER
+// select de método de pago (registro, mesa, domicilio, sin mesa, fiado,
+// pago individual) para que la opción esté disponible en todos los casos.
+function htmlPagoDividido(key, total) {
+  return `
+    <label style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);cursor:pointer;white-space:nowrap;">
+      <input type="checkbox" id="dividido-chk-${key}" onchange="toggleDividido('${key}',${total})" style="width:14px;height:14px;accent-color:var(--accent);cursor:pointer;">
+      💳 Dividido
+    </label>
+    <span id="dividido-campos-${key}" style="display:none;gap:4px;align-items:center;">
+      <input type="text" inputmode="numeric" id="dividido-ef-${key}" placeholder="Efectivo $" class="vuelto-inline" style="width:100px;" oninput="formatMilesInput(this); actualizarDivididoRestante('${key}',${total})">
+      <input type="text" inputmode="numeric" id="dividido-tr-${key}" placeholder="Transf. $" class="vuelto-inline" style="width:100px;" oninput="formatMilesInput(this); actualizarDivididoRestante('${key}',${total})">
+      <span id="dividido-restante-${key}" style="font-size:10px;white-space:nowrap;"></span>
+    </span>`;
+}
+
 // ── Revertir un pago (uno o varios pedidos) sin duplicar ni perder datos ─
 // Usa PATCH sobre el/los mismo(s) registro(s) — nunca borra ni reinserta.
 async function revertirPago(ids) {
@@ -3973,11 +4272,15 @@ async function revertirPago(ids) {
 // key = id del grupo mesa+pedido en pantalla (ej. "mesa-3-2"), para leer el
 // método de pago de la barra correcta cuando la mesa tiene varios pedidos.
 async function marcarPedidoIndividualPagado(pedidoId, key) {
+  const ped = ST.pendientes.find(p => p.id === pedidoId);
+  const total = ped ? (ped.monto_total||0) : 0;
+  const dividido = leerPagoDividido(key, total);
+  if (dividido && dividido.error) { showToast('⚠ Efectivo + transferencia debe sumar exactamente el total', 'warning'); return; }
   const metodoEl = document.getElementById(`metodo-${key}`);
-  const metodo   = metodoEl ? metodoEl.value : 'efectivo';
+  const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
   try {
-    await sbPatch('pedidos', `id=eq.${pedidoId}`, { estado: 'pagado', metodo });
+    const patch = await patchPagoConFallback(pedidoId, armarPatchPago(metodo, dividido, true));
 
     let pedidoPagado = null;
     let mesaNum = null;
@@ -3985,7 +4288,7 @@ async function marcarPedidoIndividualPagado(pedidoId, key) {
     if (idx !== -1) {
       [pedidoPagado] = ST.pendientes.splice(idx, 1);
       mesaNum = pedidoPagado.mesa;
-      pedidoPagado.estado = 'pagado'; pedidoPagado.metodo = metodo;
+      Object.assign(pedidoPagado, patch);
       ST.ingresos.unshift(pedidoPagado);
     }
 
@@ -5012,11 +5315,23 @@ function setFIngFin(f, btn) {
 
 // Filtros del "Historial de pedidos" (Ingresos) — cada dimensión (período,
 // turno, método, origen) es independiente de las demás, así que solo se
-// limpia el "active" dentro de SU propia barra de filtros.
+// limpia el "active" dentro de SU propia barra de filtros. Elegir un período
+// apaga cualquier día específico que hubiera quedado seleccionado.
 function setFPedidosHist(dimension, valor, btn) {
   fPedidosHist[dimension] = valor;
+  if (dimension === 'periodo') {
+    fPedidosHist.fecha = '';
+    const fechaEl = document.getElementById('ingfin-ped-fecha');
+    if (fechaEl) fechaEl.value = '';
+  }
   btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  renderHistorialPedidosIngresos();
+}
+
+function setFPedidosHistFecha(valor) {
+  fPedidosHist.fecha = valor || '';
+  if (valor) document.querySelectorAll('#ingfin-ped-filtros-periodo .filter-btn').forEach(b => b.classList.remove('active'));
   renderHistorialPedidosIngresos();
 }
 
@@ -5025,9 +5340,10 @@ function renderHistorialPedidosIngresos() {
   if (!tbody) return;
   const f = fPedidosHist;
   const list = ST.ingresos.filter(i => {
-    if (!inP(i.fecha, f.periodo)) return false;
+    if (!enFiltroFecha(i.fecha, f)) return false;
     if (f.turno !== 'todos' && i.turno !== f.turno) return false;
-    if (f.metodo !== 'todos' && i.metodo !== f.metodo) return false;
+    if (f.metodo === 'efectivo' && efectivoDe(i) <= 0) return false;
+    if (f.metodo === 'transferencia' && transferenciaDe(i) <= 0) return false;
     if (f.origen === 'fiado' && !i.es_fiar) return false;
     return true;
   }).sort((a,b) => b.fecha === a.fecha ? (b.hora||'').localeCompare(a.hora||'') : b.fecha.localeCompare(a.fecha));
@@ -5048,13 +5364,17 @@ function renderHistorialPedidosIngresos() {
         <td style="font-size:11px;color:var(--text3);">${primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
         <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${resumenPedido}">${resumenPedido}</td>
         <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resumenDetalle}</td>
-        <td><span class="badge ${metC(primero.metodo)}">${primero.metodo}</span></td>
+        <td><span class="badge ${metC(primero.metodo)}" title="${metodoLabel(primero)}">${primero.metodo}</span></td>
         <td>${cantidadTotal}</td>
         <td class="amount-pos">${fmt(montoTotal)}</td>
         <td><button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetalleGrupoIngreso([${idsGrupo.join(',')}])">👁</button></td>
       </tr>`;
       }).join('')
     : `<tr><td colspan="10"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin pedidos en este filtro</div></div></td></tr>`;
+
+  document.getElementById('ingfin-ped-sum-ef').textContent    = fmt(list.reduce((a,i)=>a+efectivoDe(i),0));
+  document.getElementById('ingfin-ped-sum-tr').textContent    = fmt(list.reduce((a,i)=>a+transferenciaDe(i),0));
+  document.getElementById('ingfin-ped-sum-total').textContent = fmt(list.reduce((a,i)=>a+(i.monto_total||0),0));
 }
 
 async function agregarIngresoExtra() {
@@ -5105,15 +5425,36 @@ function renderIngresosFinanciero() {
   document.getElementById('ingfin-operativos').textContent       = fmt(operativos);
   document.getElementById('ingfin-despues-operativos').textContent = fmt(despuesNominaProv - operativos);
 
+  // Historial de ingresos (tabla) — filtros propios (fIngresosHist),
+  // independientes del resumen de arriba: período/día específico, turno y
+  // método. Un cierre no tiene "un" método (trae efectivo Y transferencia),
+  // así que filtrar por método no oculta la fila: solo muestra la parte que
+  // corresponde y esconde las filas que no aportaron nada a ese método.
+  const fh = fIngresosHist;
+  const cierresHist = ST.cierresDia.filter(c =>
+    enFiltroFecha(c.fecha, fh) &&
+    (fh.turno === 'todos' || c.turno === fh.turno) &&
+    (fh.metodo === 'todos' || (fh.metodo === 'efectivo' ? (c.efectivo||0) > 0 : (c.transferencia||0) > 0))
+  );
+  // Los ingresos adicionales no tienen turno ni método propio — solo
+  // aparecen cuando esos dos filtros están en "Todos".
+  const extrasHist = (fh.turno === 'todos' && fh.metodo === 'todos')
+    ? ST.ingresosExtra.filter(i => enFiltroFecha(i.fecha, fh))
+    : [];
+
   const filas = [
-    ...cierres.map(c => ({
-      fecha: c.fecha,
-      origen: `🧾 Cierre ${c.turno==='cena'?'Comida rápida':'Almuerzo'}`,
-      detalle: c.ajuste_manual ? `Incluye ajuste: ${c.ajuste_manual>0?'+':''}${fmt(c.ajuste_manual)}` : '—',
-      efectivo: c.efectivo||0, transferencia: c.transferencia||0, monto: (c.efectivo||0)+(c.transferencia||0),
-      id: c.id, tipo: 'cierre'
-    })),
-    ...extras.map(i => ({
+    ...cierresHist.map(c => {
+      const ef = fh.metodo === 'transferencia' ? 0 : (c.efectivo||0);
+      const tr = fh.metodo === 'efectivo' ? 0 : (c.transferencia||0);
+      return {
+        fecha: c.fecha,
+        origen: `🧾 Cierre ${c.turno==='cena'?'Comida rápida':'Almuerzo'}`,
+        detalle: c.ajuste_manual ? `Incluye ajuste: ${c.ajuste_manual>0?'+':''}${fmt(c.ajuste_manual)}` : '—',
+        efectivo: ef, transferencia: tr, monto: ef + tr,
+        id: c.id, tipo: 'cierre'
+      };
+    }),
+    ...extrasHist.map(i => ({
       fecha: i.fecha, origen: '➕ Adicional', detalle: i.descripcion,
       efectivo: null, transferencia: null, monto: i.monto||0, id: i.id, tipo: 'extra'
     }))
@@ -5130,9 +5471,33 @@ function renderIngresosFinanciero() {
         <td class="amount-pos">${fmt(f.monto)}</td>
         <td>${f.tipo === 'extra' ? `<button class="btn btn-danger" onclick="eliminarIngresoExtra(${f.id})">✕</button>` : ''}</td>
       </tr>`).join('')
-    : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ingresos en este período</div></div></td></tr>`;
+    : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ingresos en este filtro</div></div></td></tr>`;
+
+  document.getElementById('ingfin-sum-ef').textContent    = fmt(filas.reduce((a,f)=>a+(f.efectivo||0),0));
+  document.getElementById('ingfin-sum-tr').textContent    = fmt(filas.reduce((a,f)=>a+(f.transferencia||0),0));
+  document.getElementById('ingfin-sum-total').textContent = fmt(filas.reduce((a,f)=>a+(f.monto||0),0));
 
   renderHistorialPedidosIngresos();
+}
+
+function setFIngresosHist(dimension, valor, btn) {
+  fIngresosHist[dimension] = valor;
+  if (dimension === 'periodo') {
+    fIngresosHist.fecha = '';
+    const fechaEl = document.getElementById('ingresoshist-fecha');
+    if (fechaEl) fechaEl.value = '';
+  }
+  btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderIngresosFinanciero();
+}
+
+// Un día específico manda por encima del período — al elegirlo se apaga el
+// resaltado de los botones de período para que no parezca que ambos aplican.
+function setFIngresosHistFecha(valor) {
+  fIngresosHist.fecha = valor || '';
+  if (valor) document.querySelectorAll('#ingresoshist-filtros-periodo .filter-btn').forEach(b => b.classList.remove('active'));
+  renderIngresosFinanciero();
 }
 
 // ── DÍA A DÍA ────────────────────────────────────────────────────────
@@ -5196,8 +5561,8 @@ function calcularVentasFijas(fecha, turno) {
   const ventaDesayunoTransferencia = (turno === 'almuerzo' && apertura) ? (apertura.venta_desayuno_transferencia || 0) : 0;
   const ventaDesayuno = ventaDesayunoEfectivo + ventaDesayunoTransferencia;
   const ings = ST.ingresos.filter(i => i.fecha === fecha && i.turno === turno);
-  const efectivoPedidos      = ings.filter(i=>i.metodo==='efectivo').reduce((a,b)=>a+(b.monto_total||0),0);
-  const transferenciaPedidos = ings.filter(i=>i.metodo==='transferencia').reduce((a,b)=>a+(b.monto_total||0),0);
+  const efectivoPedidos      = ings.reduce((a,b)=>a+efectivoDe(b),0);
+  const transferenciaPedidos = ings.reduce((a,b)=>a+transferenciaDe(b),0);
   return {
     efectivo: efectivoPedidos + ventaDesayunoEfectivo,
     transferencia: transferenciaPedidos + ventaDesayunoTransferencia,
