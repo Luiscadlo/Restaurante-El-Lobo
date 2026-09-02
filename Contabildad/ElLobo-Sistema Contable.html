@@ -163,8 +163,8 @@
 
   .chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
   .chart-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .bar-chart { display: flex; gap: 8px; align-items: flex-end; height: 120px; }
-  .bar-group { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 4px; height: 100%; justify-content: flex-end; }
+  .bar-chart { display: flex; gap: 8px; align-items: flex-end; height: 120px; overflow-x: auto; }
+  .bar-group { display: flex; flex-direction: column; align-items: center; flex: 1 0 32px; gap: 4px; height: 100%; justify-content: flex-end; }
   .bars { display: flex; gap: 3px; align-items: flex-end; height: 100px; }
   .bar { width: 14px; border-radius: 3px 3px 0 0; min-height: 4px; transition: height 0.5s ease; }
   .bar.income { background: var(--green); opacity: 0.8; }
@@ -445,12 +445,30 @@
       <div class="kpi-card orange"><div class="kpi-label">Bajo stock</div><div class="kpi-value" id="kpi-stock">0</div><div class="kpi-sub">Productos por reabastecer</div></div>
     </div>
 
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--text3);">📈 Tendencia del negocio en el tiempo — agrupa los gráficos de abajo por:</div>
+      <div class="filter-bar" id="gran-tablero-bar" style="margin-bottom:0;">
+        <button class="filter-btn" onclick="setGranTablero('dia',this)">Días</button>
+        <button class="filter-btn active" onclick="setGranTablero('semana',this)">Semanas</button>
+        <button class="filter-btn" onclick="setGranTablero('mes',this)">Meses</button>
+      </div>
+    </div>
+
     <div class="chart-container">
-      <div class="chart-title">Ingresos vs Egresos — Últimos 7 días</div>
+      <div class="chart-title" id="barChartTitle">Ingresos vs Egresos</div>
       <div class="bar-chart" id="barChart"></div>
       <div class="chart-legend">
         <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Ingresos</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Egresos</div>
+      </div>
+    </div>
+
+    <div class="chart-container">
+      <div class="chart-title" id="lineChartTitle">Utilidad neta</div>
+      <div id="lineChart"></div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Período con ganancia</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Período con pérdida</div>
       </div>
     </div>
 
@@ -1930,6 +1948,10 @@ async function loadState() {
 
 // ── Utilidades ────────────────────────────────────────────────────────
 const fmt      = n  => '$' + Math.abs(Math.round(n)).toLocaleString('es-CO');
+// Igual que fmt(), pero conserva el signo (fmt() siempre muestra el valor
+// absoluto) — se usa donde el número puede ser negativo y hace falta que se
+// note, como la utilidad neta de un período con pérdida.
+const fmtSigned = n => (n < 0 ? '− ' : '') + fmt(n);
 // Fecha local en formato YYYY-MM-DD. OJO: NO usar Date.toISOString() para esto —
 // esa función convierte a UTC, y en Colombia (UTC-5) eso hace que desde las
 // 7:00pm hasta medianoche "today()" devuelva el día siguiente por error,
@@ -2169,6 +2191,11 @@ document.getElementById('ing-hora').value = nowTime();
 
 // ── Filtros activos ───────────────────────────────────────────────────
 let fI = 'todos', fE = 'hoy', fInv = 'todos', fTablero = 'mes', fIngFin = 'semana';
+// Granularidad de los gráficos comparativos del Tablero (independiente del
+// filtro de arriba, que solo afecta las KPI de un único período) — con esto
+// se ve la tendencia del negocio en el tiempo: día a día, semana a semana o
+// mes a mes.
+let granTablero = 'semana';
 // Filtros del "Historial de pedidos" en Ingresos — a diferencia de Pedidos
 // (siempre hoy), este mira cualquier fecha, filtrable por turno/método/fiado.
 // fecha: cuando tiene un valor (YYYY-MM-DD), filtra ESE día exacto y el
@@ -5255,7 +5282,7 @@ async function agregarEgreso() {
     document.getElementById('egr-monto').value = '';
     document.getElementById('egr-desc').value  = '';
     showToast('✅ Egreso registrado', 'ok');
-  } catch(e) { showToast('⚠ Error al registrar egreso', 'warning'); }
+  } catch(e) { console.error('agregarEgreso', e); showToast(`⚠ Error al registrar egreso: ${(e.message||'').slice(0,160)}`, 'warning'); }
 }
 
 async function eliminarEgreso(id) {
@@ -5498,7 +5525,7 @@ function renderTablero() {
   if (tI > 0 && ut > 0) al.push({t:'ok', m:`✅ ¡Rentable! Utilidad del período: ${fmt(ut)} (${mg}% margen)`});
   document.getElementById('alertZone').innerHTML = al.map(a=>`<div class="alert ${a.t}">${a.m}</div>`).join('');
 
-  renderBarChart();
+  renderGraficosTablero();
 
   const cnt  = t  => alm.filter(i=>i.pedido===t).reduce((a,b)=>a+(b.cantidad||1),0);
   document.getElementById('rp-comp').textContent  = cnt('completo');
@@ -6475,28 +6502,118 @@ function renderAuditoria() {
 // BLOQUE 4 — Dashboard, tabs, renderAll y arranque
 // ══════════════════════════════════════════════════════════════════════
 
-function renderBarChart() {
-  const days = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i);
-    const f  = toLocalDateStr(d);
-    const lb = d.toLocaleDateString('es-CO', {weekday:'short'});
-    days.push({
-      lb,
-      ing: ST.ingresos.filter(x=>x.fecha===f).reduce((a,b)=>a+montoIngreso(b),0),
-      egr: ST.egresos.filter(x=>x.fecha===f).reduce((a,b)=>a+b.monto,0)
-    });
+// ── Gráficos comparativos del Tablero (tendencia en el tiempo) ─────────
+const GRAN_LABEL = { dia: 'días', semana: 'semanas', mes: 'meses' };
+
+function setGranTablero(g, btn) {
+  granTablero = g;
+  document.querySelectorAll('#gran-tablero-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderGraficosTablero();
+}
+
+// Genera los "cubos" de tiempo consecutivos terminando hoy (14 días, 8
+// semanas u 6 meses según la granularidad elegida), cada uno con su rango de
+// fechas (ini/fin, ambas incluidas) y una etiqueta corta para el eje X. Las
+// semanas empiezan domingo, igual que weekStart().
+function bucketsGrafico(gran) {
+  const hoy = new Date();
+  const N = gran === 'dia' ? 14 : gran === 'semana' ? 8 : 6;
+  const buckets = [];
+  for (let i = N - 1; i >= 0; i--) {
+    let ini, fin, label;
+    if (gran === 'dia') {
+      const d = new Date(hoy); d.setDate(d.getDate() - i);
+      ini = fin = toLocalDateStr(d);
+      label = d.toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit' });
+    } else if (gran === 'semana') {
+      const d = new Date(hoy); d.setDate(d.getDate() - d.getDay() - i*7); // domingo de esa semana
+      ini = toLocalDateStr(d);
+      const finD = new Date(d); finD.setDate(finD.getDate() + 6);
+      fin = toLocalDateStr(finD);
+      label = d.toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit' });
+    } else {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      ini = toLocalDateStr(d);
+      const finD = new Date(d.getFullYear(), d.getMonth()+1, 0);
+      fin = toLocalDateStr(finD);
+      // Abreviatura manual (no toLocaleDateString) para evitar el formato
+      // largo "abr de 26" que da el locale es-CO con {month:'short'}.
+      const MESES_ABBR = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+      label = `${MESES_ABBR[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
+    }
+    buckets.push({ ini, fin, label });
   }
-  const mx = Math.max(...days.map(d=>Math.max(d.ing,d.egr)), 1);
-  document.getElementById('barChart').innerHTML = days.map(d =>
+  return buckets;
+}
+
+// Ingresos/egresos/utilidad de un rango de fechas [desde,hasta] (ambas
+// incluidas) — misma fuente que las KPI de arriba: cierres guardados para
+// ingresos, egresosCombinados() para egresos (incluye los de Cierre).
+function statsRango(desde, hasta) {
+  const ingresos = ST.cierresDia
+    .filter(c => c.fecha >= desde && c.fecha <= hasta)
+    .reduce((a,c) => a + (c.efectivo||0) + (c.transferencia||0), 0);
+  const egresos = egresosCombinados()
+    .filter(e => e.fecha >= desde && e.fecha <= hasta)
+    .reduce((a,b) => a + b.monto, 0);
+  return { ingresos, egresos, utilidad: ingresos - egresos };
+}
+
+function renderGraficosTablero() {
+  const buckets = bucketsGrafico(granTablero).map(b => ({ ...b, ...statsRango(b.ini, b.fin) }));
+  const tituloPeriodo = `Últim${granTablero==='dia'?'os':'as'} ${buckets.length} ${GRAN_LABEL[granTablero]}`;
+
+  // Barras: Ingresos vs Egresos
+  document.getElementById('barChartTitle').textContent = `Ingresos vs Egresos — ${tituloPeriodo}`;
+  const mx = Math.max(...buckets.map(b => Math.max(b.ingresos, b.egresos)), 1);
+  document.getElementById('barChart').innerHTML = buckets.map(b =>
     `<div class="bar-group">
       <div class="bars">
-        <div class="bar income"  style="height:${Math.max(4,(d.ing/mx)*100)}px" title="${fmt(d.ing)}"></div>
-        <div class="bar expense" style="height:${Math.max(4,(d.egr/mx)*100)}px" title="${fmt(d.egr)}"></div>
+        <div class="bar income"  style="height:${Math.max(4,(b.ingresos/mx)*100)}px" title="${b.label}: ${fmt(b.ingresos)}"></div>
+        <div class="bar expense" style="height:${Math.max(4,(b.egresos/mx)*100)}px" title="${b.label}: ${fmt(b.egresos)}"></div>
       </div>
-      <div class="bar-label">${d.lb}</div>
+      <div class="bar-label">${b.label}</div>
     </div>`
   ).join('');
+
+  // Línea: Utilidad neta
+  document.getElementById('lineChartTitle').textContent = `Utilidad neta — ${tituloPeriodo}`;
+  renderLineChart('lineChart', buckets);
+}
+
+// Gráfico de línea liviano en SVG puro (sin librerías): utilidad neta por
+// cubo de tiempo, con una línea de referencia en $0 para distinguir de un
+// vistazo los períodos con ganancia (verde) de los de pérdida (rojo).
+function renderLineChart(elId, buckets) {
+  const el = document.getElementById(elId);
+  const n  = buckets.length;
+  const vals  = buckets.map(b => b.utilidad);
+  const maxV  = Math.max(...vals, 0);
+  const minV  = Math.min(...vals, 0);
+  const range = (maxV - minV) || 1;
+
+  const w = Math.max(300, el.clientWidth || 600);
+  const h = 140, padX = 22, padY = 16;
+  const xStep = n > 1 ? (w - padX*2) / (n - 1) : 0;
+  const yFor  = v => h - padY - ((v - minV) / range) * (h - padY*2);
+
+  const pts   = buckets.map((b,i) => ({ x: padX + i*xStep, y: yFor(b.utilidad), v: b.utilidad, label: b.label }));
+  const zeroY = yFor(0).toFixed(1);
+  const linePts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const areaPts = `${pts[0].x.toFixed(1)},${zeroY} ${linePts} ${pts[n-1].x.toFixed(1)},${zeroY}`;
+  const dots = pts.map(p =>
+    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${p.v>=0?'var(--green)':'var(--red)'}"><title>${p.label}: ${fmtSigned(p.v)}</title></circle>`
+  ).join('');
+
+  el.innerHTML = `
+    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px;display:block;">
+      <line x1="${padX}" y1="${zeroY}" x2="${w-padX}" y2="${zeroY}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 4"/>
+      <polygon points="${areaPts}" fill="var(--accent)" opacity="0.12"></polygon>
+      <polyline points="${linePts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+      ${dots}
+    </svg>
+    <div style="display:flex;gap:4px;">${buckets.map(b => `<div class="bar-label" style="flex:1;text-align:center;">${b.label}</div>`).join('')}</div>`;
 }
 
 // ── TABS ──────────────────────────────────────────────────────────────
