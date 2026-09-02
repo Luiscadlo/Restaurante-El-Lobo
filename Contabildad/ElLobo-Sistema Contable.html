@@ -2117,8 +2117,10 @@ async function importarDatos(e) {
       }).catch(() => {}));
     });
     (datos.egresos || []).forEach(eg => {
+      // "description" (en inglés) es el nombre real de esa columna en la
+      // tabla "egresos" de Supabase — ver la nota en agregarEgreso().
       inserts.push(sbInsert('egresos', {
-        fecha: eg.fecha, cat: eg.cat, monto: eg.monto, descripcion: eg.desc || eg.descripcion || ''
+        fecha: eg.fecha, cat: eg.cat, monto: eg.monto, description: eg.description || eg.desc || eg.descripcion || ''
       }).catch(() => {}));
     });
     (datos.inventario || []).forEach(inv => {
@@ -5275,7 +5277,10 @@ async function agregarEgreso() {
   if (!fecha || !monto || monto <= 0) { showToast('⚠ Completa fecha y monto', 'warning'); return; }
 
   try {
-    const [row] = await sbInsertConCuenta('egresos', { fecha, cat, monto, descripcion: desc, cuenta });
+    // OJO: la columna en Supabase se llama "description" (en inglés), no
+    // "descripcion" — así quedó creada la tabla "egresos", a diferencia del
+    // resto de la app que usa español. Ver ST.egresos.map en egresosCombinados().
+    const [row] = await sbInsertConCuenta('egresos', { fecha, cat, monto, description: desc, cuenta });
     ST.egresos.unshift(row);
     setSyncBadge('ok');
     renderAll();
@@ -5307,8 +5312,10 @@ function setFE(f, btn) {
 // un solo lugar. Los de categoría "prestamo" quedan afuera a propósito: solo
 // restan de la caja del día, nunca cuentan como egreso del negocio.
 function egresosCombinados() {
+  // e.description (en inglés) es el nombre real de la columna en Supabase
+  // para la tabla "egresos" — ver la nota en agregarEgreso().
   const deEgresos = ST.egresos.map(e => ({
-    id: e.id, fecha: e.fecha, cat: e.cat, descripcion: e.descripcion, monto: e.monto, origen: 'egresos', cuenta: e.cuenta || 'efectivo'
+    id: e.id, fecha: e.fecha, cat: e.cat, descripcion: e.description, monto: e.monto, origen: 'egresos', cuenta: e.cuenta || 'efectivo'
   }));
   // Los gastos que se registran en Cierre siempre salen del efectivo del turno
   // (así se descuentan en calcularAcumuladosCaja) — por eso quedan fijos en
