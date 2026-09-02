@@ -838,7 +838,7 @@
         <div class="panel-header"><div class="panel-title">Registrar egreso</div></div>
         <div class="panel-body">
           <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Para gastos del día a día (nómina, proveedores, otros) es mejor registrarlos desde <strong>Cierre</strong> — aparecen aquí solos. Este formulario es para lo que no pasa por un cierre, como arriendo o servicios.</div>
-          <div class="form-row">
+          <div class="form-row-3">
             <div class="form-group"><label>Fecha</label><input type="date" id="egr-fecha"></div>
             <div class="form-group"><label>Categoría</label>
               <select id="egr-cat">
@@ -847,6 +847,13 @@
                 <option value="arriendo">Arriendo</option>
                 <option value="servicios">Servicios públicos</option>
                 <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div class="form-group"><label>¿De qué cuenta sale?</label>
+              <select id="egr-cuenta">
+                <option value="efectivo">💵 Efectivo</option>
+                <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
+                <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
               </select>
             </div>
           </div>
@@ -884,7 +891,7 @@
           <button class="filter-btn" onclick="setFE('todo',this)">Todo</button>
         </div>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Origen</th><th>Monto</th><th></th></tr></thead><tbody id="egresos-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Cuenta</th><th>Origen</th><th>Monto</th><th></th></tr></thead><tbody id="egresos-body"></tbody></table></div>
     </div>
   </div>
 </section>
@@ -975,6 +982,13 @@
           <div class="form-row">
             <div class="form-group"><label>Fecha</label><input type="date" id="ingext-fecha"></div>
             <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="ingext-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
+          </div>
+          <div class="form-group mb"><label>¿A qué cuenta entra?</label>
+            <select id="ingext-cuenta">
+              <option value="efectivo">💵 Efectivo</option>
+              <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
+              <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
+            </select>
           </div>
           <div class="form-group mb"><label>Descripción</label><input type="text" id="ingext-desc" placeholder="ej: Venta de canecas usadas…"></div>
           <button class="btn btn-primary" onclick="agregarIngresoExtra()">+ Registrar ingreso</button>
@@ -1253,10 +1267,12 @@
     <button class="filter-btn active" onclick="setFCaja('mes',this)">Mes</button>
     <button class="filter-btn" onclick="setFCaja('todo',this)">Todo</button>
   </div>
+  <div style="font-size:11px;color:var(--text3);margin:-4px 0 12px;">💰 Los 4 montos de abajo son la <strong>utilidad acumulada del período elegido arriba</strong> (Hoy/Semana/Mes/Todo) — cambia el filtro para ver cuánto vas acumulando semana a semana o mes a mes. Cada cuenta ya descuenta los gastos/egresos y suma los aportes/ingresos que le hayas asignado a ella, dentro de ese mismo período.</div>
   <div class="kpi-grid">
-    <div class="kpi-card green"><div class="kpi-label">Utilidad acumulada — Efectivo</div><div class="kpi-value" id="caja-efectivo">$0</div><div class="kpi-sub">Solo referencia — todo el histórico</div></div>
-    <div class="kpi-card blue"><div class="kpi-label">Utilidad acumulada — Transferencia</div><div class="kpi-value" id="caja-transferencia">$0</div><div class="kpi-sub">Solo referencia — todo el histórico</div></div>
-    <div class="kpi-card accent"><div class="kpi-label">Total disponible en Caja</div><div class="kpi-value" id="caja-disponible">$0</div><div class="kpi-sub">Efectivo + transferencia + aportes − gastos (una sola bolsa)</div></div>
+    <div class="kpi-card green"><div class="kpi-label">💵 Efectivo</div><div class="kpi-value" id="caja-efectivo">$0</div><div class="kpi-sub" id="caja-sub-efectivo">Acumulado</div></div>
+    <div class="kpi-card accent"><div class="kpi-label">☀️ Transferencia — Almuerzos</div><div class="kpi-value" id="caja-transf-almuerzos">$0</div><div class="kpi-sub" id="caja-sub-transf-almuerzos">Acumulado</div></div>
+    <div class="kpi-card purple"><div class="kpi-label">🌙 Transferencia — Comidas rápidas</div><div class="kpi-value" id="caja-transf-rapidas">$0</div><div class="kpi-sub" id="caja-sub-transf-rapidas">Acumulado</div></div>
+    <div class="kpi-card blue"><div class="kpi-label">Total disponible en Caja</div><div class="kpi-value" id="caja-disponible">$0</div><div class="kpi-sub" id="caja-sub-disponible">Suma de las 3 cuentas</div></div>
   </div>
 
   <div class="two-col" style="margin-bottom:20px;">
@@ -1275,6 +1291,14 @@
           <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="caja-mov-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
         </div>
         <div class="form-group mb">
+          <label id="caja-mov-cuenta-label">¿De qué cuenta sale?</label>
+          <select id="caja-mov-cuenta">
+            <option value="efectivo">💵 Efectivo</option>
+            <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
+            <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
+          </select>
+        </div>
+        <div class="form-group mb">
           <label>Detalle <span class="req">*</span></label>
           <input type="text" id="caja-mov-descripcion" placeholder="ej: Mercado en Ara, aporte para arreglar nevera…">
         </div>
@@ -1283,13 +1307,13 @@
     </div>
     <div class="panel">
       <div class="panel-header"><div class="panel-title">Utilidades por día</div></div>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Efectivo</th><th>Transferencia</th><th>Total</th></tr></thead><tbody id="caja-historial-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Efectivo</th><th>Transf. Almuerzos</th><th>Transf. Comidas rápidas</th><th>Total</th></tr></thead><tbody id="caja-historial-body"></tbody></table></div>
     </div>
   </div>
 
   <div class="panel">
     <div class="panel-header"><div class="panel-title">Movimientos de caja (gastos y aportes de capital)</div></div>
-    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Detalle</th><th>Monto</th><th></th></tr></thead><tbody id="caja-movimientos-body"></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Cuenta</th><th>Detalle</th><th>Monto</th><th></th></tr></thead><tbody id="caja-movimientos-body"></tbody></table></div>
   </div>
   </div>
 </section>
@@ -1773,6 +1797,24 @@ async function sbInsert(tabla, data) {
   return r.json(); // array de filas insertadas
 }
 
+// Inserta en egresos/movimientos_caja/ingresos_extra, que llevan una columna
+// "cuenta" (de cuál de las 3 cuentas de Caja sale o entra el dinero). Si esa
+// columna aún no existe en Supabase (falta correr la migración), reintenta
+// sin ella para no romper el registro — solo se pierde el dato de cuenta.
+async function sbInsertConCuenta(tabla, datos) {
+  try {
+    return await sbInsert(tabla, datos);
+  } catch (e) {
+    const msg = e.message || '';
+    if (msg.includes('cuenta') && 'cuenta' in datos) {
+      const { cuenta, ...sinCuenta } = datos;
+      showToast('⚠ La cuenta no se guardó — falta agregar esa columna en Supabase (ver script SQL)', 'warning');
+      return await sbInsert(tabla, sinCuenta);
+    }
+    throw e;
+  }
+}
+
 async function sbPatch(tabla, qs, data) {
   const r = await fetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
     method: 'PATCH',
@@ -1973,6 +2015,12 @@ function turnoFromHora(h) {
 const metC = m => m==='efectivo'?'badge-green':m==='dividido'?'badge-purple':m==='gratis'?'badge-gray':'badge-accent';
 const catC = c => c==='nomina'?'badge-blue':['arriendo','servicios'].includes(c)?'badge-gray':c==='prestamo'?'badge-purple':'badge-red';
 const CAT_LABELS = { nomina:'Nómina', proveedor:'Proveedores', arriendo:'Arriendo', servicios:'Servicios', otro:'Otro', prestamo:'Préstamo' };
+
+// Las 3 cuentas/fondos de Caja: efectivo, y transferencia separada por turno
+// (almuerzos vs. comidas rápidas) — así se sabe cuál se ha ido gastando y
+// cuál debería tener capital, en vez de mezclar todo en una sola bolsa.
+const CUENTA_LABELS = { efectivo: '💵 Efectivo', transf_almuerzos: '☀️ Transf. Almuerzos', transf_rapidas: '🌙 Transf. Comidas rápidas' };
+const cuentaBadge = c => c === 'transf_almuerzos' ? 'badge-accent' : c === 'transf_rapidas' ? 'badge-purple' : 'badge-green';
 
 // ── Pago dividido (efectivo + transferencia en un mismo pedido) ────────
 // metodo='dividido' guarda el reparto exacto en monto_efectivo/monto_transferencia
@@ -5192,14 +5240,15 @@ async function guardarEdicionPedido() {
 
 // ── EGRESOS ──────────────────────────────────────────────────────────
 async function agregarEgreso() {
-  const fecha = document.getElementById('egr-fecha').value;
-  const cat   = document.getElementById('egr-cat').value;
-  const monto = valMiles('egr-monto');
-  const desc  = document.getElementById('egr-desc').value.trim();
+  const fecha  = document.getElementById('egr-fecha').value;
+  const cat    = document.getElementById('egr-cat').value;
+  const cuenta = document.getElementById('egr-cuenta').value;
+  const monto  = valMiles('egr-monto');
+  const desc   = document.getElementById('egr-desc').value.trim();
   if (!fecha || !monto || monto <= 0) { showToast('⚠ Completa fecha y monto', 'warning'); return; }
 
   try {
-    const [row] = await sbInsert('egresos', { fecha, cat, monto, descripcion: desc });
+    const [row] = await sbInsertConCuenta('egresos', { fecha, cat, monto, descripcion: desc, cuenta });
     ST.egresos.unshift(row);
     setSyncBadge('ok');
     renderAll();
@@ -5232,12 +5281,15 @@ function setFE(f, btn) {
 // restan de la caja del día, nunca cuentan como egreso del negocio.
 function egresosCombinados() {
   const deEgresos = ST.egresos.map(e => ({
-    id: e.id, fecha: e.fecha, cat: e.cat, descripcion: e.descripcion, monto: e.monto, origen: 'egresos'
+    id: e.id, fecha: e.fecha, cat: e.cat, descripcion: e.descripcion, monto: e.monto, origen: 'egresos', cuenta: e.cuenta || 'efectivo'
   }));
+  // Los gastos que se registran en Cierre siempre salen del efectivo del turno
+  // (así se descuentan en calcularAcumuladosCaja) — por eso quedan fijos en
+  // la cuenta "efectivo", sin preguntar, a diferencia de los de este formulario.
   const deCierre = ST.gastosDia
     .filter(g => g.categoria && g.categoria !== 'prestamo')
     .map(g => ({
-      id: g.id, fecha: g.fecha, cat: g.categoria, descripcion: g.nombre, monto: g.monto, origen: 'cierre', turno: g.turno
+      id: g.id, fecha: g.fecha, cat: g.categoria, descripcion: g.nombre, monto: g.monto, origen: 'cierre', turno: g.turno, cuenta: 'efectivo'
     }));
   return [...deEgresos, ...deCierre];
 }
@@ -5251,11 +5303,12 @@ function renderEgresos() {
         <td>${e.fecha}</td>
         <td style="color:var(--text)">${e.descripcion||'—'}</td>
         <td><span class="badge ${catC(e.cat)}">${CAT_LABELS[e.cat]||e.cat}</span></td>
+        <td><span class="badge ${cuentaBadge(e.cuenta)}">${CUENTA_LABELS[e.cuenta]||e.cuenta}</span></td>
         <td style="font-size:11px;color:var(--text3);">${e.origen==='cierre' ? '🧾 Cierre' : '✍ Manual'}</td>
         <td class="amount-neg">${fmt(e.monto)}</td>
         <td><button class="btn btn-danger" onclick="${e.origen==='cierre' ? `eliminarGastoDia(${e.id})` : `eliminarEgreso(${e.id})`}">✕</button></td>
       </tr>`).join('')
-    : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin registros</div></div></td></tr>`;
+    : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin registros</div></div></td></tr>`;
 
   const sE = f => todos.filter(e=>inP(e.fecha,f)).reduce((a,b)=>a+b.monto,0);
   document.getElementById('egr-hoy').textContent    = fmt(sE('hoy'));
@@ -5642,19 +5695,20 @@ function renderHistorialPedidosIngresos() {
 }
 
 async function agregarIngresoExtra() {
-  const fecha = document.getElementById('ingext-fecha').value;
-  const desc  = document.getElementById('ingext-desc').value.trim();
-  const monto = valMiles('ingext-monto');
+  const fecha  = document.getElementById('ingext-fecha').value;
+  const desc   = document.getElementById('ingext-desc').value.trim();
+  const monto  = valMiles('ingext-monto');
+  const cuenta = document.getElementById('ingext-cuenta').value;
   if (!fecha)  { showToast('⚠ Selecciona una fecha', 'warning'); return; }
   if (!desc || !monto || monto <= 0) { showToast('⚠ Completa descripción y monto', 'warning'); return; }
 
   try {
-    const [row] = await sbInsert('ingresos_extra', { fecha, descripcion: desc, monto });
+    const [row] = await sbInsertConCuenta('ingresos_extra', { fecha, descripcion: desc, monto, cuenta });
     ST.ingresosExtra.unshift(row);
     setSyncBadge('ok');
     document.getElementById('ingext-desc').value  = '';
     document.getElementById('ingext-monto').value = '';
-    renderIngresosFinanciero();
+    renderAll();
     showToast('✅ Ingreso adicional registrado', 'ok');
   } catch(e) { showToast('⚠ Error al registrar ingreso', 'warning'); }
 }
@@ -5664,7 +5718,7 @@ async function eliminarIngresoExtra(id) {
   try {
     await sbDelete('ingresos_extra', `id=eq.${id}`);
     ST.ingresosExtra = ST.ingresosExtra.filter(i => i.id !== id);
-    renderIngresosFinanciero();
+    renderAll();
   } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
 }
 
@@ -6190,32 +6244,74 @@ function setTipoMovimientoCaja(t, btn) {
   tipoMovimientoCaja = t;
   document.querySelectorAll('#caja-tipo-buttons .filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  const label = document.getElementById('caja-mov-cuenta-label');
+  if (label) label.textContent = t === 'aporte' ? '¿A qué cuenta entra?' : '¿De qué cuenta sale?';
 }
 
-// Efectivo/Transferencia acumulados son solo referencia visual (de dónde viene
-// la plata); "disponible" es una sola bolsa: se le suman aportes y se le
-// restan los gastos generales del negocio, sin importar el método.
-function calcularAcumuladosCaja() {
-  let efectivo = 0, transferencia = 0;
-  ST.cierresDia.forEach(c => {
-    efectivo      += (c.efectivo || 0) - (c.gastos || 0) + (c.ajuste_manual || 0);
-    transferencia += (c.transferencia || 0);
+// Caja dividida en 3 cuentas reales (no una sola bolsa mezclada):
+//  - efectivo:         todo el efectivo, de cualquier turno
+//  - transf_almuerzos: transferencias del turno almuerzo
+//  - transf_rapidas:   transferencias del turno comidas rápidas (turno 'cena')
+// Cada cuenta es el saldo neto DENTRO DEL PERÍODO recibido (hoy/semana/mes/
+// todo, el mismo filtro de arriba en la pestaña): lo que entró por cierres de
+// turno en ese período, más los aportes/ingresos extra que se le asignaron,
+// menos los egresos/gastos que se le asignaron a ella — todo filtrado por
+// fecha. Así se puede ver cuánta utilidad se va acumulando semana a semana o
+// mes a mes, no solo el total de todo el histórico.
+function calcularAcumuladosCaja(periodo = 'todo') {
+  let efectivo = 0, transfAlmuerzos = 0, transfRapidas = 0;
+
+  // Base: lo que dejó cada turno cerrado dentro del período. Los gastos y el
+  // ajuste manual del turno (registrados en Cierre) siempre se cobran del
+  // efectivo, sin importar el turno — así se ha calculado siempre la caja
+  // esperada.
+  ST.cierresDia.filter(c => inP(c.fecha, periodo)).forEach(c => {
+    efectivo += (c.efectivo || 0) - (c.gastos || 0) + (c.ajuste_manual || 0);
+    if (c.turno === 'almuerzo') transfAlmuerzos += (c.transferencia || 0);
+    else                        transfRapidas   += (c.transferencia || 0);
   });
-  const aportes    = ST.movimientosCaja.filter(m => m.tipo === 'aporte').reduce((a,b) => a+(b.monto||0), 0);
-  const gastosCaja = ST.movimientosCaja.filter(m => m.tipo === 'gasto').reduce((a,b) => a+(b.monto||0), 0);
-  const disponible = efectivo + transferencia + aportes - gastosCaja;
-  return { efectivo, transferencia, aportes, gastosCaja, disponible };
+
+  const sumaPorCuenta = (cta, monto) => {
+    if (cta === 'transf_almuerzos') transfAlmuerzos += monto;
+    else if (cta === 'transf_rapidas') transfRapidas += monto;
+    else efectivo += monto;
+  };
+
+  // Ingresos adicionales (Ingresos → "Registrar ingreso adicional") dentro del
+  // período, cada uno depositado a la cuenta que se eligió al registrarlo.
+  ST.ingresosExtra.filter(i => inP(i.fecha, periodo)).forEach(i => sumaPorCuenta(i.cuenta || 'efectivo', i.monto || 0));
+
+  // Aportes de capital (suman) y gastos generales (restan) registrados en
+  // Caja dentro del período, cada uno con la cuenta que se eligió al registrarlo.
+  let aportes = 0, gastosCaja = 0;
+  ST.movimientosCaja.filter(m => inP(m.fecha, periodo)).forEach(m => {
+    const monto = m.monto || 0;
+    if (m.tipo === 'aporte') { aportes += monto; sumaPorCuenta(m.cuenta || 'efectivo', monto); }
+    else                     { gastosCaja += monto; sumaPorCuenta(m.cuenta || 'efectivo', -monto); }
+  });
+
+  // Egresos registrados directo en la pestaña Egresos (arriendo, servicios,
+  // nómina/proveedores manuales…) dentro del período, cada uno con su cuenta.
+  // OJO: los gastos categorizados que se registran en Cierre (gastosDia) NO se
+  // vuelven a restar aquí — ya están descontados arriba, dentro de "c.gastos"
+  // de cada turno; volver a restarlos aquí los contaría dos veces.
+  let egresosTotal = 0;
+  ST.egresos.filter(e => inP(e.fecha, periodo)).forEach(e => { egresosTotal += (e.monto || 0); sumaPorCuenta(e.cuenta || 'efectivo', -(e.monto || 0)); });
+
+  const disponible = efectivo + transfAlmuerzos + transfRapidas;
+  return { efectivo, transfAlmuerzos, transfRapidas, aportes, gastosCaja, egresosTotal, disponible };
 }
 
 async function agregarMovimientoCaja() {
   const fecha       = document.getElementById('caja-mov-fecha').value || today();
   const descripcion = document.getElementById('caja-mov-descripcion').value.trim();
   const monto       = valMiles('caja-mov-monto');
+  const cuenta      = document.getElementById('caja-mov-cuenta').value;
   if (!descripcion) { showToast('⚠ Escribe el detalle del movimiento', 'warning'); return; }
   if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
 
   try {
-    const [row] = await sbInsert('movimientos_caja', { fecha, tipo: tipoMovimientoCaja, descripcion, monto });
+    const [row] = await sbInsertConCuenta('movimientos_caja', { fecha, tipo: tipoMovimientoCaja, descripcion, monto, cuenta });
     ST.movimientosCaja.unshift(row);
     setSyncBadge('ok');
     document.getElementById('caja-mov-descripcion').value = '';
@@ -6242,19 +6338,32 @@ function renderCaja() {
   const cajaEfEl = document.getElementById('caja-efectivo');
   if (!cajaEfEl) return; // sección oculta/no cargada todavía
 
-  const { efectivo, transferencia, disponible } = calcularAcumuladosCaja();
+  const { efectivo, transfAlmuerzos, transfRapidas, disponible } = calcularAcumuladosCaja(fCaja);
   cajaEfEl.textContent = fmt(efectivo);
-  document.getElementById('caja-transferencia').textContent = fmt(transferencia);
+  document.getElementById('caja-transf-almuerzos').textContent = fmt(transfAlmuerzos);
+  document.getElementById('caja-transf-rapidas').textContent   = fmt(transfRapidas);
   document.getElementById('caja-disponible').textContent    = fmt(disponible);
   document.getElementById('caja-disponible').style.color    = disponible >= 0 ? 'var(--accent)' : 'var(--red)';
 
-  // Utilidades por día (agrupadas), filtradas por el período elegido
+  // Los 4 "kpi-sub" dejan claro que el monto ya es SOLO del período elegido
+  // arriba (Hoy/Semana/Mes/Todo), para no parecer un total fijo.
+  const PERIODO_LABEL_CAJA = { hoy:'hoy', semana:'esta semana', mes:'este mes', todo:'todo el histórico' };
+  const periodoTxt = PERIODO_LABEL_CAJA[fCaja] || fCaja;
+  document.getElementById('caja-sub-efectivo').textContent        = `Acumulado — ${periodoTxt}`;
+  document.getElementById('caja-sub-transf-almuerzos').textContent = `Acumulado — ${periodoTxt}`;
+  document.getElementById('caja-sub-transf-rapidas').textContent   = `Acumulado — ${periodoTxt}`;
+  document.getElementById('caja-sub-disponible').textContent       = `Suma de las 3 cuentas — ${periodoTxt}`;
+
+  // Utilidades por día (agrupadas por turno), con el mismo filtro de período
+  // que ya se usó arriba para los 4 montos acumulados — el desglose día a día
+  // de exactamente lo que compone ese acumulado.
   const cierresFiltrados = ST.cierresDia.filter(c => inP(c.fecha, fCaja));
   const porDia = {};
   cierresFiltrados.forEach(c => {
-    if (!porDia[c.fecha]) porDia[c.fecha] = { efectivo: 0, transferencia: 0 };
-    porDia[c.fecha].efectivo      += (c.efectivo || 0) - (c.gastos || 0) + (c.ajuste_manual || 0);
-    porDia[c.fecha].transferencia += (c.transferencia || 0);
+    if (!porDia[c.fecha]) porDia[c.fecha] = { efectivo: 0, transfAlmuerzos: 0, transfRapidas: 0 };
+    porDia[c.fecha].efectivo += (c.efectivo || 0) - (c.gastos || 0) + (c.ajuste_manual || 0);
+    if (c.turno === 'almuerzo') porDia[c.fecha].transfAlmuerzos += (c.transferencia || 0);
+    else                        porDia[c.fecha].transfRapidas   += (c.transferencia || 0);
   });
   const fechas = Object.keys(porDia).sort((a,b) => b.localeCompare(a));
   const histBody = document.getElementById('caja-historial-body');
@@ -6264,11 +6373,12 @@ function renderCaja() {
         return `<tr>
           <td>${f}</td>
           <td class="amount-pos">${fmt(d.efectivo)}</td>
-          <td class="amount-pos">${fmt(d.transferencia)}</td>
-          <td><strong>${fmt(d.efectivo + d.transferencia)}</strong></td>
+          <td class="amount-pos">${fmt(d.transfAlmuerzos)}</td>
+          <td class="amount-pos">${fmt(d.transfRapidas)}</td>
+          <td><strong>${fmt(d.efectivo + d.transfAlmuerzos + d.transfRapidas)}</strong></td>
         </tr>`;
       }).join('')
-    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Sin cierres en este período</div></div></td></tr>`;
+    : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Sin cierres en este período</div></div></td></tr>`;
 
   // Movimientos de caja (gastos y aportes), filtrados por el mismo período
   const movs = ST.movimientosCaja.filter(m => inP(m.fecha, fCaja)).sort((a,b) => b.fecha.localeCompare(a.fecha));
@@ -6277,11 +6387,12 @@ function renderCaja() {
     ? movs.map(m => `<tr>
         <td>${m.fecha}</td>
         <td><span class="badge ${m.tipo==='aporte'?'badge-green':'badge-red'}">${m.tipo==='aporte'?'➕ Aporte':'➖ Gasto'}</span></td>
+        <td><span class="badge ${cuentaBadge(m.cuenta)}">${CUENTA_LABELS[m.cuenta]||m.cuenta||'💵 Efectivo'}</span></td>
         <td style="color:var(--text)">${m.descripcion}</td>
         <td class="${m.tipo==='aporte'?'amount-pos':'amount-neg'}">${fmt(m.monto)}</td>
         <td><button class="btn btn-danger" onclick="eliminarMovimientoCaja(${m.id})">✕</button></td>
       </tr>`).join('')
-    : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">💰</div><div class="empty-text">Sin movimientos registrados en este período</div></div></td></tr>`;
+    : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">💰</div><div class="empty-text">Sin movimientos registrados en este período</div></div></td></tr>`;
 }
 
 // ══════════════════════════════════════════════════════════════════════
