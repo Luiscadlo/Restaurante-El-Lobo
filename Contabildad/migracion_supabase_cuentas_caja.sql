@@ -26,3 +26,11 @@ alter table movimientos_caja add constraint movimientos_caja_cuenta_check check 
 alter table ingresos_extra add column if not exists cuenta text not null default 'efectivo';
 alter table ingresos_extra drop constraint if exists ingresos_extra_cuenta_check;
 alter table ingresos_extra add constraint ingresos_extra_cuenta_check check (cuenta in ('efectivo','transf_rapidas','transf_almuerzos'));
+
+-- Refrescar el caché de esquema de PostgREST ------------------------------
+-- Después de un ALTER TABLE, la API de Supabase a veces tarda en darse
+-- cuenta de las columnas nuevas (o hasta de columnas viejas, por un rato)
+-- y responde "Could not find the 'x' column ... in the schema cache" aunque
+-- la columna sí exista. Esta línea le avisa a PostgREST que recargue el
+-- esquema de una vez, sin esperar el auto-refresco periódico.
+notify pgrst, 'reload schema';
