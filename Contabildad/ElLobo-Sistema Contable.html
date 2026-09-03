@@ -163,16 +163,29 @@
 
   .chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
   .chart-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .bar-chart { display: flex; gap: 8px; align-items: flex-end; height: 120px; overflow-x: auto; }
-  .bar-group { display: flex; flex-direction: column; align-items: center; flex: 1 0 32px; gap: 4px; height: 100%; justify-content: flex-end; }
-  .bars { display: flex; gap: 3px; align-items: flex-end; height: 100px; }
-  .bar { width: 14px; border-radius: 3px 3px 0 0; min-height: 4px; transition: height 0.5s ease; }
+  .chart-scale-row { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: start; }
+  .chart-yaxis { position: relative; height: 100px; }
+  .chart-yaxis-label { position: absolute; right: 0; transform: translateY(-50%); font-size: 9px; color: var(--text3); white-space: nowrap; }
+  /* .bar-chart es SOLO la zona de barras (100px = la misma altura que
+     .chart-yaxis, para que sus marcas queden alineadas con el 0%/100% de la
+     escala); las etiquetas del eje X van debajo, en .bar-labels-row, con el
+     mismo flex-basis por columna para que sigan alineadas con sus barras. */
+  .bar-chart-scroll { overflow-x: auto; overflow-y: hidden; }
+  .bar-chart { position: relative; display: flex; gap: 8px; align-items: flex-end; height: 100px; min-width: fit-content; }
+  .bar-gridline { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border); }
+  .bar-group { position: relative; display: flex; gap: 3px; align-items: flex-end; justify-content: center; flex: 1 0 32px; height: 100%; }
+  .bar { width: 14px; border-radius: 3px 3px 0 0; min-height: 4px; transition: height 0.5s ease; cursor: pointer; }
   .bar.income { background: var(--green); opacity: 0.8; }
   .bar.expense { background: var(--red); opacity: 0.8; }
+  .bar-labels-row { display: flex; gap: 8px; margin-top: 6px; min-width: fit-content; }
+  .bar-label-cell { flex: 1 0 32px; text-align: center; }
   .bar-label { font-size: 9px; color: var(--text3); text-align: center; }
   .chart-legend { display: flex; gap: 16px; margin-top: 12px; }
   .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text3); }
   .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .chart-tooltip { position: fixed; pointer-events: none; z-index: 9999; background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 11px; font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text); box-shadow: 0 6px 18px rgba(0,0,0,0.35); white-space: nowrap; display: none; }
+  .chart-tooltip .tt-label { color: var(--text3); font-size: 10px; margin-bottom: 2px; }
+  .chart-tooltip .tt-valor { font-weight: 700; }
 
   .stock-bar-wrap { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; flex: 1; }
   .stock-bar { height: 100%; border-radius: 3px; }
@@ -456,7 +469,13 @@
 
     <div class="chart-container">
       <div class="chart-title" id="barChartTitle">Ingresos vs Egresos</div>
-      <div class="bar-chart" id="barChart"></div>
+      <div class="chart-scale-row">
+        <div class="chart-yaxis" id="barChartYAxis"></div>
+        <div class="bar-chart-scroll">
+          <div class="bar-chart" id="barChart"></div>
+          <div class="bar-labels-row" id="barChartLabels"></div>
+        </div>
+      </div>
       <div class="chart-legend">
         <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Ingresos</div>
         <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Egresos</div>
@@ -889,7 +908,7 @@
           <div class="report-line"><span>Esta semana</span><strong class="amount-neg" id="egr-semana">$0</strong></div>
           <div class="report-line"><span>Este mes</span><strong class="amount-neg" id="egr-mes">$0</strong></div>
           <div class="divider"></div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Por categoría — período: <strong id="egr-cat-periodo" style="color:var(--text2);">hoy</strong> <span style="color:var(--text3);">(cambia con el filtro del historial, abajo)</span></div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Por categoría <span style="color:var(--text3);">(según los filtros del historial, abajo)</span></div>
           <div class="report-line"><span>Nómina</span><strong id="egr-nom">$0</strong></div>
           <div class="report-line"><span>Proveedores</span><strong id="egr-prov">$0</strong></div>
           <div class="report-line"><span>Arriendo + Servicios</span><strong id="egr-arr">$0</strong></div>
@@ -902,11 +921,50 @@
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">Historial de egresos <span style="color:var(--text3);font-size:11px;">— incluye los gastos categorizados que registras en Cierre</span></div>
-        <div class="filter-bar" style="margin-bottom:0;">
-          <button class="filter-btn active" onclick="setFE('hoy',this)">Hoy</button>
-          <button class="filter-btn" onclick="setFE('semana',this)">Semana</button>
-          <button class="filter-btn" onclick="setFE('mes',this)">Mes</button>
-          <button class="filter-btn" onclick="setFE('todo',this)">Todo</button>
+      </div>
+      <div class="panel-body" style="padding-bottom:0;">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:4px;">
+          <div>
+            <div class="filtro-label">Período</div>
+            <div class="filter-bar" style="margin-bottom:0;" id="egr-filtros-periodo">
+              <button class="filter-btn active" onclick="setFEgr('periodo','hoy',this)">Hoy</button>
+              <button class="filter-btn" onclick="setFEgr('periodo','semana',this)">Semana</button>
+              <button class="filter-btn" onclick="setFEgr('periodo','mes',this)">Mes</button>
+              <button class="filter-btn" onclick="setFEgr('periodo','todo',this)">Todo</button>
+            </div>
+          </div>
+          <div>
+            <div class="filtro-label">Día específico</div>
+            <input type="date" id="egr-fecha-filtro" style="padding:8px 10px;" onchange="setFEgrFecha(this.value)">
+          </div>
+          <div>
+            <div class="filtro-label">Categoría</div>
+            <select onchange="setFEgrSelect('cat', this.value)">
+              <option value="todas">Todas</option>
+              <option value="nomina">Nómina</option>
+              <option value="proveedor">Proveedores</option>
+              <option value="arriendo">Arriendo</option>
+              <option value="servicios">Servicios</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div>
+            <div class="filtro-label">Cuenta</div>
+            <select onchange="setFEgrSelect('cuenta', this.value)">
+              <option value="todas">Todas</option>
+              <option value="efectivo">💵 Efectivo</option>
+              <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
+              <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
+            </select>
+          </div>
+          <div>
+            <div class="filtro-label">Método de pago</div>
+            <select onchange="setFEgrSelect('metodo', this.value)">
+              <option value="todos">Todos</option>
+              <option value="efectivo">Efectivo</option>
+              <option value="transferencia">Transferencia</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Cuenta</th><th>Origen</th><th>Monto</th><th></th></tr></thead><tbody id="egresos-body"></tbody></table></div>
@@ -1952,6 +2010,15 @@ const fmt      = n  => '$' + Math.abs(Math.round(n)).toLocaleString('es-CO');
 // absoluto) — se usa donde el número puede ser negativo y hace falta que se
 // note, como la utilidad neta de un período con pérdida.
 const fmtSigned = n => (n < 0 ? '− ' : '') + fmt(n);
+// Versión corta para etiquetas de eje ($1.2M / $850K) — donde fmt() completo
+// ("$1.234.567") no cabe en el espacio angosto de un eje de gráfico.
+function fmtCompacto(n) {
+  const v = Math.abs(Math.round(n));
+  const signo = n < 0 ? '− ' : '';
+  if (v >= 1000000) return signo + '$' + (v/1000000).toFixed(v % 1000000 === 0 ? 0 : 1) + 'M';
+  if (v >= 1000)    return signo + '$' + Math.round(v/1000) + 'K';
+  return signo + '$' + v;
+}
 // Fecha local en formato YYYY-MM-DD. OJO: NO usar Date.toISOString() para esto —
 // esa función convierte a UTC, y en Colombia (UTC-5) eso hace que desde las
 // 7:00pm hasta medianoche "today()" devuelva el día siguiente por error,
@@ -2192,7 +2259,11 @@ let ddTurno = 'almuerzo';
 document.getElementById('ing-hora').value = nowTime();
 
 // ── Filtros activos ───────────────────────────────────────────────────
-let fI = 'todos', fE = 'hoy', fInv = 'todos', fTablero = 'mes', fIngFin = 'semana';
+let fI = 'todos', fInv = 'todos', fTablero = 'mes', fIngFin = 'semana';
+// Historial de Egresos: período/fecha igual que fPedidosHist, más categoría,
+// cuenta y método de pago (efectivo vs. cualquier transferencia).
+let fEgr = { periodo: 'hoy', fecha: '', cat: 'todas', cuenta: 'todas', metodo: 'todos' };
+let egrEditId = null;
 // Granularidad de los gráficos comparativos del Tablero (independiente del
 // filtro de arriba, que solo afecta las KPI de un único período) — con esto
 // se ve la tendencia del negocio en el tiempo: día a día, semana a semana o
@@ -5299,11 +5370,69 @@ async function eliminarEgreso(id) {
   } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
 }
 
-function setFE(f, btn) {
-  fE = f;
-  document.querySelectorAll('#tab-egresos .filter-btn').forEach(b => b.classList.remove('active'));
+function editarEgreso(id) { egrEditId = id; renderEgresos(); }
+function cancelarEdicionEgreso() { egrEditId = null; renderEgresos(); }
+
+async function guardarEdicionEgreso(id) {
+  const fechaEl  = document.getElementById(`egr-edit-fecha-${id}`);
+  const descEl   = document.getElementById(`egr-edit-desc-${id}`);
+  const catEl    = document.getElementById(`egr-edit-cat-${id}`);
+  const cuentaEl = document.getElementById(`egr-edit-cuenta-${id}`);
+  const montoEl  = document.getElementById(`egr-edit-monto-${id}`);
+  if (!fechaEl || !montoEl) return;
+  const fecha  = fechaEl.value;
+  const monto  = parseMiles(montoEl.value);
+  if (!fecha || !monto || monto <= 0) { showToast('⚠ Completa fecha y monto', 'warning'); return; }
+
+  try {
+    // "description" (en inglés) es el nombre real de esa columna — ver la
+    // nota en agregarEgreso().
+    const patch = { fecha, description: descEl.value.trim(), cat: catEl.value, cuenta: cuentaEl.value, monto };
+    await sbPatch('egresos', `id=eq.${id}`, patch);
+    const e = ST.egresos.find(x => x.id === id);
+    if (e) Object.assign(e, patch);
+    egrEditId = null;
+    setSyncBadge('ok');
+    renderAll();
+    showToast('✅ Egreso actualizado', 'ok');
+  } catch(err) { console.error('guardarEdicionEgreso', err); showToast(`⚠ Error al actualizar: ${(err.message||'').slice(0,160)}`, 'warning'); }
+}
+
+function setFEgr(dimension, valor, btn) {
+  fEgr[dimension] = valor;
+  if (dimension === 'periodo') {
+    fEgr.fecha = '';
+    const fechaEl = document.getElementById('egr-fecha-filtro');
+    if (fechaEl) fechaEl.value = '';
+  }
+  btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderEgresos();
+}
+
+function setFEgrFecha(valor) {
+  fEgr.fecha = valor || '';
+  if (valor) document.querySelectorAll('#egr-filtros-periodo .filter-btn').forEach(b => b.classList.remove('active'));
+  renderEgresos();
+}
+
+function setFEgrSelect(campo, valor) {
+  fEgr[campo] = valor;
+  renderEgresos();
+}
+
+// Un egreso pasa el filtro si cumple fecha/período Y (si están activos)
+// categoría, cuenta y método de pago — método se deriva de la cuenta:
+// "efectivo" es el único método efectivo, cualquier otra cuenta es transferencia.
+function pasaFiltroEgr(e, f) {
+  if (!enFiltroFecha(e.fecha, f)) return false;
+  if (f.cat    !== 'todas' && e.cat !== f.cat) return false;
+  if (f.cuenta !== 'todas' && (e.cuenta || 'efectivo') !== f.cuenta) return false;
+  if (f.metodo !== 'todos') {
+    const metodo = (e.cuenta || 'efectivo') === 'efectivo' ? 'efectivo' : 'transferencia';
+    if (metodo !== f.metodo) return false;
+  }
+  return true;
 }
 
 // Egresos "de verdad" (los que cargas tú directo aquí, ej: arriendo, servicios)
@@ -5328,20 +5457,60 @@ function egresosCombinados() {
   return [...deEgresos, ...deCierre];
 }
 
+// Fila editable inline de un egreso (solo para origen==='egresos' — los de
+// Cierre se editan en su propia pestaña, ver el botón "Editar en Cierre").
+function filaEgresoEdit(e) {
+  return `<tr>
+    <td><input type="date" id="egr-edit-fecha-${e.id}" value="${e.fecha}" style="width:100%;"></td>
+    <td><input type="text" id="egr-edit-desc-${e.id}" value="${(e.descripcion||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
+    <td><select id="egr-edit-cat-${e.id}" style="width:100%;">
+      <option value="nomina"${e.cat==='nomina'?' selected':''}>Nómina</option>
+      <option value="proveedor"${e.cat==='proveedor'?' selected':''}>Proveedores</option>
+      <option value="arriendo"${e.cat==='arriendo'?' selected':''}>Arriendo</option>
+      <option value="servicios"${e.cat==='servicios'?' selected':''}>Servicios</option>
+      <option value="otro"${e.cat==='otro'?' selected':''}>Otro</option>
+    </select></td>
+    <td><select id="egr-edit-cuenta-${e.id}" style="width:100%;">
+      <option value="efectivo"${e.cuenta==='efectivo'?' selected':''}>💵 Efectivo</option>
+      <option value="transf_almuerzos"${e.cuenta==='transf_almuerzos'?' selected':''}>☀️ Transf. Almuerzos</option>
+      <option value="transf_rapidas"${e.cuenta==='transf_rapidas'?' selected':''}>🌙 Transf. Comidas rápidas</option>
+    </select></td>
+    <td style="font-size:11px;color:var(--text3);">✍ Manual</td>
+    <td><input type="text" inputmode="numeric" id="egr-edit-monto-${e.id}" value="${Number(e.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
+    <td style="white-space:nowrap;display:flex;gap:4px;">
+      <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="guardarEdicionEgreso(${e.id})">✓</button>
+      <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="cancelarEdicionEgreso()">✕</button>
+    </td>
+  </tr>`;
+}
+
 function renderEgresos() {
   const todos = egresosCombinados();
-  const list  = todos.filter(e => inP(e.fecha, fE)).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const list  = todos.filter(e => pasaFiltroEgr(e, fEgr)).sort((a,b) => b.fecha.localeCompare(a.fecha));
   const tbody = document.getElementById('egresos-body');
   tbody.innerHTML = list.length
-    ? list.map(e => `<tr>
+    ? list.map(e => {
+        if (e.origen === 'egresos' && egrEditId === e.id) return filaEgresoEdit(e);
+        // Los de Cierre muestran de cuál turno vienen (almuerzo o comida
+        // rápida) y llevan al Cierre de ese día/turno para editarlos ahí.
+        const origenTxt = e.origen === 'cierre'
+          ? `🧾 Cierre · ${e.turno === 'almuerzo' ? '☀️ Almuerzo' : '🌙 Comida rápida'}`
+          : '✍ Manual';
+        const acciones = e.origen === 'egresos'
+          ? `<button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="editarEgreso(${e.id})">✏️</button>
+             <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="eliminarEgreso(${e.id})">✕</button>`
+          : `<button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="irADiaADia('${e.fecha}','${e.turno}')" title="Editar en Cierre">✏️</button>
+             <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="eliminarGastoDia(${e.id})">✕</button>`;
+        return `<tr>
         <td>${e.fecha}</td>
         <td style="color:var(--text)">${e.descripcion||'—'}</td>
         <td><span class="badge ${catC(e.cat)}">${CAT_LABELS[e.cat]||e.cat}</span></td>
         <td><span class="badge ${cuentaBadge(e.cuenta)}">${CUENTA_LABELS[e.cuenta]||e.cuenta}</span></td>
-        <td style="font-size:11px;color:var(--text3);">${e.origen==='cierre' ? '🧾 Cierre' : '✍ Manual'}</td>
+        <td style="font-size:11px;color:var(--text3);">${origenTxt}</td>
         <td class="amount-neg">${fmt(e.monto)}</td>
-        <td><button class="btn btn-danger" onclick="${e.origen==='cierre' ? `eliminarGastoDia(${e.id})` : `eliminarEgreso(${e.id})`}">✕</button></td>
-      </tr>`).join('')
+        <td style="white-space:nowrap;display:flex;gap:4px;">${acciones}</td>
+      </tr>`;
+      }).join('')
     : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin registros</div></div></td></tr>`;
 
   const sE = f => todos.filter(e=>inP(e.fecha,f)).reduce((a,b)=>a+b.monto,0);
@@ -5349,11 +5518,8 @@ function renderEgresos() {
   document.getElementById('egr-semana').textContent = fmt(sE('semana'));
   document.getElementById('egr-mes').textContent    = fmt(sE('mes'));
 
-  // El desglose por categoría sigue el mismo período elegido en el filtro del
-  // historial (fE) — igual que en Ingresos — para que no parezca un total fijo
-  // desconectado de "Hoy/Semana/Mes/Todo".
-  const PERIODO_LABEL = { hoy:'hoy', semana:'esta semana', mes:'este mes', todo:'todo el historial' };
-  document.getElementById('egr-cat-periodo').textContent = PERIODO_LABEL[fE] || fE;
+  // El desglose por categoría sigue exactamente los mismos filtros de la
+  // tabla de abajo (período/fecha/categoría/cuenta/método).
   document.getElementById('egr-nom').textContent    = fmt(list.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
   document.getElementById('egr-prov').textContent   = fmt(list.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
   document.getElementById('egr-arr').textContent    = fmt(list.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0));
@@ -6266,6 +6432,7 @@ function corregirCierreActual() {
 // ══════════════════════════════════════════════════════════════════════
 let fCaja = 'mes';
 let tipoMovimientoCaja = 'gasto';
+let cajaMovEditId = null;
 
 function setFCaja(f, btn) {
   fCaja = f;
@@ -6368,6 +6535,55 @@ async function eliminarMovimientoCaja(id) {
   } catch (e) { showToast('⚠ Error al eliminar', 'warning'); }
 }
 
+function editarMovimientoCaja(id) { cajaMovEditId = id; renderCaja(); }
+function cancelarEdicionMovimientoCaja() { cajaMovEditId = null; renderCaja(); }
+
+async function guardarEdicionMovimientoCaja(id) {
+  const fechaEl  = document.getElementById(`caja-edit-fecha-${id}`);
+  const tipoEl   = document.getElementById(`caja-edit-tipo-${id}`);
+  const cuentaEl = document.getElementById(`caja-edit-cuenta-${id}`);
+  const descEl   = document.getElementById(`caja-edit-desc-${id}`);
+  const montoEl  = document.getElementById(`caja-edit-monto-${id}`);
+  if (!fechaEl || !montoEl) return;
+  const fecha       = fechaEl.value;
+  const descripcion = descEl.value.trim();
+  const monto       = parseMiles(montoEl.value);
+  if (!descripcion) { showToast('⚠ Escribe el detalle del movimiento', 'warning'); return; }
+  if (!fecha || !monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
+
+  try {
+    const patch = { fecha, tipo: tipoEl.value, cuenta: cuentaEl.value, descripcion, monto };
+    await sbPatch('movimientos_caja', `id=eq.${id}`, patch);
+    const m = ST.movimientosCaja.find(x => x.id === id);
+    if (m) Object.assign(m, patch);
+    cajaMovEditId = null;
+    setSyncBadge('ok');
+    renderCaja();
+    showToast('✅ Movimiento actualizado', 'ok');
+  } catch(err) { console.error('guardarEdicionMovimientoCaja', err); showToast(`⚠ Error al actualizar: ${(err.message||'').slice(0,160)}`, 'warning'); }
+}
+
+function filaMovimientoCajaEdit(m) {
+  return `<tr>
+    <td><input type="date" id="caja-edit-fecha-${m.id}" value="${m.fecha}" style="width:100%;"></td>
+    <td><select id="caja-edit-tipo-${m.id}" style="width:100%;">
+      <option value="gasto"${m.tipo==='gasto'?' selected':''}>➖ Gasto</option>
+      <option value="aporte"${m.tipo==='aporte'?' selected':''}>➕ Aporte</option>
+    </select></td>
+    <td><select id="caja-edit-cuenta-${m.id}" style="width:100%;">
+      <option value="efectivo"${m.cuenta==='efectivo'?' selected':''}>💵 Efectivo</option>
+      <option value="transf_almuerzos"${m.cuenta==='transf_almuerzos'?' selected':''}>☀️ Transf. Almuerzos</option>
+      <option value="transf_rapidas"${m.cuenta==='transf_rapidas'?' selected':''}>🌙 Transf. Comidas rápidas</option>
+    </select></td>
+    <td><input type="text" id="caja-edit-desc-${m.id}" value="${(m.descripcion||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
+    <td><input type="text" inputmode="numeric" id="caja-edit-monto-${m.id}" value="${Number(m.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
+    <td style="white-space:nowrap;display:flex;gap:4px;">
+      <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="guardarEdicionMovimientoCaja(${m.id})">✓</button>
+      <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="cancelarEdicionMovimientoCaja()">✕</button>
+    </td>
+  </tr>`;
+}
+
 function renderCaja() {
   const cajaEfEl = document.getElementById('caja-efectivo');
   if (!cajaEfEl) return; // sección oculta/no cargada todavía
@@ -6418,13 +6634,16 @@ function renderCaja() {
   const movs = ST.movimientosCaja.filter(m => inP(m.fecha, fCaja)).sort((a,b) => b.fecha.localeCompare(a.fecha));
   const movBody = document.getElementById('caja-movimientos-body');
   movBody.innerHTML = movs.length
-    ? movs.map(m => `<tr>
+    ? movs.map(m => cajaMovEditId === m.id ? filaMovimientoCajaEdit(m) : `<tr>
         <td>${m.fecha}</td>
         <td><span class="badge ${m.tipo==='aporte'?'badge-green':'badge-red'}">${m.tipo==='aporte'?'➕ Aporte':'➖ Gasto'}</span></td>
         <td><span class="badge ${cuentaBadge(m.cuenta)}">${CUENTA_LABELS[m.cuenta]||m.cuenta||'💵 Efectivo'}</span></td>
         <td style="color:var(--text)">${m.descripcion}</td>
         <td class="${m.tipo==='aporte'?'amount-pos':'amount-neg'}">${fmt(m.monto)}</td>
-        <td><button class="btn btn-danger" onclick="eliminarMovimientoCaja(${m.id})">✕</button></td>
+        <td style="white-space:nowrap;display:flex;gap:4px;">
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="editarMovimientoCaja(${m.id})">✏️</button>
+          <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="eliminarMovimientoCaja(${m.id})">✕</button>
+        </td>
       </tr>`).join('')
     : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">💰</div><div class="empty-text">Sin movimientos registrados en este período</div></div></td></tr>`;
 }
@@ -6567,6 +6786,56 @@ function statsRango(desde, hasta) {
   return { ingresos, egresos, utilidad: ingresos - egresos };
 }
 
+// ── Tooltip flotante compartido por los gráficos del Tablero ───────────
+// Un solo div reutilizado (creado la primera vez que hace falta), fijo a la
+// ventana y siguiendo el cursor — así al pasar el mouse por una barra o un
+// punto se ve el valor exacto de inmediato, sin esperar el tooltip nativo
+// del navegador.
+function tooltipChartEl() {
+  let el = document.getElementById('chart-tooltip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'chart-tooltip';
+    el.className = 'chart-tooltip';
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function mostrarTooltipChart(ev, origen) {
+  const el = tooltipChartEl();
+  el.innerHTML = `<div class="tt-label">${origen.dataset.label}</div><div class="tt-valor">${origen.dataset.valor}</div>`;
+  el.style.display = 'block';
+  moverTooltipChart(ev);
+}
+function moverTooltipChart(ev) {
+  const el = tooltipChartEl();
+  if (el.style.display === 'none') return;
+  const pad = 14;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  if (x + 160 > window.innerWidth)  x = ev.clientX - pad - 150;
+  if (y + 44  > window.innerHeight) y = ev.clientY - pad - 40;
+  el.style.left = x + 'px';
+  el.style.top  = y + 'px';
+}
+function ocultarTooltipChart() {
+  const el = document.getElementById('chart-tooltip');
+  if (el) el.style.display = 'none';
+}
+
+// Dibuja el eje Y (escala de referencia) de un gráfico: 5 marcas repartidas
+// entre 0 y maxVal para hacerse una idea del orden de magnitud de un vistazo,
+// sin tener que pasar el mouse por cada barra.
+function renderEjeY(elId, maxVal) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  const PASOS = 4;
+  el.innerHTML = Array.from({length: PASOS+1}, (_, i) => {
+    const frac = i / PASOS; // 0 = arriba (maxVal), 1 = abajo ($0)
+    const val  = maxVal * (1 - frac);
+    return `<div class="chart-yaxis-label" style="top:${(frac*100).toFixed(1)}%;">${fmtCompacto(val)}</div>`;
+  }).join('');
+}
+
 function renderGraficosTablero() {
   const buckets = bucketsGrafico(granTablero).map(b => ({ ...b, ...statsRango(b.ini, b.fin) }));
   const tituloPeriodo = `Últim${granTablero==='dia'?'os':'as'} ${buckets.length} ${GRAN_LABEL[granTablero]}`;
@@ -6574,14 +6843,19 @@ function renderGraficosTablero() {
   // Barras: Ingresos vs Egresos
   document.getElementById('barChartTitle').textContent = `Ingresos vs Egresos — ${tituloPeriodo}`;
   const mx = Math.max(...buckets.map(b => Math.max(b.ingresos, b.egresos)), 1);
-  document.getElementById('barChart').innerHTML = buckets.map(b =>
+  renderEjeY('barChartYAxis', mx);
+  // Líneas de referencia (mismos 5 pasos que el eje Y) detrás de las barras.
+  const gridlines = Array.from({length: 5}, (_, i) =>
+    `<div class="bar-gridline" style="top:${(i*25).toFixed(1)}%;"></div>`
+  ).join('');
+  document.getElementById('barChart').innerHTML = gridlines + buckets.map(b =>
     `<div class="bar-group">
-      <div class="bars">
-        <div class="bar income"  style="height:${Math.max(4,(b.ingresos/mx)*100)}px" title="${b.label}: ${fmt(b.ingresos)}"></div>
-        <div class="bar expense" style="height:${Math.max(4,(b.egresos/mx)*100)}px" title="${b.label}: ${fmt(b.egresos)}"></div>
-      </div>
-      <div class="bar-label">${b.label}</div>
+      <div class="bar income"  style="height:${Math.max(4,(b.ingresos/mx)*100)}px" data-label="${b.label}" data-valor="Ingresos: ${fmt(b.ingresos)}" onmouseenter="mostrarTooltipChart(event,this)" onmousemove="moverTooltipChart(event)" onmouseleave="ocultarTooltipChart()"></div>
+      <div class="bar expense" style="height:${Math.max(4,(b.egresos/mx)*100)}px" data-label="${b.label}" data-valor="Egresos: ${fmt(b.egresos)}" onmouseenter="mostrarTooltipChart(event,this)" onmousemove="moverTooltipChart(event)" onmouseleave="ocultarTooltipChart()"></div>
     </div>`
+  ).join('');
+  document.getElementById('barChartLabels').innerHTML = buckets.map(b =>
+    `<div class="bar-label-cell"><div class="bar-label">${b.label}</div></div>`
   ).join('');
 
   // Línea: Utilidad neta
@@ -6590,8 +6864,8 @@ function renderGraficosTablero() {
 }
 
 // Gráfico de línea liviano en SVG puro (sin librerías): utilidad neta por
-// cubo de tiempo, con una línea de referencia en $0 para distinguir de un
-// vistazo los períodos con ganancia (verde) de los de pérdida (rojo).
+// cubo de tiempo, con eje Y de referencia, línea de $0 y tooltip al pasar
+// el mouse por cada punto con el valor exacto de ese período.
 function renderLineChart(elId, buckets) {
   const el = document.getElementById(elId);
   const n  = buckets.length;
@@ -6600,8 +6874,8 @@ function renderLineChart(elId, buckets) {
   const minV  = Math.min(...vals, 0);
   const range = (maxV - minV) || 1;
 
-  const w = Math.max(300, el.clientWidth || 600);
-  const h = 140, padX = 22, padY = 16;
+  const w = Math.max(320, el.clientWidth || 600);
+  const h = 150, padX = 48, padY = 16;
   const xStep = n > 1 ? (w - padX*2) / (n - 1) : 0;
   const yFor  = v => h - padY - ((v - minV) / range) * (h - padY*2);
 
@@ -6609,18 +6883,30 @@ function renderLineChart(elId, buckets) {
   const zeroY = yFor(0).toFixed(1);
   const linePts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const areaPts = `${pts[0].x.toFixed(1)},${zeroY} ${linePts} ${pts[n-1].x.toFixed(1)},${zeroY}`;
+
+  // Eje Y: 4 marcas repartidas entre el mínimo y el máximo (incluye $0
+  // siempre, aunque no caiga justo en un paso, vía la línea de referencia).
+  const PASOS = 4;
+  const gridlines = Array.from({length: PASOS+1}, (_, i) => {
+    const val = minV + (range * i / PASOS);
+    const y = yFor(val).toFixed(1);
+    return `<line x1="${padX}" y1="${y}" x2="${w-padX}" y2="${y}" stroke="var(--border)" stroke-width="1" stroke-dasharray="3 4" opacity="0.5"/>
+      <text x="${padX-8}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="9" fill="var(--text3)">${fmtCompacto(val)}</text>`;
+  }).join('');
+
   const dots = pts.map(p =>
-    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${p.v>=0?'var(--green)':'var(--red)'}"><title>${p.label}: ${fmtSigned(p.v)}</title></circle>`
+    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="${p.v>=0?'var(--green)':'var(--red)'}" style="cursor:pointer;" data-label="${p.label}" data-valor="${fmtSigned(p.v)}" onmouseenter="mostrarTooltipChart(event,this)" onmousemove="moverTooltipChart(event)" onmouseleave="ocultarTooltipChart()"></circle>`
   ).join('');
 
   el.innerHTML = `
     <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:${h}px;display:block;">
-      <line x1="${padX}" y1="${zeroY}" x2="${w-padX}" y2="${zeroY}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 4"/>
+      ${gridlines}
+      <line x1="${padX}" y1="${zeroY}" x2="${w-padX}" y2="${zeroY}" stroke="var(--border2)" stroke-width="1.5"/>
       <polygon points="${areaPts}" fill="var(--accent)" opacity="0.12"></polygon>
       <polyline points="${linePts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
       ${dots}
     </svg>
-    <div style="display:flex;gap:4px;">${buckets.map(b => `<div class="bar-label" style="flex:1;text-align:center;">${b.label}</div>`).join('')}</div>`;
+    <div style="display:flex;gap:4px;padding-left:${padX}px;padding-right:${padX}px;">${buckets.map(b => `<div class="bar-label" style="flex:1;text-align:center;">${b.label}</div>`).join('')}</div>`;
 }
 
 // ── TABS ──────────────────────────────────────────────────────────────
