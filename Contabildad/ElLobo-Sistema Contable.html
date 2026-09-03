@@ -1118,9 +1118,18 @@
               <button class="filter-btn" onclick="setFIngresosHist('metodo','transferencia',this)">Transferencia</button>
             </div>
           </div>
+          <div>
+            <div class="filtro-label">Cuenta <span style="text-transform:none;">(solo ingresos adicionales)</span></div>
+            <div class="filter-bar" style="margin-bottom:0;" id="ingresoshist-filtros-cuenta">
+              <button class="filter-btn active" onclick="setFIngresosHist('cuenta','todas',this)">Todas</button>
+              <button class="filter-btn" onclick="setFIngresosHist('cuenta','efectivo',this)">💵 Efectivo</button>
+              <button class="filter-btn" onclick="setFIngresosHist('cuenta','transf_almuerzos',this)">☀️ Transf. Almuerzos</button>
+              <button class="filter-btn" onclick="setFIngresosHist('cuenta','transf_rapidas',this)">🌙 Transf. Comidas rápidas</button>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Origen</th><th>Detalle</th><th>Efectivo</th><th>Transferencia</th><th>Monto</th><th></th></tr></thead><tbody id="ingfin-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Origen</th><th>Detalle</th><th>Cuenta</th><th>Efectivo</th><th>Transferencia</th><th>Monto</th><th></th></tr></thead><tbody id="ingfin-body"></tbody></table></div>
       <div class="panel-body" style="padding-top:10px;border-top:1px solid var(--border);">
         <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;">
           <span>Efectivo <strong class="amount-pos" id="ingfin-sum-ef">$0</strong></span>
@@ -2275,7 +2284,8 @@ let granTablero = 'semana';
 // período (Hoy/Semana/Mes/Todo) se ignora — así se puede ver un día en
 // específico sin importar hace cuánto fue.
 let fPedidosHist = { periodo: 'mes', fecha: '', turno: 'todos', metodo: 'todos', origen: 'todos' };
-let fIngresosHist = { periodo: 'semana', fecha: '', turno: 'todos', metodo: 'todos' };
+let fIngresosHist = { periodo: 'semana', fecha: '', turno: 'todos', metodo: 'todos', cuenta: 'todas' };
+let ingExtraEditId = null;
 let ddEditId = null;
 
 // ── Autocomplete índices ──────────────────────────────────────────────
@@ -5922,6 +5932,53 @@ async function eliminarIngresoExtra(id) {
   } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
 }
 
+function editarIngresoExtra(id) { ingExtraEditId = id; renderIngresosFinanciero(); }
+function cancelarEdicionIngresoExtra() { ingExtraEditId = null; renderIngresosFinanciero(); }
+
+async function guardarEdicionIngresoExtra(id) {
+  const fechaEl  = document.getElementById(`ingext-edit-fecha-${id}`);
+  const descEl   = document.getElementById(`ingext-edit-desc-${id}`);
+  const cuentaEl = document.getElementById(`ingext-edit-cuenta-${id}`);
+  const montoEl  = document.getElementById(`ingext-edit-monto-${id}`);
+  if (!fechaEl || !montoEl) return;
+  const fecha       = fechaEl.value;
+  const descripcion = descEl.value.trim();
+  const monto       = parseMiles(montoEl.value);
+  if (!descripcion) { showToast('⚠ Escribe la descripción', 'warning'); return; }
+  if (!fecha || !monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
+
+  try {
+    const patch = { fecha, descripcion, cuenta: cuentaEl.value, monto };
+    await sbPatch('ingresos_extra', `id=eq.${id}`, patch);
+    const i = ST.ingresosExtra.find(x => x.id === id);
+    if (i) Object.assign(i, patch);
+    ingExtraEditId = null;
+    setSyncBadge('ok');
+    renderAll();
+    showToast('✅ Ingreso actualizado', 'ok');
+  } catch(err) { console.error('guardarEdicionIngresoExtra', err); showToast(`⚠ Error al actualizar: ${(err.message||'').slice(0,160)}`, 'warning'); }
+}
+
+function filaIngresoExtraEdit(f) {
+  return `<tr>
+    <td><input type="date" id="ingext-edit-fecha-${f.id}" value="${f.fecha}" style="width:100%;"></td>
+    <td style="font-size:11px;color:var(--text3);">➕ Adicional</td>
+    <td><input type="text" id="ingext-edit-desc-${f.id}" value="${(f.detalle||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
+    <td><select id="ingext-edit-cuenta-${f.id}" style="width:100%;">
+      <option value="efectivo"${f.cuenta==='efectivo'?' selected':''}>💵 Efectivo</option>
+      <option value="transf_almuerzos"${f.cuenta==='transf_almuerzos'?' selected':''}>☀️ Transf. Almuerzos</option>
+      <option value="transf_rapidas"${f.cuenta==='transf_rapidas'?' selected':''}>🌙 Transf. Comidas rápidas</option>
+    </select></td>
+    <td>—</td>
+    <td>—</td>
+    <td><input type="text" inputmode="numeric" id="ingext-edit-monto-${f.id}" value="${Number(f.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
+    <td style="white-space:nowrap;display:flex;gap:4px;">
+      <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="guardarEdicionIngresoExtra(${f.id})">✓</button>
+      <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="cancelarEdicionIngresoExtra()">✕</button>
+    </td>
+  </tr>`;
+}
+
 function renderIngresosFinanciero() {
   const cierres = ST.cierresDia.filter(c => inP(c.fecha, fIngFin));
   const extras  = ST.ingresosExtra.filter(i => inP(i.fecha, fIngFin));
@@ -5944,20 +6001,23 @@ function renderIngresosFinanciero() {
   document.getElementById('ingfin-despues-operativos').textContent = fmt(despuesNominaProv - operativos);
 
   // Historial de ingresos (tabla) — filtros propios (fIngresosHist),
-  // independientes del resumen de arriba: período/día específico, turno y
-  // método. Un cierre no tiene "un" método (trae efectivo Y transferencia),
-  // así que filtrar por método no oculta la fila: solo muestra la parte que
-  // corresponde y esconde las filas que no aportaron nada a ese método.
+  // independientes del resumen de arriba: período/día específico, turno,
+  // método y cuenta. Un cierre no tiene "un" método (trae efectivo Y
+  // transferencia), así que filtrar por método no oculta la fila: solo
+  // muestra la parte que corresponde y esconde las filas que no aportaron
+  // nada a ese método. La cuenta, en cambio, solo aplica a los ingresos
+  // adicionales (un cierre ya se distingue por turno, no por una sola cuenta).
   const fh = fIngresosHist;
   const cierresHist = ST.cierresDia.filter(c =>
     enFiltroFecha(c.fecha, fh) &&
     (fh.turno === 'todos' || c.turno === fh.turno) &&
-    (fh.metodo === 'todos' || (fh.metodo === 'efectivo' ? (c.efectivo||0) > 0 : (c.transferencia||0) > 0))
+    (fh.metodo === 'todos' || (fh.metodo === 'efectivo' ? (c.efectivo||0) > 0 : (c.transferencia||0) > 0)) &&
+    fh.cuenta === 'todas'
   );
   // Los ingresos adicionales no tienen turno ni método propio — solo
-  // aparecen cuando esos dos filtros están en "Todos".
+  // aparecen cuando esos filtros están en "Todos"/"Todas".
   const extrasHist = (fh.turno === 'todos' && fh.metodo === 'todos')
-    ? ST.ingresosExtra.filter(i => enFiltroFecha(i.fecha, fh))
+    ? ST.ingresosExtra.filter(i => enFiltroFecha(i.fecha, fh) && (fh.cuenta === 'todas' || (i.cuenta||'efectivo') === fh.cuenta))
     : [];
 
   const filas = [
@@ -5965,31 +6025,39 @@ function renderIngresosFinanciero() {
       const ef = fh.metodo === 'transferencia' ? 0 : (c.efectivo||0);
       const tr = fh.metodo === 'efectivo' ? 0 : (c.transferencia||0);
       return {
-        fecha: c.fecha,
+        fecha: c.fecha, turno: c.turno,
         origen: `🧾 Cierre ${c.turno==='cena'?'Comida rápida':'Almuerzo'}`,
         detalle: c.ajuste_manual ? `Incluye ajuste: ${c.ajuste_manual>0?'+':''}${fmt(c.ajuste_manual)}` : '—',
-        efectivo: ef, transferencia: tr, monto: ef + tr,
+        cuenta: null, efectivo: ef, transferencia: tr, monto: ef + tr,
         id: c.id, tipo: 'cierre'
       };
     }),
     ...extrasHist.map(i => ({
       fecha: i.fecha, origen: '➕ Adicional', detalle: i.descripcion,
-      efectivo: null, transferencia: null, monto: i.monto||0, id: i.id, tipo: 'extra'
+      cuenta: i.cuenta || 'efectivo', efectivo: null, transferencia: null, monto: i.monto||0, id: i.id, tipo: 'extra'
     }))
   ].sort((a,b) => b.fecha.localeCompare(a.fecha));
 
   const tbody = document.getElementById('ingfin-body');
   tbody.innerHTML = filas.length
-    ? filas.map(f => `<tr>
+    ? filas.map(f => {
+        if (f.tipo === 'extra' && ingExtraEditId === f.id) return filaIngresoExtraEdit(f);
+        const acciones = f.tipo === 'extra'
+          ? `<button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="editarIngresoExtra(${f.id})">✏️</button>
+             <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="eliminarIngresoExtra(${f.id})">✕</button>`
+          : `<button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="irADiaADia('${f.fecha}','${f.turno}')" title="Editar en Cierre">✏️</button>`;
+        return `<tr>
         <td>${f.fecha}</td>
         <td style="font-size:11px;color:var(--text3);">${f.origen}</td>
         <td style="color:var(--text);font-size:12px;">${f.detalle}</td>
+        <td>${f.cuenta ? `<span class="badge ${cuentaBadge(f.cuenta)}">${CUENTA_LABELS[f.cuenta]||f.cuenta}</span>` : '—'}</td>
         <td>${f.efectivo !== null ? fmt(f.efectivo) : '—'}</td>
         <td>${f.transferencia !== null ? fmt(f.transferencia) : '—'}</td>
         <td class="amount-pos">${fmt(f.monto)}</td>
-        <td>${f.tipo === 'extra' ? `<button class="btn btn-danger" onclick="eliminarIngresoExtra(${f.id})">✕</button>` : ''}</td>
-      </tr>`).join('')
-    : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ingresos en este filtro</div></div></td></tr>`;
+        <td style="white-space:nowrap;display:flex;gap:4px;">${acciones}</td>
+      </tr>`;
+      }).join('')
+    : `<tr><td colspan="8"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ingresos en este filtro</div></div></td></tr>`;
 
   document.getElementById('ingfin-sum-ef').textContent    = fmt(filas.reduce((a,f)=>a+(f.efectivo||0),0));
   document.getElementById('ingfin-sum-tr').textContent    = fmt(filas.reduce((a,f)=>a+(f.transferencia||0),0));
@@ -6411,7 +6479,13 @@ function irADiaADia(fecha, turno) {
   viendoHistorialCierre = true;
   document.querySelectorAll('#tab-diaadia .filter-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(turno==='almuerzo'?'dd-btn-almuerzo':'dd-btn-cena').classList.add('active');
-  renderDiaADia();
+  // Cambia a la pestaña Cierre — sin esto, cuando se llama desde otra
+  // pestaña (ej. el botón "Editar en Cierre" de Egresos o Ingresos), el
+  // estado se actualizaba mas la pestaña visible seguia siendo la anterior,
+  // así que parecía que el botón no hacía nada. showTab() ya llama a
+  // renderAll() (incluye renderDiaADia()), así que no hace falta repetirlo.
+  const tabBtn = document.querySelector(`.tab[onclick*="showTab('diaadia'"]`);
+  showTab('diaadia', tabBtn);
 }
 
 // Botón "Corregir cierre" del banner de turno cerrado — reabre en modo edición
@@ -6742,22 +6816,29 @@ function setGranTablero(g, btn) {
 // semanas u 6 meses según la granularidad elegida), cada uno con su rango de
 // fechas (ini/fin, ambas incluidas) y una etiqueta corta para el eje X. Las
 // semanas empiezan domingo, igual que weekStart().
+// "label" es la etiqueta corta que va debajo de cada barra/punto; "rango" es
+// la versión completa (fecha inicio–fin) que se muestra en el tooltip al
+// pasar el mouse, para que quede clarísimo qué días exactos cubre esa semana
+// o ese mes — las semanas siempre empiezan domingo (mismo criterio que
+// weekStart(), usado en el resto de la app para "Esta semana").
 function bucketsGrafico(gran) {
   const hoy = new Date();
   const N = gran === 'dia' ? 14 : gran === 'semana' ? 8 : 6;
+  const ddmm = d => d.toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit' });
   const buckets = [];
   for (let i = N - 1; i >= 0; i--) {
-    let ini, fin, label;
+    let ini, fin, label, rango;
     if (gran === 'dia') {
       const d = new Date(hoy); d.setDate(d.getDate() - i);
       ini = fin = toLocalDateStr(d);
-      label = d.toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit' });
+      label = rango = ddmm(d);
     } else if (gran === 'semana') {
       const d = new Date(hoy); d.setDate(d.getDate() - d.getDay() - i*7); // domingo de esa semana
       ini = toLocalDateStr(d);
       const finD = new Date(d); finD.setDate(finD.getDate() + 6);
       fin = toLocalDateStr(finD);
-      label = d.toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit' });
+      label = ddmm(d);
+      rango = `${ddmm(d)} – ${ddmm(finD)}`;
     } else {
       const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
       ini = toLocalDateStr(d);
@@ -6766,9 +6847,11 @@ function bucketsGrafico(gran) {
       // Abreviatura manual (no toLocaleDateString) para evitar el formato
       // largo "abr de 26" que da el locale es-CO con {month:'short'}.
       const MESES_ABBR = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+      const MESES_FULL = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
       label = `${MESES_ABBR[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
+      rango = `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}`;
     }
-    buckets.push({ ini, fin, label });
+    buckets.push({ ini, fin, label, rango });
   }
   return buckets;
 }
@@ -6850,8 +6933,8 @@ function renderGraficosTablero() {
   ).join('');
   document.getElementById('barChart').innerHTML = gridlines + buckets.map(b =>
     `<div class="bar-group">
-      <div class="bar income"  style="height:${Math.max(4,(b.ingresos/mx)*100)}px" data-label="${b.label}" data-valor="Ingresos: ${fmt(b.ingresos)}" onmouseenter="mostrarTooltipChart(event,this)" onmousemove="moverTooltipChart(event)" onmouseleave="ocultarTooltipChart()"></div>
-      <div class="bar expense" style="height:${Math.max(4,(b.egresos/mx)*100)}px" data-label="${b.label}" data-valor="Egresos: ${fmt(b.egresos)}" onmouseenter="mostrarTooltipChart(event,this)" onmousemove="moverTooltipChart(event)" onmouseleave="ocultarTooltipChart()"></div>
+      <div class="bar income"  style="height:${Math.max(4,(b.ingresos/mx)*100)}px" data-label="${b.rango}" data-valor="Ingresos: ${fmt(b.ingresos)}" onmouseenter="mostrarTooltipChart(event,this)" onmousemove="moverTooltipChart(event)" onmouseleave="ocultarTooltipChart()"></div>
+      <div class="bar expense" style="height:${Math.max(4,(b.egresos/mx)*100)}px" data-label="${b.rango}" data-valor="Egresos: ${fmt(b.egresos)}" onmouseenter="mostrarTooltipChart(event,this)" onmousemove="moverTooltipChart(event)" onmouseleave="ocultarTooltipChart()"></div>
     </div>`
   ).join('');
   document.getElementById('barChartLabels').innerHTML = buckets.map(b =>
@@ -6879,7 +6962,7 @@ function renderLineChart(elId, buckets) {
   const xStep = n > 1 ? (w - padX*2) / (n - 1) : 0;
   const yFor  = v => h - padY - ((v - minV) / range) * (h - padY*2);
 
-  const pts   = buckets.map((b,i) => ({ x: padX + i*xStep, y: yFor(b.utilidad), v: b.utilidad, label: b.label }));
+  const pts   = buckets.map((b,i) => ({ x: padX + i*xStep, y: yFor(b.utilidad), v: b.utilidad, label: b.label, rango: b.rango }));
   const zeroY = yFor(0).toFixed(1);
   const linePts = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const areaPts = `${pts[0].x.toFixed(1)},${zeroY} ${linePts} ${pts[n-1].x.toFixed(1)},${zeroY}`;
@@ -6895,7 +6978,7 @@ function renderLineChart(elId, buckets) {
   }).join('');
 
   const dots = pts.map(p =>
-    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="${p.v>=0?'var(--green)':'var(--red)'}" style="cursor:pointer;" data-label="${p.label}" data-valor="${fmtSigned(p.v)}" onmouseenter="mostrarTooltipChart(event,this)" onmousemove="moverTooltipChart(event)" onmouseleave="ocultarTooltipChart()"></circle>`
+    `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4.5" fill="${p.v>=0?'var(--green)':'var(--red)'}" style="cursor:pointer;" data-label="${p.rango}" data-valor="${fmtSigned(p.v)}" onmouseenter="mostrarTooltipChart(event,this)" onmousemove="moverTooltipChart(event)" onmouseleave="ocultarTooltipChart()"></circle>`
   ).join('');
 
   el.innerHTML = `
