@@ -5356,6 +5356,7 @@ async function agregarEgreso() {
   const monto  = valMiles('egr-monto');
   const desc   = document.getElementById('egr-desc').value.trim();
   if (!fecha || !monto || monto <= 0) { showToast('⚠ Completa fecha y monto', 'warning'); return; }
+  if (!advertirSiQuedaNegativo({ cuentaNueva: cuenta, efectoNuevo: -monto })) return;
 
   try {
     // OJO: la columna en Supabase se llama "description" (en inglés), no
@@ -5393,6 +5394,14 @@ async function guardarEdicionEgreso(id) {
   const fecha  = fechaEl.value;
   const monto  = parseMiles(montoEl.value);
   if (!fecha || !monto || monto <= 0) { showToast('⚠ Completa fecha y monto', 'warning'); return; }
+
+  const original = ST.egresos.find(x => x.id === id);
+  const cuentaNueva = cuentaEl.value;
+  if (!advertirSiQuedaNegativo({
+    cuentaNueva, efectoNuevo: -monto,
+    cuentaVieja: original ? (original.cuenta||'efectivo') : null,
+    efectoViejo: original ? -(original.monto||0) : 0
+  })) return;
 
   try {
     // "description" (en inglés) es el nombre real de esa columna — ver la
@@ -6577,6 +6586,28 @@ function calcularAcumuladosCaja(periodo = 'todo') {
   return { efectivo, transfAlmuerzos, transfRapidas, aportes, gastosCaja, egresosTotal, disponible };
 }
 
+// Antes de guardar un gasto/egreso, avisa (sin bloquear) si esa cuenta va a
+// quedar en negativo — el sistema no impide registrar un gasto sin capital
+// suficiente, pero al menos confirma que es a propósito. Nunca avisa por un
+// aporte/ingreso (efectoNuevo >= 0), solo por retiros.
+//   cuentaNueva/efectoNuevo: la cuenta y el delta (negativo = gasto) que va a
+//     aplicar el movimiento que se está guardando ahora.
+//   cuentaVieja/efectoViejo: si es una edición, la cuenta/delta que ese mismo
+//     registro tenía ANTES de editarlo (para no contarlo dos veces) — se
+//     omiten al crear un registro nuevo.
+function advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja, efectoViejo }) {
+  if (efectoNuevo >= 0) return true;
+  const bal = calcularAcumuladosCaja('todo');
+  const saldoDe = c => c === 'transf_almuerzos' ? bal.transfAlmuerzos : c === 'transf_rapidas' ? bal.transfRapidas : bal.efectivo;
+  let saldoBase = saldoDe(cuentaNueva);
+  if (cuentaVieja && cuentaVieja === cuentaNueva) saldoBase -= (efectoViejo || 0);
+  const resultante = saldoBase + efectoNuevo;
+  if (resultante < 0) {
+    return confirm(`⚠ La cuenta "${CUENTA_LABELS[cuentaNueva] || cuentaNueva}" quedará en ${fmtSigned(resultante)} con este movimiento.\n\n¿Continuar de todas formas?`);
+  }
+  return true;
+}
+
 async function agregarMovimientoCaja() {
   const fecha       = document.getElementById('caja-mov-fecha').value || today();
   const descripcion = document.getElementById('caja-mov-descripcion').value.trim();
@@ -6584,6 +6615,7 @@ async function agregarMovimientoCaja() {
   const cuenta      = document.getElementById('caja-mov-cuenta').value;
   if (!descripcion) { showToast('⚠ Escribe el detalle del movimiento', 'warning'); return; }
   if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
+  if (tipoMovimientoCaja === 'gasto' && !advertirSiQuedaNegativo({ cuentaNueva: cuenta, efectoNuevo: -monto })) return;
 
   try {
     const [row] = await sbInsertConCuenta('movimientos_caja', { fecha, tipo: tipoMovimientoCaja, descripcion, monto, cuenta });
@@ -6625,6 +6657,13 @@ async function guardarEdicionMovimientoCaja(id) {
   if (!descripcion) { showToast('⚠ Escribe el detalle del movimiento', 'warning'); return; }
   if (!fecha || !monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
 
+  const original = ST.movimientosCaja.find(x => x.id === id);
+  const tipoNuevo = tipoEl.value;
+  const cuentaNueva = cuentaEl.value;
+  const efectoViejo = original ? (original.tipo === 'aporte' ? (original.monto||0) : -(original.monto||0)) : 0;
+  const efectoNuevo = tipoNuevo === 'aporte' ? monto : -monto;
+  if (!advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja: original ? (original.cuenta||'efectivo') : null, efectoViejo })) return;
+
   try {
     const patch = { fecha, tipo: tipoEl.value, cuenta: cuentaEl.value, descripcion, monto };
     await sbPatch('movimientos_caja', `id=eq.${id}`, patch);
@@ -6663,10 +6702,19 @@ function renderCaja() {
   if (!cajaEfEl) return; // sección oculta/no cargada todavía
 
   const { efectivo, transfAlmuerzos, transfRapidas, disponible } = calcularAcumuladosCaja(fCaja);
-  cajaEfEl.textContent = fmt(efectivo);
-  document.getElementById('caja-transf-almuerzos').textContent = fmt(transfAlmuerzos);
-  document.getElementById('caja-transf-rapidas').textContent   = fmt(transfRapidas);
-  document.getElementById('caja-disponible').textContent    = fmt(disponible);
+  // fmt() siempre muestra el valor absoluto — si una cuenta quedó en
+  // negativo (se gastó más de lo que tenía) hay que usar fmtSigned() y
+  // pintarla en rojo, si no, se vería como un número positivo normal y
+  // el descuadre pasaría inadvertido.
+  cajaEfEl.textContent = fmtSigned(efectivo);
+  cajaEfEl.style.color = efectivo >= 0 ? 'var(--green)' : 'var(--red)';
+  const elAlm = document.getElementById('caja-transf-almuerzos');
+  elAlm.textContent = fmtSigned(transfAlmuerzos);
+  elAlm.style.color = transfAlmuerzos >= 0 ? 'var(--accent)' : 'var(--red)';
+  const elRap = document.getElementById('caja-transf-rapidas');
+  elRap.textContent = fmtSigned(transfRapidas);
+  elRap.style.color = transfRapidas >= 0 ? 'var(--purple)' : 'var(--red)';
+  document.getElementById('caja-disponible').textContent    = fmtSigned(disponible);
   document.getElementById('caja-disponible').style.color    = disponible >= 0 ? 'var(--accent)' : 'var(--red)';
 
   // Los 4 "kpi-sub" dejan claro que el monto ya es SOLO del período elegido
