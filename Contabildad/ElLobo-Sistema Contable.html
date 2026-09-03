@@ -1071,8 +1071,17 @@
         </div>
       </div>
       <div class="panel">
-        <div class="panel-header"><div class="panel-title">Resumen — estado de resultados</div></div>
+        <div class="panel-header">
+          <div class="panel-title">Resumen — estado de resultados</div>
+          <div class="filter-bar" style="margin-bottom:0;" id="ingfin-filtros-periodo">
+            <button class="filter-btn" onclick="setFIngFin('hoy',this)">Hoy</button>
+            <button class="filter-btn active" onclick="setFIngFin('semana',this)">Semana</button>
+            <button class="filter-btn" onclick="setFIngFin('mes',this)">Mes</button>
+            <button class="filter-btn" onclick="setFIngFin('todo',this)">Todo</button>
+          </div>
+        </div>
         <div class="panel-body">
+          <div style="font-size:10px;color:var(--text3);margin:-6px 0 10px;">Este filtro es solo para este resumen — "Historial de ingresos" y "Historial de pedidos", más abajo, tienen cada uno el suyo.</div>
           <div class="report-line"><span><strong>Ingresos totales</strong></span><strong class="amount-pos" id="ingfin-total">$0</strong></div>
           <div class="report-line"><span>(−) Nómina</span><strong class="amount-neg" id="ingfin-nomina">$0</strong></div>
           <div class="report-line"><span>(−) Proveedores</span><strong class="amount-neg" id="ingfin-proveedores">$0</strong></div>
