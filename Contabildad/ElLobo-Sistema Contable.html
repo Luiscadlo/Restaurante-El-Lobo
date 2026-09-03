@@ -902,13 +902,22 @@
         </div>
       </div>
       <div class="panel">
-        <div class="panel-header"><div class="panel-title">Resumen egresos</div></div>
+        <div class="panel-header">
+          <div class="panel-title">Resumen egresos</div>
+          <div class="filter-bar egr-periodo-btns" style="margin-bottom:0;">
+            <button class="filter-btn active" data-periodo="hoy"   onclick="setFEgr('periodo','hoy',this)">Hoy</button>
+            <button class="filter-btn" data-periodo="semana" onclick="setFEgr('periodo','semana',this)">Semana</button>
+            <button class="filter-btn" data-periodo="mes"    onclick="setFEgr('periodo','mes',this)">Mes</button>
+            <button class="filter-btn" data-periodo="todo"   onclick="setFEgr('periodo','todo',this)">Todo</button>
+          </div>
+        </div>
         <div class="panel-body">
+          <div style="font-size:10px;color:var(--text3);margin:-2px 0 10px;">👆 El filtro de arriba mueve "Total del período" y "Por categoría" (y también el historial de abajo — es un solo filtro para toda la pestaña). Hoy/Esta semana/Este mes de aquí abajo son fijos, no cambian con el filtro.</div>
           <div class="report-line"><span>Hoy</span><strong class="amount-neg" id="egr-hoy">$0</strong></div>
           <div class="report-line"><span>Esta semana</span><strong class="amount-neg" id="egr-semana">$0</strong></div>
           <div class="report-line"><span>Este mes</span><strong class="amount-neg" id="egr-mes">$0</strong></div>
           <div class="divider"></div>
-          <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Por categoría <span style="color:var(--text3);">(según los filtros del historial, abajo)</span></div>
+          <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Por categoría</div>
           <div class="report-line"><span>Nómina</span><strong id="egr-nom">$0</strong></div>
           <div class="report-line"><span>Proveedores</span><strong id="egr-prov">$0</strong></div>
           <div class="report-line"><span>Arriendo + Servicios</span><strong id="egr-arr">$0</strong></div>
@@ -926,11 +935,11 @@
         <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:4px;">
           <div>
             <div class="filtro-label">Período</div>
-            <div class="filter-bar" style="margin-bottom:0;" id="egr-filtros-periodo">
-              <button class="filter-btn active" onclick="setFEgr('periodo','hoy',this)">Hoy</button>
-              <button class="filter-btn" onclick="setFEgr('periodo','semana',this)">Semana</button>
-              <button class="filter-btn" onclick="setFEgr('periodo','mes',this)">Mes</button>
-              <button class="filter-btn" onclick="setFEgr('periodo','todo',this)">Todo</button>
+            <div class="filter-bar egr-periodo-btns" style="margin-bottom:0;" id="egr-filtros-periodo">
+              <button class="filter-btn active" data-periodo="hoy"   onclick="setFEgr('periodo','hoy',this)">Hoy</button>
+              <button class="filter-btn" data-periodo="semana" onclick="setFEgr('periodo','semana',this)">Semana</button>
+              <button class="filter-btn" data-periodo="mes"    onclick="setFEgr('periodo','mes',this)">Mes</button>
+              <button class="filter-btn" data-periodo="todo"   onclick="setFEgr('periodo','todo',this)">Todo</button>
             </div>
           </div>
           <div>
@@ -1073,22 +1082,25 @@
       <div class="panel">
         <div class="panel-header">
           <div class="panel-title">Resumen — estado de resultados</div>
-          <div class="filter-bar" style="margin-bottom:0;" id="ingfin-filtros-periodo">
-            <button class="filter-btn" onclick="setFIngFin('hoy',this)">Hoy</button>
-            <button class="filter-btn active" onclick="setFIngFin('semana',this)">Semana</button>
-            <button class="filter-btn" onclick="setFIngFin('mes',this)">Mes</button>
-            <button class="filter-btn" onclick="setFIngFin('todo',this)">Todo</button>
+          <div class="filter-bar ingfin-periodo-btns" style="margin-bottom:0;">
+            <button class="filter-btn" data-periodo="hoy"   onclick="setFIngresosHist('periodo','hoy',this)">Hoy</button>
+            <button class="filter-btn active" data-periodo="semana" onclick="setFIngresosHist('periodo','semana',this)">Semana</button>
+            <button class="filter-btn" data-periodo="mes"    onclick="setFIngresosHist('periodo','mes',this)">Mes</button>
+            <button class="filter-btn" data-periodo="todo"   onclick="setFIngresosHist('periodo','todo',this)">Todo</button>
           </div>
         </div>
         <div class="panel-body">
-          <div style="font-size:10px;color:var(--text3);margin:-6px 0 10px;">Este filtro es solo para este resumen — "Historial de ingresos" y "Historial de pedidos", más abajo, tienen cada uno el suyo.</div>
+          <div style="font-size:10px;color:var(--text3);margin:-6px 0 10px;">👆 Un solo filtro de período para este resumen y "Historial de ingresos" (abajo) — cámbialo aquí o allá, da igual, siempre quedan sincronizados. "Historial de pedidos" es aparte (es detalle pedido por pedido, no un resumen de plata).</div>
           <div class="report-line"><span><strong>Ingresos totales</strong></span><strong class="amount-pos" id="ingfin-total">$0</strong></div>
           <div class="report-line"><span>(−) Nómina</span><strong class="amount-neg" id="ingfin-nomina">$0</strong></div>
           <div class="report-line"><span>(−) Proveedores</span><strong class="amount-neg" id="ingfin-proveedores">$0</strong></div>
           <div class="report-line"><span><strong>= Después de nómina y proveedores</strong></span><strong id="ingfin-despues-nomina">$0</strong></div>
           <div class="report-line"><span>(−) Gastos operativos (servicios + arriendo)</span><strong class="amount-neg" id="ingfin-operativos">$0</strong></div>
-          <div class="divider"></div>
           <div class="report-line"><span><strong>= Después de gastos operativos</strong></span><strong id="ingfin-despues-operativos">$0</strong></div>
+          <div class="report-line"><span>(−) Otros egresos</span><strong class="amount-neg" id="ingfin-otros">$0</strong></div>
+          <div class="divider"></div>
+          <div class="report-line"><span><strong>= Utilidad neta</strong></span><strong id="ingfin-utilidad-neta">$0</strong></div>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px;">Mismo número que "Utilidad neta" del Tablero para este período — acá está el desglose completo.</div>
         </div>
       </div>
     </div>
@@ -1100,11 +1112,11 @@
         <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:4px;">
           <div>
             <div class="filtro-label">Período</div>
-            <div class="filter-bar" style="margin-bottom:0;" id="ingresoshist-filtros-periodo">
-              <button class="filter-btn" onclick="setFIngresosHist('periodo','hoy',this)">Hoy</button>
-              <button class="filter-btn active" onclick="setFIngresosHist('periodo','semana',this)">Semana</button>
-              <button class="filter-btn" onclick="setFIngresosHist('periodo','mes',this)">Mes</button>
-              <button class="filter-btn" onclick="setFIngresosHist('periodo','todo',this)">Todo</button>
+            <div class="filter-bar ingfin-periodo-btns" style="margin-bottom:0;" id="ingresoshist-filtros-periodo">
+              <button class="filter-btn" data-periodo="hoy"   onclick="setFIngresosHist('periodo','hoy',this)">Hoy</button>
+              <button class="filter-btn active" data-periodo="semana" onclick="setFIngresosHist('periodo','semana',this)">Semana</button>
+              <button class="filter-btn" data-periodo="mes"    onclick="setFIngresosHist('periodo','mes',this)">Mes</button>
+              <button class="filter-btn" data-periodo="todo"   onclick="setFIngresosHist('periodo','todo',this)">Todo</button>
             </div>
           </div>
           <div>
@@ -2277,7 +2289,7 @@ let ddTurno = 'almuerzo';
 document.getElementById('ing-hora').value = nowTime();
 
 // ── Filtros activos ───────────────────────────────────────────────────
-let fI = 'todos', fInv = 'todos', fTablero = 'mes', fIngFin = 'semana';
+let fI = 'todos', fInv = 'todos', fTablero = 'mes';
 // Historial de Egresos: período/fecha igual que fPedidosHist, más categoría,
 // cuenta y método de pago (efectivo vs. cualquier transferencia).
 let fEgr = { periodo: 'hoy', fecha: '', cat: 'todas', cuenta: 'todas', metodo: 'todos' };
@@ -5432,15 +5444,23 @@ function setFEgr(dimension, valor, btn) {
     fEgr.fecha = '';
     const fechaEl = document.getElementById('egr-fecha-filtro');
     if (fechaEl) fechaEl.value = '';
+    // El período es UN SOLO filtro compartido por toda la pestaña — hay un
+    // grupo de botones en "Resumen egresos" (arriba) y otro en el historial
+    // (abajo); hay que sincronizar el "active" en LOS DOS, no solo en el
+    // grupo del botón que se clickeó, para que nunca se vean desincronizados.
+    document.querySelectorAll('.egr-periodo-btns .filter-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.periodo === valor);
+    });
+  } else {
+    btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
   }
-  btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
   renderEgresos();
 }
 
 function setFEgrFecha(valor) {
   fEgr.fecha = valor || '';
-  if (valor) document.querySelectorAll('#egr-filtros-periodo .filter-btn').forEach(b => b.classList.remove('active'));
+  if (valor) document.querySelectorAll('.egr-periodo-btns .filter-btn').forEach(b => b.classList.remove('active'));
   renderEgresos();
 }
 
@@ -5837,13 +5857,6 @@ function renderTablero() {
 }
 
 // ── INGRESOS (financiero — cierres guardados + ingresos adicionales) ───
-function setFIngFin(f, btn) {
-  fIngFin = f;
-  btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderIngresosFinanciero();
-}
-
 // Filtros del "Historial de pedidos" (Ingresos) — cada dimensión (período,
 // turno, método, origen) es independiente de las demás, así que solo se
 // limpia el "active" dentro de SU propia barra de filtros. Elegir un período
@@ -5998,30 +6011,45 @@ function filaIngresoExtraEdit(f) {
 }
 
 function renderIngresosFinanciero() {
-  const cierres = ST.cierresDia.filter(c => inP(c.fecha, fIngFin));
-  const extras  = ST.ingresosExtra.filter(i => inP(i.fecha, fIngFin));
+  // "Resumen — estado de resultados" usa el MISMO período que "Historial de
+  // ingresos" (fIngresosHist.periodo/fecha) — es un solo filtro para toda la
+  // pestaña, ver setFIngresosHist(). Turno/método/cuenta son filtros propios
+  // de esa tabla, no aplican aquí (el resumen es la plata completa del
+  // período, sin partirla por turno o método de pago).
+  const cierres = ST.cierresDia.filter(c => enFiltroFecha(c.fecha, fIngresosHist));
+  const extras  = ST.ingresosExtra.filter(i => enFiltroFecha(i.fecha, fIngresosHist));
 
   const totalCierres = cierres.reduce((a,c) => a + (c.efectivo||0) + (c.transferencia||0), 0);
   const totalExtras  = extras.reduce((a,i) => a + (i.monto||0), 0);
   const totalIngresos = totalCierres + totalExtras;
 
-  const egrs       = egresosCombinados().filter(e => inP(e.fecha, fIngFin));
-  const nomina     = egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0);
+  const egrs        = egresosCombinados().filter(e => enFiltroFecha(e.fecha, fIngresosHist));
+  const nomina      = egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0);
   const proveedores = egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0);
-  const operativos = egrs.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0);
+  const operativos  = egrs.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0);
+  const otros       = egrs.filter(e=>e.cat==='otro').reduce((a,b)=>a+b.monto,0);
   const despuesNominaProv = totalIngresos - nomina - proveedores;
+  const despuesOperativos = despuesNominaProv - operativos;
+  // Utilidad neta = TODOS los ingresos menos TODOS los egresos del período,
+  // igual que "Utilidad neta" del Tablero — antes esta fila no existía y la
+  // última ("después de gastos operativos") ni siquiera restaba "Otros", así
+  // que nunca coincidía con el Tablero. Ahora sí, con el mismo período.
+  const utilidadNeta = despuesOperativos - otros;
 
   document.getElementById('ingfin-total').textContent            = fmt(totalIngresos);
   document.getElementById('ingfin-nomina').textContent           = fmt(nomina);
   document.getElementById('ingfin-proveedores').textContent      = fmt(proveedores);
   document.getElementById('ingfin-despues-nomina').textContent   = fmt(despuesNominaProv);
   document.getElementById('ingfin-operativos').textContent       = fmt(operativos);
-  document.getElementById('ingfin-despues-operativos').textContent = fmt(despuesNominaProv - operativos);
+  document.getElementById('ingfin-despues-operativos').textContent = fmt(despuesOperativos);
+  document.getElementById('ingfin-otros').textContent             = fmt(otros);
+  document.getElementById('ingfin-utilidad-neta').textContent     = fmtSigned(utilidadNeta);
+  document.getElementById('ingfin-utilidad-neta').style.color     = utilidadNeta >= 0 ? 'var(--green)' : 'var(--red)';
 
-  // Historial de ingresos (tabla) — filtros propios (fIngresosHist),
-  // independientes del resumen de arriba: período/día específico, turno,
-  // método y cuenta. Un cierre no tiene "un" método (trae efectivo Y
-  // transferencia), así que filtrar por método no oculta la fila: solo
+  // Historial de ingresos (tabla) — comparte período/fecha con el resumen de
+  // arriba (fIngresosHist); turno, método y cuenta son filtros propios de
+  // esta tabla, no del resumen. Un cierre no tiene "un" método (trae efectivo
+  // Y transferencia), así que filtrar por método no oculta la fila: solo
   // muestra la parte que corresponde y esconde las filas que no aportaron
   // nada a ese método. La cuenta, en cambio, solo aplica a los ingresos
   // adicionales (un cierre ya se distingue por turno, no por una sola cuenta).
@@ -6090,9 +6118,17 @@ function setFIngresosHist(dimension, valor, btn) {
     fIngresosHist.fecha = '';
     const fechaEl = document.getElementById('ingresoshist-fecha');
     if (fechaEl) fechaEl.value = '';
+    // El período es UN SOLO filtro compartido entre "Resumen — estado de
+    // resultados" (arriba) y "Historial de ingresos" (abajo) — cada uno
+    // tiene su propio grupo de botones, hay que sincronizar el "active" en
+    // los dos para que nunca queden mostrando períodos distintos.
+    document.querySelectorAll('.ingfin-periodo-btns .filter-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.periodo === valor);
+    });
+  } else {
+    btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
   }
-  btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
   renderIngresosFinanciero();
 }
 
@@ -6100,7 +6136,7 @@ function setFIngresosHist(dimension, valor, btn) {
 // resaltado de los botones de período para que no parezca que ambos aplican.
 function setFIngresosHistFecha(valor) {
   fIngresosHist.fecha = valor || '';
-  if (valor) document.querySelectorAll('#ingresoshist-filtros-periodo .filter-btn').forEach(b => b.classList.remove('active'));
+  if (valor) document.querySelectorAll('.ingfin-periodo-btns .filter-btn').forEach(b => b.classList.remove('active'));
   renderIngresosFinanciero();
 }
 
