@@ -1387,9 +1387,10 @@
       <div class="panel-body">
         <div class="form-group mb">
           <label>Tipo</label>
-          <div style="display:flex;gap:8px;" id="caja-tipo-buttons">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="caja-tipo-buttons">
             <button type="button" class="filter-btn active" onclick="setTipoMovimientoCaja('gasto',this)" style="flex:1;">➖ Gasto</button>
             <button type="button" class="filter-btn" onclick="setTipoMovimientoCaja('aporte',this)" style="flex:1;">➕ Aporte de capital</button>
+            <button type="button" class="filter-btn" onclick="setTipoMovimientoCaja('traspaso',this)" style="flex:1;">🔁 Traspaso</button>
           </div>
         </div>
         <div class="form-row mb">
@@ -1404,9 +1405,17 @@
             <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
           </select>
         </div>
+        <div class="form-group mb" id="caja-mov-cuenta-destino-wrap" style="display:none;">
+          <label>¿A qué cuenta entra?</label>
+          <select id="caja-mov-cuenta-destino">
+            <option value="efectivo">💵 Efectivo</option>
+            <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
+            <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
+          </select>
+        </div>
         <div class="form-group mb">
           <label>Detalle <span class="req">*</span></label>
-          <input type="text" id="caja-mov-descripcion" placeholder="ej: Mercado en Ara, aporte para arreglar nevera…">
+          <input type="text" id="caja-mov-descripcion" placeholder="ej: Mercado en Ara, aporte para arreglar nevera, consigné a la cuenta de almuerzos…">
         </div>
         <button class="btn btn-primary" onclick="agregarMovimientoCaja()" style="width:100%;">+ Registrar movimiento</button>
       </div>
@@ -1418,7 +1427,7 @@
   </div>
 
   <div class="panel">
-    <div class="panel-header"><div class="panel-title">Movimientos de caja (gastos y aportes de capital)</div></div>
+    <div class="panel-header"><div class="panel-title">Movimientos de caja (gastos, aportes de capital y traspasos)</div></div>
     <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Cuenta</th><th>Detalle</th><th>Monto</th><th></th></tr></thead><tbody id="caja-movimientos-body"></tbody></table></div>
   </div>
   </div>
@@ -1904,20 +1913,24 @@ async function sbInsert(tabla, data) {
 }
 
 // Inserta en egresos/movimientos_caja/ingresos_extra, que llevan una columna
-// "cuenta" (de cuál de las 3 cuentas de Caja sale o entra el dinero). Si esa
-// columna aún no existe en Supabase (falta correr la migración), reintenta
-// sin ella para no romper el registro — solo se pierde el dato de cuenta.
+// "cuenta" (de cuál de las 3 cuentas de Caja sale o entra el dinero) y,
+// movimientos_caja además, "cuenta_destino" (a cuál entra, solo en un
+// traspaso). Si alguna de esas columnas aún no existe en Supabase (falta
+// correr la migración), reintenta sin ella para no romper el registro —
+// solo se pierde ese dato puntual.
 async function sbInsertConCuenta(tabla, datos) {
-  try {
-    return await sbInsert(tabla, datos);
-  } catch (e) {
-    const msg = e.message || '';
-    if (msg.includes('cuenta') && 'cuenta' in datos) {
-      const { cuenta, ...sinCuenta } = datos;
-      showToast('⚠ La cuenta no se guardó — falta agregar esa columna en Supabase (ver script SQL)', 'warning');
-      return await sbInsert(tabla, sinCuenta);
+  let payload = { ...datos };
+  for (;;) {
+    try {
+      return await sbInsert(tabla, payload);
+    } catch (e) {
+      const msg = e.message || '';
+      const columnaFaltante = ['cuenta_destino', 'cuenta'].find(c => c in payload && msg.includes(c));
+      if (!columnaFaltante) throw e;
+      const { [columnaFaltante]: _omit, ...resto } = payload;
+      payload = resto;
+      showToast(`⚠ "${columnaFaltante}" no se guardó — falta agregar esa columna en Supabase (ver script SQL)`, 'warning');
     }
-    throw e;
   }
 }
 
@@ -6575,6 +6588,8 @@ function setTipoMovimientoCaja(t, btn) {
   btn.classList.add('active');
   const label = document.getElementById('caja-mov-cuenta-label');
   if (label) label.textContent = t === 'aporte' ? '¿A qué cuenta entra?' : '¿De qué cuenta sale?';
+  const destinoWrap = document.getElementById('caja-mov-cuenta-destino-wrap');
+  if (destinoWrap) destinoWrap.style.display = t === 'traspaso' ? '' : 'none';
 }
 
 // Caja dividida en 3 cuentas reales (no una sola bolsa mezclada):
@@ -6611,11 +6626,16 @@ function calcularAcumuladosCaja(periodo = 'todo') {
   ST.ingresosExtra.filter(i => inP(i.fecha, periodo)).forEach(i => sumaPorCuenta(i.cuenta || 'efectivo', i.monto || 0));
 
   // Aportes de capital (suman) y gastos generales (restan) registrados en
-  // Caja dentro del período, cada uno con la cuenta que se eligió al registrarlo.
+  // Caja dentro del período, cada uno con la cuenta que se eligió al
+  // registrarlo. Un "traspaso" no es ni aporte ni gasto — no agrega ni quita
+  // plata del negocio, solo la mueve de una cuenta a otra, así que no cuenta
+  // en aportes/gastosCaja, pero sí resta de la cuenta origen y suma en la
+  // cuenta destino.
   let aportes = 0, gastosCaja = 0;
   ST.movimientosCaja.filter(m => inP(m.fecha, periodo)).forEach(m => {
     const monto = m.monto || 0;
     if (m.tipo === 'aporte') { aportes += monto; sumaPorCuenta(m.cuenta || 'efectivo', monto); }
+    else if (m.tipo === 'traspaso') { sumaPorCuenta(m.cuenta || 'efectivo', -monto); sumaPorCuenta(m.cuenta_destino || 'efectivo', monto); }
     else                     { gastosCaja += monto; sumaPorCuenta(m.cuenta || 'efectivo', -monto); }
   });
 
@@ -6654,22 +6674,29 @@ function advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja, efecto
 }
 
 async function agregarMovimientoCaja() {
-  const fecha       = document.getElementById('caja-mov-fecha').value || today();
-  const descripcion = document.getElementById('caja-mov-descripcion').value.trim();
-  const monto       = valMiles('caja-mov-monto');
-  const cuenta      = document.getElementById('caja-mov-cuenta').value;
+  const fecha         = document.getElementById('caja-mov-fecha').value || today();
+  const descripcion   = document.getElementById('caja-mov-descripcion').value.trim();
+  const monto         = valMiles('caja-mov-monto');
+  const cuenta        = document.getElementById('caja-mov-cuenta').value;
+  const cuentaDestino = document.getElementById('caja-mov-cuenta-destino').value;
   if (!descripcion) { showToast('⚠ Escribe el detalle del movimiento', 'warning'); return; }
   if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
-  if (tipoMovimientoCaja === 'gasto' && !advertirSiQuedaNegativo({ cuentaNueva: cuenta, efectoNuevo: -monto })) return;
+  if (tipoMovimientoCaja === 'traspaso' && cuenta === cuentaDestino) { showToast('⚠ Elige dos cuentas distintas para el traspaso', 'warning'); return; }
+  // El aporte solo suma (nunca deja nada en negativo); tanto el gasto como
+  // la cuenta de ORIGEN de un traspaso restan, así que ambos se avisan.
+  if (tipoMovimientoCaja !== 'aporte' && !advertirSiQuedaNegativo({ cuentaNueva: cuenta, efectoNuevo: -monto })) return;
 
   try {
-    const [row] = await sbInsertConCuenta('movimientos_caja', { fecha, tipo: tipoMovimientoCaja, descripcion, monto, cuenta });
+    const datos = { fecha, tipo: tipoMovimientoCaja, descripcion, monto, cuenta };
+    if (tipoMovimientoCaja === 'traspaso') datos.cuenta_destino = cuentaDestino;
+    const [row] = await sbInsertConCuenta('movimientos_caja', datos);
     ST.movimientosCaja.unshift(row);
     setSyncBadge('ok');
     document.getElementById('caja-mov-descripcion').value = '';
     document.getElementById('caja-mov-monto').value = '';
     renderCaja();
-    showToast(`✅ ${tipoMovimientoCaja === 'aporte' ? 'Aporte de capital' : 'Gasto'} registrado`, 'ok');
+    const nombreTipo = tipoMovimientoCaja === 'aporte' ? 'Aporte de capital' : tipoMovimientoCaja === 'traspaso' ? 'Traspaso entre cuentas' : 'Gasto';
+    showToast(`✅ ${nombreTipo} registrado`, 'ok');
   } catch (e) {
     console.error(e);
     showToast('⚠ Error al registrar — ¿ya creaste la tabla movimientos_caja en Supabase?', 'warning');
@@ -6702,15 +6729,21 @@ async function guardarEdicionMovimientoCaja(id) {
   if (!descripcion) { showToast('⚠ Escribe el detalle del movimiento', 'warning'); return; }
   if (!fecha || !monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
 
+  const destinoEl = document.getElementById(`caja-edit-cuenta-destino-${id}`);
   const original = ST.movimientosCaja.find(x => x.id === id);
   const tipoNuevo = tipoEl.value;
   const cuentaNueva = cuentaEl.value;
+  const cuentaDestinoNueva = destinoEl ? destinoEl.value : null;
+  if (tipoNuevo === 'traspaso' && cuentaNueva === cuentaDestinoNueva) { showToast('⚠ Elige dos cuentas distintas para el traspaso', 'warning'); return; }
+  // El efecto sobre la cuenta que se muestra/valida aquí es el de la cuenta
+  // ORIGEN — igual en gasto que en traspaso (ambos restan de ella); el aporte
+  // suma. La cuenta destino de un traspaso solo suma, nunca queda negativa.
   const efectoViejo = original ? (original.tipo === 'aporte' ? (original.monto||0) : -(original.monto||0)) : 0;
   const efectoNuevo = tipoNuevo === 'aporte' ? monto : -monto;
   if (!advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja: original ? (original.cuenta||'efectivo') : null, efectoViejo })) return;
 
   try {
-    const patch = { fecha, tipo: tipoEl.value, cuenta: cuentaEl.value, descripcion, monto };
+    const patch = { fecha, tipo: tipoNuevo, cuenta: cuentaNueva, cuenta_destino: tipoNuevo === 'traspaso' ? cuentaDestinoNueva : null, descripcion, monto };
     await sbPatch('movimientos_caja', `id=eq.${id}`, patch);
     const m = ST.movimientosCaja.find(x => x.id === id);
     if (m) Object.assign(m, patch);
@@ -6721,17 +6754,29 @@ async function guardarEdicionMovimientoCaja(id) {
   } catch(err) { console.error('guardarEdicionMovimientoCaja', err); showToast(`⚠ Error al actualizar: ${(err.message||'').slice(0,160)}`, 'warning'); }
 }
 
+function toggleCajaEditDestino(id) {
+  const tipoEl = document.getElementById(`caja-edit-tipo-${id}`);
+  const destinoEl = document.getElementById(`caja-edit-cuenta-destino-${id}`);
+  if (tipoEl && destinoEl) destinoEl.style.display = tipoEl.value === 'traspaso' ? '' : 'none';
+}
+
 function filaMovimientoCajaEdit(m) {
   return `<tr>
     <td><input type="date" id="caja-edit-fecha-${m.id}" value="${m.fecha}" style="width:100%;"></td>
-    <td><select id="caja-edit-tipo-${m.id}" style="width:100%;">
+    <td><select id="caja-edit-tipo-${m.id}" style="width:100%;" onchange="toggleCajaEditDestino(${m.id})">
       <option value="gasto"${m.tipo==='gasto'?' selected':''}>➖ Gasto</option>
       <option value="aporte"${m.tipo==='aporte'?' selected':''}>➕ Aporte</option>
+      <option value="traspaso"${m.tipo==='traspaso'?' selected':''}>🔁 Traspaso</option>
     </select></td>
     <td><select id="caja-edit-cuenta-${m.id}" style="width:100%;">
       <option value="efectivo"${m.cuenta==='efectivo'?' selected':''}>💵 Efectivo</option>
       <option value="transf_almuerzos"${m.cuenta==='transf_almuerzos'?' selected':''}>☀️ Transf. Almuerzos</option>
       <option value="transf_rapidas"${m.cuenta==='transf_rapidas'?' selected':''}>🌙 Transf. Comidas rápidas</option>
+    </select>
+    <select id="caja-edit-cuenta-destino-${m.id}" style="width:100%;margin-top:4px;${m.tipo==='traspaso'?'':'display:none;'}">
+      <option value="efectivo"${m.cuenta_destino==='efectivo'?' selected':''}>→ 💵 Efectivo</option>
+      <option value="transf_almuerzos"${m.cuenta_destino==='transf_almuerzos'?' selected':''}>→ ☀️ Transf. Almuerzos</option>
+      <option value="transf_rapidas"${m.cuenta_destino==='transf_rapidas'?' selected':''}>→ 🌙 Transf. Comidas rápidas</option>
     </select></td>
     <td><input type="text" id="caja-edit-desc-${m.id}" value="${(m.descripcion||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
     <td><input type="text" inputmode="numeric" id="caja-edit-monto-${m.id}" value="${Number(m.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
@@ -6800,13 +6845,15 @@ function renderCaja() {
   // Movimientos de caja (gastos y aportes), filtrados por el mismo período
   const movs = ST.movimientosCaja.filter(m => inP(m.fecha, fCaja)).sort((a,b) => b.fecha.localeCompare(a.fecha));
   const movBody = document.getElementById('caja-movimientos-body');
+  const TIPO_BADGE_CAJA = { aporte: 'badge-green', traspaso: 'badge-blue' };
+  const TIPO_LABEL_CAJA = { aporte: '➕ Aporte', traspaso: '🔁 Traspaso' };
   movBody.innerHTML = movs.length
     ? movs.map(m => cajaMovEditId === m.id ? filaMovimientoCajaEdit(m) : `<tr>
         <td>${m.fecha}</td>
-        <td><span class="badge ${m.tipo==='aporte'?'badge-green':'badge-red'}">${m.tipo==='aporte'?'➕ Aporte':'➖ Gasto'}</span></td>
-        <td><span class="badge ${cuentaBadge(m.cuenta)}">${CUENTA_LABELS[m.cuenta]||m.cuenta||'💵 Efectivo'}</span></td>
+        <td><span class="badge ${TIPO_BADGE_CAJA[m.tipo]||'badge-red'}">${TIPO_LABEL_CAJA[m.tipo]||'➖ Gasto'}</span></td>
+        <td><span class="badge ${cuentaBadge(m.cuenta)}">${CUENTA_LABELS[m.cuenta]||m.cuenta||'💵 Efectivo'}</span>${m.tipo==='traspaso' ? ` → <span class="badge ${cuentaBadge(m.cuenta_destino)}">${CUENTA_LABELS[m.cuenta_destino]||m.cuenta_destino||'💵 Efectivo'}</span>` : ''}</td>
         <td style="color:var(--text)">${m.descripcion}</td>
-        <td class="${m.tipo==='aporte'?'amount-pos':'amount-neg'}">${fmt(m.monto)}</td>
+        <td class="${m.tipo==='aporte'?'amount-pos':m.tipo==='traspaso'?'':'amount-neg'}">${fmt(m.monto)}</td>
         <td style="white-space:nowrap;display:flex;gap:4px;">
           <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="editarMovimientoCaja(${m.id})">✏️</button>
           <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="eliminarMovimientoCaja(${m.id})">✕</button>
