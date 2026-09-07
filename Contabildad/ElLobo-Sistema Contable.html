@@ -59,7 +59,7 @@
   .kpi-card.orange::before { background: var(--orange); }
   .kpi-card.purple::before { background: var(--purple); }
   .kpi-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); margin-bottom: 10px; font-family: 'Syne', sans-serif; font-weight: 600; }
-  .kpi-value { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 21px; line-height: 1.15; margin-bottom: 6px; overflow-wrap: break-word; }
+  .kpi-value { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 18px; line-height: 1.15; margin-bottom: 6px; overflow-wrap: break-word; }
   .kpi-card.green .kpi-value { color: var(--green); }
   .kpi-card.red .kpi-value { color: var(--red); }
   .kpi-card.accent .kpi-value { color: var(--accent); }
@@ -1295,13 +1295,18 @@
         <div class="report-line"><span>Efectivo recibido (pedidos)</span><strong class="amount-pos" id="dd-res-efectivo">$0</strong></div>
         <div class="report-line"><span>Transferencia recibida (pedidos)</span><strong class="amount-pos" id="dd-res-transferencia">$0</strong></div>
         <div class="report-line"><span>Total gastos extra</span><strong class="amount-neg" id="dd-res-gastos">$0</strong></div>
-        <div class="report-line" id="dd-res-ajuste-row" style="display:none;"><span>Ajuste</span><strong id="dd-res-ajuste">$0</strong></div>
+        <div class="report-line" id="dd-res-ajuste-efectivo-row" style="display:none;"><span>Ajuste efectivo</span><strong id="dd-res-ajuste-efectivo">$0</strong></div>
+        <div class="report-line" id="dd-res-ajuste-transferencia-row" style="display:none;"><span>Ajuste transferencia</span><strong id="dd-res-ajuste-transferencia">$0</strong></div>
 
         <button type="button" class="btn btn-outline" style="width:100%;margin:10px 0;" onclick="toggleAjusteManual()" id="btn-toggle-ajuste">➕ Ajuste</button>
         <div id="ajuste-manual-section" style="display:none;margin-bottom:10px;">
           <div class="form-group mb">
-            <label>Ajuste ($) <span style="color:var(--text3);font-weight:400;">— escribe un valor negativo (ej: -5000) para restar</span></label>
-            <input type="text" inputmode="numeric" id="dd-ajuste-monto" placeholder="0" oninput="formatMilesConSigno(this); recalcularResultadoCierre()">
+            <label>Ajuste efectivo ($) <span style="color:var(--text3);font-weight:400;">— escribe un valor negativo (ej: -5000) para restar</span></label>
+            <input type="text" inputmode="numeric" id="dd-ajuste-efectivo-monto" placeholder="0" oninput="formatMilesConSigno(this); recalcularResultadoCierre()">
+          </div>
+          <div class="form-group mb">
+            <label>Ajuste transferencia ($) <span style="color:var(--text3);font-weight:400;">— escribe un valor negativo (ej: -5000) para restar</span></label>
+            <input type="text" inputmode="numeric" id="dd-ajuste-transferencia-monto" placeholder="0" oninput="formatMilesConSigno(this); recalcularResultadoCierre()">
           </div>
           <div class="form-group mb">
             <label>Explicación del ajuste <span class="req">*</span></label>
@@ -1312,7 +1317,7 @@
         <div class="divider"></div>
         <div class="monto-display" style="background:rgba(76,175,125,0.07);border-color:rgba(76,175,125,0.25);">
           <div class="monto-val" id="dd-total-turno" style="color:var(--green);">$0</div>
-          <div class="monto-label">Total del turno (efectivo + transferencia)</div>
+          <div class="monto-label" id="dd-total-turno-label">Total del turno (efectivo + transferencia)</div>
         </div>
         <div class="monto-display" style="margin-top:10px;">
           <div class="monto-val" id="dd-resultado">$0</div>
@@ -2053,6 +2058,9 @@ const fmt      = n  => '$' + Math.abs(Math.round(n)).toLocaleString('es-CO');
 // absoluto) — se usa donde el número puede ser negativo y hace falta que se
 // note, como la utilidad neta de un período con pérdida.
 const fmtSigned = n => (n < 0 ? '− ' : '') + fmt(n);
+// Para mostrar un ajuste manual con su signo bien claro: "+ $190.000" si suma,
+// "− $5.000" si resta, nada de signo si es 0 (fmt() de por sí no distingue).
+const fmtAjuste = n => (n > 0 ? '+ ' : n < 0 ? '− ' : '') + fmt(n);
 // Versión corta para etiquetas de eje ($1.2M / $850K) — donde fmt() completo
 // ("$1.234.567") no cabe en el espacio angosto de un eje de gráfico.
 function fmtCompacto(n) {
@@ -5707,11 +5715,14 @@ function renderTablero() {
 
   // Ingresos: directo de los cierres guardados (efectivo/transferencia ya
   // son la suma bruta de pedidos pagados de ese turno, antes de gastos —
-  // el mismo campo que ya usan renderIngresosFinanciero() y renderCaja()).
-  // Ya incluye el desayuno, porque calcularVentasFijas lo suma al guardar
-  // el cierre — no se vuelve a sumar aparte para no duplicarlo.
+  // el mismo campo que ya usan renderIngresosFinanciero() y renderCaja()),
+  // más el ajuste manual de cada cierre (si tiene) — igual que en Caja, para
+  // que la Utilidad neta del Tablero no se quede corta frente a lo que de
+  // verdad hay en las 3 cuentas. Ya incluye el desayuno, porque
+  // calcularVentasFijas lo suma al guardar el cierre — no se vuelve a sumar
+  // aparte para no duplicarlo.
   const cierresPeriodo = ST.cierresDia.filter(c => inP(c.fecha, fTablero));
-  const tI = cierresPeriodo.reduce((a,c) => a + (c.efectivo||0) + (c.transferencia||0), 0);
+  const tI = cierresPeriodo.reduce((a,c) => a + (c.efectivo||0) + (c.transferencia||0) + ajustesDeCierre(c).total, 0);
   const totalEfectivoCierres      = cierresPeriodo.reduce((a,c) => a + (c.efectivo||0), 0);
   const totalTransferenciaCierres = cierresPeriodo.reduce((a,c) => a + (c.transferencia||0), 0);
 
@@ -6032,7 +6043,9 @@ function renderIngresosFinanciero() {
   const cierres = ST.cierresDia.filter(c => enFiltroFecha(c.fecha, fIngresosHist));
   const extras  = ST.ingresosExtra.filter(i => enFiltroFecha(i.fecha, fIngresosHist));
 
-  const totalCierres = cierres.reduce((a,c) => a + (c.efectivo||0) + (c.transferencia||0), 0);
+  // Incluye el ajuste manual de cada cierre (si tiene) — igual que el
+  // Tablero, para que "Utilidad neta" coincida entre las dos pestañas.
+  const totalCierres = cierres.reduce((a,c) => a + (c.efectivo||0) + (c.transferencia||0) + ajustesDeCierre(c).total, 0);
   const totalExtras  = extras.reduce((a,i) => a + (i.monto||0), 0);
   const totalIngresos = totalCierres + totalExtras;
 
@@ -6086,7 +6099,7 @@ function renderIngresosFinanciero() {
       return {
         fecha: c.fecha, turno: c.turno,
         origen: `🧾 Cierre ${c.turno==='cena'?'Comida rápida':'Almuerzo'}`,
-        detalle: c.ajuste_manual ? `Incluye ajuste: ${c.ajuste_manual>0?'+':''}${fmt(c.ajuste_manual)}` : '—',
+        detalle: textoAjusteCierre(c) || '—',
         cuenta: null, efectivo: ef, transferencia: tr, monto: ef + tr,
         id: c.id, tipo: 'cierre'
       };
@@ -6195,14 +6208,39 @@ function toggleAjusteManual() {
 }
 
 function resetearCamposAjusteCierre() {
-  const montoEl = document.getElementById('dd-ajuste-monto');
-  const notaEl  = document.getElementById('dd-ajuste-nota');
-  if (montoEl) montoEl.value = '';
-  if (notaEl)  notaEl.value  = '';
+  const montoEfEl = document.getElementById('dd-ajuste-efectivo-monto');
+  const montoTrEl = document.getElementById('dd-ajuste-transferencia-monto');
+  const notaEl    = document.getElementById('dd-ajuste-nota');
+  if (montoEfEl) montoEfEl.value = '';
+  if (montoTrEl) montoTrEl.value = '';
+  if (notaEl)    notaEl.value    = '';
   const sec = document.getElementById('ajuste-manual-section');
   const btn = document.getElementById('btn-toggle-ajuste');
   if (sec) sec.style.display = 'none';
   if (btn) btn.textContent = '➕ Ajuste';
+}
+
+// Un cierre puede traer un ajuste manual de efectivo, de transferencia, o de
+// ambos (separados desde que se agregó el ajuste de transferencia — antes
+// "ajuste_manual" era un solo valor que siempre se trataba como parte del
+// efectivo). Esta función centraliza esa lectura para que Cierre, Caja,
+// Auditoría e Ingresos lo interpreten todos igual, incluidos los cierres
+// viejos que solo tienen el campo original.
+function ajustesDeCierre(c) {
+  const efectivo      = c.ajuste_efectivo != null ? (c.ajuste_efectivo || 0) : (c.ajuste_manual || 0);
+  const transferencia = c.ajuste_transferencia || 0;
+  return { efectivo, transferencia, total: efectivo + transferencia };
+}
+
+// Texto corto para notar, en tablas de solo lectura (Historial de ingresos),
+// que un cierre trae ajuste — sin repetir en cada tabla la lógica de separar
+// efectivo/transferencia y formatear el signo de cada uno.
+function textoAjusteCierre(c) {
+  const aj = ajustesDeCierre(c);
+  const partes = [];
+  if (aj.efectivo)      partes.push(`efectivo ${fmtAjuste(aj.efectivo)}`);
+  if (aj.transferencia) partes.push(`transferencia ${fmtAjuste(aj.transferencia)}`);
+  return partes.length ? `Incluye ajuste: ${partes.join(', ')}` : '';
 }
 
 // Suma fija de los pedidos ya registrados (no editable) para una fecha/turno.
@@ -6239,17 +6277,25 @@ function calcularGastosTurno(fecha, turno) {
 }
 
 // Recalcula los totales derivados (KPIs, utilidad, caja esperada). Efectivo y
-// transferencia son siempre la suma fija de los pedidos; solo el Ajuste es editable.
+// transferencia son siempre la suma fija de los pedidos; solo el Ajuste
+// (efectivo y/o transferencia, por separado) es editable.
 function recalcularResultadoCierre() {
   const fecha = document.getElementById('dd-fecha').value || today();
   const { efectivo, transferencia, cajaInicial, ventaDesayuno, ventaDesayunoEfectivo, ventaDesayunoTransferencia, tieneApertura } = calcularVentasFijas(fecha, ddTurno);
   const total = efectivo + transferencia;
 
   const { reales: gastos, conPrestamos: gastosConPrestamos } = calcularGastosTurno(fecha, ddTurno);
-  const ajuste = valMilesConSigno('dd-ajuste-monto');
+  const ajusteEfectivo      = valMilesConSigno('dd-ajuste-efectivo-monto');
+  const ajusteTransferencia = valMilesConSigno('dd-ajuste-transferencia-monto');
+  const ajusteTotal    = ajusteEfectivo + ajusteTransferencia;
+  const totalAjustado  = total + ajusteTotal;
+  const ajustado        = ajusteTotal !== 0;
 
-  const resultado    = total - gastos + ajuste;
-  const cajaEsperada = cajaInicial + efectivo - gastosConPrestamos + ajuste;
+  const resultado    = total - gastos + ajusteTotal;
+  // Caja esperada en EFECTIVO: solo la mueve el ajuste de efectivo — el de
+  // transferencia no es plata física, así que no debe cambiar cuánto
+  // efectivo se espera encontrar en la caja.
+  const cajaEsperada = cajaInicial + efectivo - gastosConPrestamos + ajusteEfectivo;
 
   document.getElementById('dd-res-caja-inicial').innerHTML = tieneApertura
     ? fmt(cajaInicial)
@@ -6259,25 +6305,41 @@ function recalcularResultadoCierre() {
   document.getElementById('dd-res-efectivo').textContent = fmt(efectivo - ventaDesayunoEfectivo);
   document.getElementById('dd-res-transferencia').textContent = fmt(transferencia - ventaDesayunoTransferencia);
 
-  document.getElementById('dd-total').textContent         = fmt(total);
+  // "Total vendido" (KPI de arriba) y "Total del turno" (cuadro de abajo) son
+  // el mismo número e incluyen el ajuste cuando lo hay, para que no escondan
+  // plata que en realidad debería estar en caja. Cuando está ajustado, los
+  // dos lo marcan con la misma etiqueta para que no se confunda con la venta
+  // "cruda" de pedidos.
+  const tagAjustado = ' <span style="color:var(--accent);">· incluye ajuste</span>';
+  document.getElementById('dd-total').textContent         = fmt(totalAjustado);
   document.getElementById('dd-efectivo').textContent      = fmt(efectivo);
   document.getElementById('dd-transferencia').textContent = fmt(transferencia);
-  document.getElementById('dd-turno-label').textContent   = ddTurno==='almuerzo' ? 'Efectivo + Transferencia almuerzo (incl. desayuno)' : 'Efectivo + Transferencia comida rápida';
+  document.getElementById('dd-turno-label').innerHTML = (ddTurno==='almuerzo' ? 'Efectivo + Transferencia almuerzo (incl. desayuno)' : 'Efectivo + Transferencia comida rápida') + (ajustado ? tagAjustado : '');
 
   document.getElementById('dd-res-gastos').textContent  = fmt(gastos);
-  document.getElementById('dd-total-turno').textContent = fmt(total);
+  document.getElementById('dd-total-turno').textContent = fmt(totalAjustado);
+  document.getElementById('dd-total-turno-label').innerHTML = `Total del turno (efectivo + transferencia)${ajustado ? tagAjustado : ''}`;
   document.getElementById('dd-resultado').textContent   = fmt(resultado);
   document.getElementById('dd-resultado').style.color   = resultado >= 0 ? 'var(--accent)' : 'var(--red)';
   document.getElementById('dd-caja-esperada').textContent = fmt(cajaEsperada);
 
-  const ajusteRow = document.getElementById('dd-res-ajuste-row');
-  const ajusteEl  = document.getElementById('dd-res-ajuste');
-  if (ajuste !== 0) {
-    ajusteRow.style.display = 'flex';
-    ajusteEl.textContent = (ajuste > 0 ? '+ ' : '− ') + '$' + Math.abs(Math.round(ajuste)).toLocaleString('es-CO');
-    ajusteEl.className   = ajuste >= 0 ? 'amount-pos' : 'amount-neg';
+  const efRow = document.getElementById('dd-res-ajuste-efectivo-row');
+  const efEl  = document.getElementById('dd-res-ajuste-efectivo');
+  if (ajusteEfectivo !== 0) {
+    efRow.style.display = 'flex';
+    efEl.textContent = fmtAjuste(ajusteEfectivo);
+    efEl.className   = ajusteEfectivo >= 0 ? 'amount-pos' : 'amount-neg';
   } else {
-    ajusteRow.style.display = 'none';
+    efRow.style.display = 'none';
+  }
+  const trRow = document.getElementById('dd-res-ajuste-transferencia-row');
+  const trEl  = document.getElementById('dd-res-ajuste-transferencia');
+  if (ajusteTransferencia !== 0) {
+    trRow.style.display = 'flex';
+    trEl.textContent = fmtAjuste(ajusteTransferencia);
+    trEl.className   = ajusteTransferencia >= 0 ? 'amount-pos' : 'amount-neg';
+  } else {
+    trRow.style.display = 'none';
   }
 }
 
@@ -6286,43 +6348,46 @@ async function guardarCierre() {
   const { efectivo, transferencia } = calcularVentasFijas(fecha, ddTurno);
   const { reales: gastos } = calcularGastosTurno(fecha, ddTurno);
 
-  const ajuste     = valMilesConSigno('dd-ajuste-monto');
+  const ajusteEfectivo      = valMilesConSigno('dd-ajuste-efectivo-monto');
+  const ajusteTransferencia = valMilesConSigno('dd-ajuste-transferencia-monto');
+  const hayAjuste  = ajusteEfectivo !== 0 || ajusteTransferencia !== 0;
   const ajusteNota = document.getElementById('dd-ajuste-nota').value.trim();
-  if (ajuste !== 0 && !ajusteNota) {
+  if (hayAjuste && !ajusteNota) {
     showToast('⚠ Escribe la explicación del ajuste', 'warning');
     return;
   }
-  const resultado = efectivo + transferencia - gastos + ajuste;
+  const resultado = efectivo + transferencia - gastos + ajusteEfectivo + ajusteTransferencia;
 
   const datosGuardar = {
     efectivo, transferencia, gastos, resultado,
-    ajuste_manual: ajuste, ajuste_manual_nota: ajuste !== 0 ? ajusteNota : ''
+    ajuste_efectivo: ajusteEfectivo, ajuste_transferencia: ajusteTransferencia,
+    ajuste_manual_nota: hayAjuste ? ajusteNota : ''
   };
 
   try {
     const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
-    try {
-      if (existing) {
-        await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${ddTurno}`, datosGuardar);
-        Object.assign(existing, datosGuardar);
-      } else {
-        const [row] = await sbInsert('cierres_dia', { fecha, turno: ddTurno, ...datosGuardar });
-        ST.cierresDia.unshift(row);
-      }
-    } catch (e) {
-      const msg = e.message || '';
-      if (msg.includes('ajuste_manual')) {
-        // Columnas de ajuste manual aún no existen en Supabase — reintenta sin ellas
-        const { ajuste_manual, ajuste_manual_nota, ...datosBase } = datosGuardar;
+    // Si "ajuste_efectivo"/"ajuste_transferencia" (o la nota) aún no existen
+    // como columnas en Supabase, reintenta sin la que falte para no perder
+    // el resto del cierre — igual que sbInsertConCuenta para Caja/Egresos.
+    let payload = { ...datosGuardar };
+    for (;;) {
+      try {
         if (existing) {
-          await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${ddTurno}`, datosBase);
-          Object.assign(existing, datosBase);
+          await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${ddTurno}`, payload);
+          Object.assign(existing, payload);
         } else {
-          const [row] = await sbInsert('cierres_dia', { fecha, turno: ddTurno, ...datosBase });
+          const [row] = await sbInsert('cierres_dia', { fecha, turno: ddTurno, ...payload });
           ST.cierresDia.unshift(row);
         }
-        showToast('⚠ El ajuste manual no se guardó — falta agregar esas columnas en Supabase (ver script SQL)', 'warning');
-      } else { throw e; }
+        break;
+      } catch (e) {
+        const msg = e.message || '';
+        const columnaFaltante = ['ajuste_efectivo', 'ajuste_transferencia', 'ajuste_manual_nota'].find(c => c in payload && msg.includes(c));
+        if (!columnaFaltante) throw e;
+        const { [columnaFaltante]: _omit, ...resto } = payload;
+        payload = resto;
+        showToast(`⚠ "${columnaFaltante}" no se guardó — falta agregar esa columna en Supabase (ver script SQL)`, 'warning');
+      }
     }
 
     setSyncBadge('ok');
@@ -6442,7 +6507,7 @@ function renderHistorialCierres() {
         <td class="amount-pos">${fmt(c.efectivo)}</td>
         <td class="amount-pos">${fmt(c.transferencia)}</td>
         <td class="amount-neg">${fmt(c.gastos)}</td>
-        <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}${c.ajuste_manual ? ' <span title="Incluye ajuste manual">*</span>' : ''}</td>
+        <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}${ajustesDeCierre(c).total ? ` <span title="${textoAjusteCierre(c)}">*</span>` : ''}</td>
         <td style="display:flex;gap:4px;">
           <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="irADiaADia('${c.fecha}','${c.turno}')">Ver</button>
           <button class="btn btn-danger" style="padding:5px 10px;font-size:11px;" onclick="eliminarCierre('${c.fecha}','${c.turno}')">🗑</button>
@@ -6494,11 +6559,13 @@ function renderDiaADia() {
   // cual quedó guardado. Efectivo/Transferencia ya no se prefiltran aquí — los
   // calcula siempre recalcularResultadoCierre() a partir de los pedidos reales.
   if (viendoHistorialCierre && cierreExistente) {
-    const ajusteVal = cierreExistente.ajuste_manual || 0;
-    document.getElementById('dd-ajuste-monto').value = ajusteVal ? (ajusteVal < 0 ? '-' : '') + Math.abs(ajusteVal).toLocaleString('es-CO') : '';
+    const aj = ajustesDeCierre(cierreExistente);
+    const paraInput = v => v ? (v < 0 ? '-' : '') + Math.abs(v).toLocaleString('es-CO') : '';
+    document.getElementById('dd-ajuste-efectivo-monto').value      = paraInput(aj.efectivo);
+    document.getElementById('dd-ajuste-transferencia-monto').value = paraInput(aj.transferencia);
     document.getElementById('dd-ajuste-nota').value  = cierreExistente.ajuste_manual_nota || '';
-    document.getElementById('ajuste-manual-section').style.display = ajusteVal ? 'block' : 'none';
-    document.getElementById('btn-toggle-ajuste').textContent = ajusteVal ? '➖ Ocultar ajuste' : '➕ Ajuste';
+    document.getElementById('ajuste-manual-section').style.display = aj.total ? 'block' : 'none';
+    document.getElementById('btn-toggle-ajuste').textContent = aj.total ? '➖ Ocultar ajuste' : '➕ Ajuste';
   }
 
   // Gastos (siempre reales — no dependen del modo en el que estemos)
@@ -6605,14 +6672,16 @@ function setTipoMovimientoCaja(t, btn) {
 function calcularAcumuladosCaja(periodo = 'todo') {
   let efectivo = 0, transfAlmuerzos = 0, transfRapidas = 0;
 
-  // Base: lo que dejó cada turno cerrado dentro del período. Los gastos y el
-  // ajuste manual del turno (registrados en Cierre) siempre se cobran del
-  // efectivo, sin importar el turno — así se ha calculado siempre la caja
-  // esperada.
+  // Base: lo que dejó cada turno cerrado dentro del período. Los gastos
+  // siempre se cobran del efectivo, sin importar el turno — así se ha
+  // calculado siempre la caja esperada. El ajuste manual del turno ya viene
+  // separado en efectivo/transferencia (ver ajustesDeCierre) y cada parte se
+  // suma a su bolsa correspondiente.
   ST.cierresDia.filter(c => inP(c.fecha, periodo)).forEach(c => {
-    efectivo += (c.efectivo || 0) - (c.gastos || 0) + (c.ajuste_manual || 0);
-    if (c.turno === 'almuerzo') transfAlmuerzos += (c.transferencia || 0);
-    else                        transfRapidas   += (c.transferencia || 0);
+    const aj = ajustesDeCierre(c);
+    efectivo += (c.efectivo || 0) - (c.gastos || 0) + aj.efectivo;
+    if (c.turno === 'almuerzo') transfAlmuerzos += (c.transferencia || 0) + aj.transferencia;
+    else                        transfRapidas   += (c.transferencia || 0) + aj.transferencia;
   });
 
   const sumaPorCuenta = (cta, monto) => {
@@ -6823,9 +6892,10 @@ function renderCaja() {
   const porDia = {};
   cierresFiltrados.forEach(c => {
     if (!porDia[c.fecha]) porDia[c.fecha] = { efectivo: 0, transfAlmuerzos: 0, transfRapidas: 0 };
-    porDia[c.fecha].efectivo += (c.efectivo || 0) - (c.gastos || 0) + (c.ajuste_manual || 0);
-    if (c.turno === 'almuerzo') porDia[c.fecha].transfAlmuerzos += (c.transferencia || 0);
-    else                        porDia[c.fecha].transfRapidas   += (c.transferencia || 0);
+    const aj = ajustesDeCierre(c);
+    porDia[c.fecha].efectivo += (c.efectivo || 0) - (c.gastos || 0) + aj.efectivo;
+    if (c.turno === 'almuerzo') porDia[c.fecha].transfAlmuerzos += (c.transferencia || 0) + aj.transferencia;
+    else                        porDia[c.fecha].transfRapidas   += (c.transferencia || 0) + aj.transferencia;
   });
   const fechas = Object.keys(porDia).sort((a,b) => b.localeCompare(a));
   const histBody = document.getElementById('caja-historial-body');
@@ -6913,14 +6983,18 @@ function aplicarGateAdmin(prefix, renderFn) {
 function renderAuditoria() {
   const body = document.getElementById('auditoria-body');
   if (!body) return;
-  const ajustes = ST.cierresDia.filter(c => c.ajuste_manual).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const ajustes = ST.cierresDia.filter(c => ajustesDeCierre(c).total !== 0).sort((a,b) => b.fecha.localeCompare(a.fecha));
   body.innerHTML = ajustes.length
-    ? ajustes.map(c => `<tr>
+    ? ajustes.map(c => {
+        const aj = ajustesDeCierre(c);
+        const linea = (etiqueta, v) => v ? `<div class="${v>=0?'amount-pos':'amount-neg'}">${etiqueta} ${fmtAjuste(v)}</div>` : '';
+        return `<tr>
         <td>${c.fecha}</td>
         <td><span class="badge ${c.turno==='cena'?'badge-purple':'badge-accent'}">${c.turno==='cena'?'🌙 Comidas rápidas':'☀️ Almuerzo'}</span></td>
-        <td class="${c.ajuste_manual>=0?'amount-pos':'amount-neg'}">${c.ajuste_manual>=0?'+ ':'− '}${fmt(Math.abs(c.ajuste_manual))}</td>
+        <td>${linea('💵', aj.efectivo)}${linea('💳', aj.transferencia)}</td>
         <td style="color:var(--text2);">${c.ajuste_manual_nota || '—'}</td>
-      </tr>`).join('')
+      </tr>`;
+      }).join('')
     : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ajustes manuales registrados</div></div></td></tr>`;
 
   const elimBody = document.getElementById('auditoria-eliminados-body');
