@@ -43,6 +43,17 @@ import sys
 import argparse
 from datetime import date
 
+# En Windows, la consola (cmd/PowerShell) no siempre usa UTF-8 por defecto,
+# y los prints con emoji (✅) revientan con UnicodeEncodeError aunque el
+# Excel se haya guardado bien. Forzamos UTF-8 en stdout/stderr para que el
+# script corra igual en Windows/Mac/Linux sin depender de configurar
+# PYTHONIOENCODING a mano.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment

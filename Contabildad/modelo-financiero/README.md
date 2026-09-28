@@ -54,9 +54,5 @@ Un `.xlsx` de 4 hojas: **Cover / Outputs / Inputs / Model**.
 
 ## Notas
 
-- **Windows:** si al final ves un `UnicodeEncodeError` (el archivo sí se
-  alcanza a guardar; falla solo el mensaje de "listo" con el ✅), corre antes
-  `set PYTHONIOENCODING=utf-8` (cmd) o `$env:PYTHONIOENCODING="utf-8"`
-  (PowerShell).
 - **No subas el Excel exportado ni el modelo generado al repositorio:**
   contienen los datos reales del negocio y el repo es público en GitHub Pages.
