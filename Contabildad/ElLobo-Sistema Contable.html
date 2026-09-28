@@ -6,6 +6,7 @@
 <title>El Lobo — Sistema Contable</title>
 <meta http-equiv="Content-Security-Policy" content="connect-src *;">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #0f0e0c; --surface: #1a1915; --surface2: #222118;
@@ -417,7 +418,8 @@
   <div class="tab" onclick="showTab('ingfin',this)">🔒 Ingresos</div>
   <div class="tab" onclick="showTab('egresos',this)">🔒 Egresos</div>
   <div class="tab" onclick="showTab('caja',this)">🔒 Caja</div>
-  <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría</div>
+  <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
+  <div class="tab" onclick="showTab('datos',this)">🔒 Datos</div>
 </nav>
 
 <main>
@@ -442,11 +444,19 @@
     </div>
     <div id="alertZone" style="margin-bottom:16px;"></div>
 
-    <div class="filter-bar">
-      <button class="filter-btn" onclick="setFTablero('hoy',this)">Hoy</button>
-      <button class="filter-btn" onclick="setFTablero('semana',this)">Esta semana</button>
-      <button class="filter-btn active" onclick="setFTablero('mes',this)">Este mes</button>
-      <button class="filter-btn" onclick="setFTablero('todo',this)">Todo el historial</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div class="filter-bar" style="margin-bottom:0;">
+        <button class="filter-btn" onclick="setFTablero('hoy',this)">Hoy</button>
+        <button class="filter-btn" onclick="setFTablero('semana',this)">Esta semana</button>
+        <button class="filter-btn active" onclick="setFTablero('mes',this)">Este mes</button>
+        <button class="filter-btn" onclick="setFTablero('todo',this)">Todo el historial</button>
+        <span style="color:var(--text3);font-size:11px;margin-left:6px;">Rango personalizado:</span>
+        <input type="date" id="tablero-rango-desde" onchange="setFTableroRango()" style="width:auto;">
+        <span style="color:var(--text3);font-size:11px;">–</span>
+        <input type="date" id="tablero-rango-hasta" onchange="setFTableroRango()" style="width:auto;">
+      </div>
+      <button class="filter-btn" id="btn-toggle-gratis-tablero" onclick="toggleIncluirGratisTablero()"
+        title="Simula los ingresos si los pedidos 'gratis' se hubieran cobrado">🎁 Incluir "gratis" como pagado: OFF</button>
     </div>
 
     <div class="kpi-grid">
@@ -608,6 +618,16 @@
           </button>
           <div id="fiar-info-section" style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(155,127,212,0.08);border:1px solid rgba(155,127,212,0.3);font-size:12px;color:var(--purple);">
             ⚠ El ingreso se registrará en la fecha en que se marque como pagado
+            <div class="form-group mb autocomplete-wrap" style="margin-top:10px;">
+              <label style="color:var(--purple);">Cliente <span class="req">*</span></label>
+              <input type="text" id="ing-cliente-fiado" placeholder="Buscar o escribir nombre del cliente…" autocomplete="off"
+                oninput="doACCliente()" onkeydown="acKeyCliente(event)" onfocus="doACCliente()">
+              <div class="autocomplete-list" id="ac-cliente-fiado" style="display:none;"></div>
+            </div>
+            <div id="cliente-fiado-seleccionado" style="display:none;font-size:12px;color:var(--text);">
+              Cliente: <strong id="cliente-fiado-nombre"></strong>
+              <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:10px;margin-left:6px;" onclick="quitarClienteFiadoSeleccionado()">✕ quitar</button>
+            </div>
           </div>
           <div id="gratis-info-section" style="display:none;margin-top:8px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(240,180,40,0.08);border:1px solid rgba(240,180,40,0.3);font-size:12px;color:var(--orange);">
             🎁 Este pedido NO se suma a los ingresos del día (regalo de la casa / consumo del dueño) — solo queda el registro de qué y cuánto se dio gratis.
@@ -894,6 +914,14 @@
               </select>
             </div>
           </div>
+          <div class="form-group mb">
+            <label>Turno del gasto <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+            <select id="egr-turno">
+              <option value="">— No aplica (gasto general) —</option>
+              <option value="almuerzo">☀️ Almuerzo</option>
+              <option value="cena">🌙 Comidas rápidas</option>
+            </select>
+          </div>
           <div class="form-row">
             <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="egr-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
             <div class="form-group"><label>Descripción</label><input type="text" id="egr-desc" placeholder="ej: Arriendo local, luz…"></div>
@@ -972,6 +1000,14 @@
               <option value="todos">Todos</option>
               <option value="efectivo">Efectivo</option>
               <option value="transferencia">Transferencia</option>
+            </select>
+          </div>
+          <div>
+            <div class="filtro-label">Turno</div>
+            <select onchange="setFEgrSelect('turno', this.value)">
+              <option value="todos">Todos</option>
+              <option value="almuerzo">☀️ Almuerzo</option>
+              <option value="cena">🌙 Comidas rápidas</option>
             </select>
           </div>
         </div>
@@ -1465,6 +1501,34 @@
   </div>
 </section>
 
+<!-- ===== DATOS (exportar todo a Excel para análisis externo — acceso con contraseña) ===== -->
+<section class="section" id="tab-datos">
+  <div id="datos-login" class="panel" style="max-width:400px;margin:60px auto;">
+    <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
+    <div class="panel-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Exportación completa de datos para análisis externo (Excel/Python).</div>
+      <div class="form-group mb">
+        <label>Contraseña</label>
+        <input type="password" id="datos-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('datos-password')">
+      </div>
+      <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('datos-password')">Entrar</button>
+    </div>
+  </div>
+
+  <div id="datos-contenido" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><div class="panel-title">📊 Exportar todos los datos</div></div>
+      <div class="panel-body">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Genera un Excel (.xlsx) con una hoja por cada tabla del sistema (pedidos, egresos, cierres, caja, inventario, etc.) — pensado para análisis externo en Excel o Python, no para reimportar. Para respaldo/reimportación, usa el botón "Exportar" (JSON) del encabezado.</div>
+        <button class="btn btn-primary" onclick="exportarExcelCompleto()">📥 Exportar todos los datos a Excel (.xlsx)</button>
+      </div>
+    </div>
+  </div>
+</section>
+
 
 <div id="detalle-modal" class="modal-overlay" style="display:none;" onclick="cerrarModalDetalle(event)">
   <div class="modal-box">
@@ -1912,10 +1976,14 @@ async function sbInsertConCuenta(tabla, datos) {
     return await sbInsert(tabla, datos);
   } catch (e) {
     const msg = e.message || '';
-    if (msg.includes('cuenta') && 'cuenta' in datos) {
-      const { cuenta, ...sinCuenta } = datos;
-      showToast('⚠ La cuenta no se guardó — falta agregar esa columna en Supabase (ver script SQL)', 'warning');
-      return await sbInsert(tabla, sinCuenta);
+    // "turno" es opcional en egresos (punto 6) — mismo patrón que "cuenta":
+    // si la migración aún no corrió, reintenta sin la(s) columna(s) que falten.
+    const opcionales = ['cuenta', 'turno'].filter(campo => campo in datos && msg.includes(campo));
+    if (opcionales.length) {
+      const datosSinOpcionales = { ...datos };
+      opcionales.forEach(campo => delete datosSinOpcionales[campo]);
+      showToast(`⚠ No se guardó "${opcionales.join('/')}" — falta agregar esa columna en Supabase (ver script SQL)`, 'warning');
+      return await sbInsert(tabla, datosSinOpcionales);
     }
     throw e;
   }
@@ -1953,7 +2021,8 @@ let ST = {
   notasDia:   [],   // notas/recordatorios del día
   movimientosCaja: [], // gastos generales y aportes de capital (sección Caja)
   ingresosExtra: [], // ingresos adicionales personalizados (sección Ingresos)
-  pedidosEliminados: [] // auditoría de pedidos pagados eliminados
+  pedidosEliminados: [], // auditoría de pedidos pagados eliminados
+  clientesFiado: [] // clientes registrados para asociar a pedidos fiados
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -1995,7 +2064,7 @@ function showToast(msg, tipo = 'info', accion = null) {
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados] = await Promise.all([
+    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado] = await Promise.all([
       sbGet('pedidos',     'order=created_at.desc'),
       sbGet('egresos',     'order=created_at.desc'),
       sbGet('inventario',  'order=nombre.asc'),
@@ -2007,7 +2076,8 @@ async function loadState() {
       sbGet('notas_dia',   'order=created_at.desc').catch(() => []),
       sbGet('movimientos_caja', 'order=created_at.desc').catch(() => []),
       sbGet('ingresos_extra', 'order=fecha.desc').catch(() => []),
-      sbGet('pedidos_eliminados', 'order=created_at.desc').catch(() => [])
+      sbGet('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
+      sbGet('clientes_fiado', 'order=nombre.asc').catch(() => [])
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
@@ -2023,6 +2093,7 @@ async function loadState() {
     ST.movimientosCaja = movimientosCaja;
     ST.ingresosExtra   = ingresosExtra;
     ST.pedidosEliminados = pedidosEliminados;
+    ST.clientesFiado   = clientesFiado;
 
     setSyncBadge('ok');
   } catch (e) {
@@ -2187,6 +2258,36 @@ function exportarDatos() {
   URL.revokeObjectURL(a.href);
 }
 
+// Exporta TODO lo que hay en memoria a un Excel con una hoja por tabla —
+// para análisis externo (Excel/Python), no para reimportar (eso lo cubre
+// exportarDatos()/importarDatos(), el respaldo JSON de arriba).
+function exportarExcelCompleto() {
+  if (typeof XLSX === 'undefined') {
+    showToast('⚠ No se pudo cargar la librería de Excel (revisa tu conexión)', 'warning');
+    return;
+  }
+  const wb = XLSX.utils.book_new();
+  const addSheet = (nombre, filas) => {
+    const ws = XLSX.utils.json_to_sheet(filas || []);
+    XLSX.utils.book_append_sheet(wb, ws, nombre.slice(0, 31));
+  };
+  addSheet('Pedidos_Pagados', ST.ingresos);
+  addSheet('Pedidos_Pendientes', ST.pendientes);
+  addSheet('Egresos', ST.egresos);
+  addSheet('Gastos_Cierre', ST.gastosDia);
+  addSheet('Cierres_Dia', ST.cierresDia);
+  addSheet('Aperturas_Turno', ST.aperturasTurno);
+  addSheet('Movimientos_Caja', ST.movimientosCaja);
+  addSheet('Ingresos_Extra', ST.ingresosExtra);
+  addSheet('Inventario', ST.inventario);
+  addSheet('Consumos', ST.consumos);
+  addSheet('Notas_Dia', ST.notasDia);
+  addSheet('Pedidos_Eliminados', ST.pedidosEliminados);
+  if (ST.clientesFiado?.length) addSheet('Clientes_Fiado', ST.clientesFiado);
+  XLSX.writeFile(wb, `ElLobo_datos_${today()}.xlsx`);
+  showToast('✅ Excel exportado', 'ok');
+}
+
 async function importarDatos(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -2290,9 +2391,16 @@ document.getElementById('ing-hora').value = nowTime();
 
 // ── Filtros activos ───────────────────────────────────────────────────
 let fI = 'todos', fInv = 'todos', fTablero = 'mes';
+// Rango de fechas personalizado del Tablero (además de Hoy/Semana/Mes/Todo).
+// Si desde/hasta tienen algo, mandan por encima de fTablero — ver inPTablero().
+let fTableroRango = { desde: '', hasta: '' };
+// Simulación "¿cuánto tendríamos si los pedidos 'gratis' se hubieran
+// cobrado?" — solo afecta algunas KPI del Tablero (ver renderTablero()),
+// nunca el efectivo/transferencia reales de los cierres.
+let incluirGratisTablero = false;
 // Historial de Egresos: período/fecha igual que fPedidosHist, más categoría,
 // cuenta y método de pago (efectivo vs. cualquier transferencia).
-let fEgr = { periodo: 'hoy', fecha: '', cat: 'todas', cuenta: 'todas', metodo: 'todos' };
+let fEgr = { periodo: 'hoy', fecha: '', cat: 'todas', cuenta: 'todas', metodo: 'todos', turno: 'todos' };
 let egrEditId = null;
 // Granularidad de los gráficos comparativos del Tablero (independiente del
 // filtro de arriba, que solo afecta las KPI de un único período) — con esto
@@ -2318,6 +2426,10 @@ let acIdx = { sopa:-1, arroz:-1, proteina:-1, acomp:-1 };
 
 // ── Selección de ubicación (form Ingresos) ────────────────────────────
 let selectedUbicacion = null; // 'mesa_X' | 'domicilio' | null
+// Cliente elegido para un pedido "Fiar" — ver doACCliente()/pickACCliente()
+// más abajo. Se limpia al salir de la ubicación "fiar" o al registrar.
+let clienteFiadoSeleccionadoId = null;
+let clientesFiadoAcIdx = -1;
 
 // Productos extra en cola mientras se arma el pedido en Ingresos — se insertan
 // junto con los almuerzos al registrar (no afectan "cantidad de pedidos", que es
@@ -2525,6 +2637,10 @@ function seleccionarUbicacion(ubicacion) {
     if (dirElM) dirElM.value = '';
   }
 
+  // Fuera de "fiar" no tiene sentido conservar un cliente elegido — se
+  // limpia para no arrastrarlo por error a un pedido de otro tipo.
+  if (ubicacion !== 'fiar') quitarClienteFiadoSeleccionado();
+
   actualizarVisibilidadParaLlevar();
   actualizarVisibilidadMetodoPago();
   renderMesasForm();
@@ -2594,14 +2710,17 @@ function validarRegistro() {
 
   const actualValido = !!(pedido && (montoAlm > 0 || montoBebida > 0));
 
+  // Un fiado necesita cliente asociado — sin eso no se deja registrar.
+  const clienteOk = selectedUbicacion !== 'fiar' || !!clienteFiadoSeleccionadoId;
+
   // "Agregar almuerzo" necesita un almuerzo válido en el formulario en este momento.
-  const okAgregar = !!(actualValido && selectedUbicacion && abierto);
+  const okAgregar = !!(actualValido && selectedUbicacion && abierto && clienteOk);
   if (btnAgregarAlmuerzo) btnAgregarAlmuerzo.disabled = !okAgregar;
 
   // Registrar/Pagado inmediatamente puede ir con lo que ya está en cola,
   // aunque el formulario actual esté vacío (por eso no exige actualValido).
   const hayAlgoParaRegistrar = actualValido || almuerzosEnCola.length > 0 || extrasIngresoPendientes.length > 0;
-  const okRegistrar = !!(hayAlgoParaRegistrar && selectedUbicacion && abierto);
+  const okRegistrar = !!(hayAlgoParaRegistrar && selectedUbicacion && abierto && clienteOk);
   btn.disabled = !okRegistrar;
   if (btnPagado) btnPagado.disabled = !okRegistrar;
 }
@@ -2971,7 +3090,84 @@ document.addEventListener('click', e => {
     const l = document.getElementById('ac-' + t);
     if (l && !l.contains(e.target) && e.target.id !== 'ing-' + t) l.style.display = 'none';
   });
+  const lc = document.getElementById('ac-cliente-fiado');
+  if (lc && !lc.contains(e.target) && e.target.id !== 'ing-cliente-fiado') lc.style.display = 'none';
 });
+
+// ── Autocomplete de cliente fiado (lista dinámica, no un catálogo fijo
+// como PL — por eso va aparte del resto de autocompletes de arriba) ────
+function doACCliente() {
+  const input = document.getElementById('ing-cliente-fiado');
+  const list  = document.getElementById('ac-cliente-fiado');
+  if (!input || !list) return;
+  const q = input.value.toLowerCase().trim();
+  const filtered = q ? ST.clientesFiado.filter(c => c.nombre.toLowerCase().includes(q)) : ST.clientesFiado;
+  clientesFiadoAcIdx = -1;
+  let html = filtered.slice(0, 8).map(c =>
+    `<div class="autocomplete-item" data-id="${c.id}" onmousedown="pickACCliente(event,${c.id},'${c.nombre.replace(/'/g,"\\'")}')"><span>${c.nombre}</span>${c.telefono ? `<span class="item-code">${c.telefono}</span>` : ''}</div>`
+  ).join('');
+  const yaExiste = q && ST.clientesFiado.some(c => c.nombre.toLowerCase() === q);
+  if (q && !yaExiste) {
+    html += `<div class="autocomplete-item" style="color:var(--accent);" onmousedown="crearYSeleccionarClienteFiado(event,'${input.value.trim().replace(/'/g,"\\'")}')">+ Crear cliente nuevo: "${input.value.trim()}"</div>`;
+  }
+  if (!html) { list.style.display = 'none'; return; }
+  list.innerHTML = html;
+  list.style.display = 'block';
+}
+
+function pickACCliente(e, id, nombre) {
+  e.preventDefault();
+  clienteFiadoSeleccionadoId = id;
+  document.getElementById('ing-cliente-fiado').value = '';
+  document.getElementById('ac-cliente-fiado').style.display = 'none';
+  mostrarClienteFiadoSeleccionado(nombre);
+  validarRegistro();
+}
+
+async function crearYSeleccionarClienteFiado(e, nombre) {
+  e.preventDefault();
+  nombre = (nombre||'').trim();
+  if (!nombre) return;
+  try {
+    const [row] = await sbInsert('clientes_fiado', { nombre });
+    ST.clientesFiado.push(row);
+    ST.clientesFiado.sort((a,b) => a.nombre.localeCompare(b.nombre));
+    setSyncBadge('ok');
+    pickACCliente(e, row.id, row.nombre);
+    showToast(`✅ Cliente "${row.nombre}" creado`, 'ok');
+  } catch (err) {
+    console.error(err);
+    showToast('⚠ No se pudo crear el cliente — ¿ya creaste la tabla clientes_fiado en Supabase?', 'warning');
+  }
+}
+
+function mostrarClienteFiadoSeleccionado(nombre) {
+  const wrap = document.getElementById('cliente-fiado-seleccionado');
+  const nombreEl = document.getElementById('cliente-fiado-nombre');
+  if (wrap && nombreEl) { nombreEl.textContent = nombre; wrap.style.display = 'block'; }
+}
+
+function quitarClienteFiadoSeleccionado() {
+  clienteFiadoSeleccionadoId = null;
+  const wrap = document.getElementById('cliente-fiado-seleccionado');
+  if (wrap) wrap.style.display = 'none';
+  validarRegistro();
+}
+
+function acKeyCliente(e) {
+  const list = document.getElementById('ac-cliente-fiado');
+  const items = list.querySelectorAll('.autocomplete-item');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown')  { clientesFiadoAcIdx = Math.min(clientesFiadoAcIdx+1, items.length-1); hlACCliente(items); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { clientesFiadoAcIdx = Math.max(clientesFiadoAcIdx-1, 0); hlACCliente(items); e.preventDefault(); }
+  else if (e.key === 'Enter' && clientesFiadoAcIdx >= 0) { items[clientesFiadoAcIdx].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })); e.preventDefault(); }
+  else if (e.key === 'Escape') { list.style.display = 'none'; }
+}
+
+function hlACCliente(items) {
+  items.forEach((it, i) => it.classList.toggle('ac-sel', i === clientesFiadoAcIdx));
+  if (clientesFiadoAcIdx >= 0) items[clientesFiadoAcIdx].scrollIntoView({ block:'nearest' });
+}
 
 // ── Registrar pedido ──────────────────────────────────────────────────
 // estadoFinal: 'pendiente' (normal) | 'pagado' (botón "Pagado inmediatamente")
@@ -3051,6 +3247,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         es_fiar: selectedUbicacion === 'fiar',
         es_sin_mesa: selectedUbicacion === 'sinmesa',
         es_gratis: esGratis,
+        cliente_fiado_id: selectedUbicacion === 'fiar' ? clienteFiadoSeleccionadoId : null,
         direccion: direccionValue || '', grupo_pedido: grupoPedido
       };
 
@@ -3059,17 +3256,21 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         [newPedido] = await sbInsert('pedidos', pedidoData);
       } catch (e) {
         const msg = e.message || '';
-        if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
+        if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia') || msg.includes('cliente_fiado_id')) {
           // Columnas opcionales aún no existen en Supabase — reintenta sin ellas
-          const { es_fiar: esFiarVal, direccion: dirVal, es_sin_mesa: esSinMesaVal, es_gratis: esGratisVal, grupo_pedido: grupoVal, monto_efectivo: mEf, monto_transferencia: mTr, ...pedidoBase } = pedidoData;
+          const { es_fiar: esFiarVal, direccion: dirVal, es_sin_mesa: esSinMesaVal, es_gratis: esGratisVal, grupo_pedido: grupoVal, monto_efectivo: mEf, monto_transferencia: mTr, cliente_fiado_id: clienteVal, ...pedidoBase } = pedidoData;
           [newPedido] = await sbInsert('pedidos', pedidoBase);
           newPedido.es_fiar = esFiarVal; newPedido.direccion = dirVal;
           newPedido.es_sin_mesa = esSinMesaVal; newPedido.es_gratis = esGratisVal; newPedido.grupo_pedido = grupoVal;
+          newPedido.cliente_fiado_id = clienteVal;
           if (dividido && (msg.includes('monto_efectivo') || msg.includes('monto_transferencia'))) {
             showToast('⚠ El reparto del pago dividido no se guardó — falta agregar esas columnas en Supabase (ver script SQL)', 'warning');
           }
           if (esGratis && msg.includes('es_gratis')) {
             showToast('⚠ Falta agregar la columna es_gratis en Supabase (ver script SQL) — por ahora este pedido SÍ contará en los ingresos', 'warning');
+          }
+          if (selectedUbicacion === 'fiar' && msg.includes('cliente_fiado_id')) {
+            showToast('⚠ Falta agregar la columna cliente_fiado_id en Supabase (ver script SQL) — el fiado quedó sin cliente asociado', 'warning');
           }
         } else { throw e; }
       }
@@ -3111,6 +3312,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
           mesa: mesa_numero, para_llevar: false,
           es_fiar: selectedUbicacion === 'fiar', es_sin_mesa: selectedUbicacion === 'sinmesa',
           es_gratis: esGratis,
+          cliente_fiado_id: selectedUbicacion === 'fiar' ? clienteFiadoSeleccionadoId : null,
           direccion: '', grupo_pedido: grupoPedido
         };
         try {
@@ -3119,10 +3321,11 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
             [newExtra] = await sbInsert('pedidos', extraData);
           } catch (e) {
             const msg = e.message || '';
-            if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
-              const { es_fiar: efV, direccion: dV, es_sin_mesa: esmV, es_gratis: egV, grupo_pedido: gV, monto_efectivo: mEf, monto_transferencia: mTr, ...extraBase } = extraData;
+            if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia') || msg.includes('cliente_fiado_id')) {
+              const { es_fiar: efV, direccion: dV, es_sin_mesa: esmV, es_gratis: egV, grupo_pedido: gV, monto_efectivo: mEf, monto_transferencia: mTr, cliente_fiado_id: clV, ...extraBase } = extraData;
               [newExtra] = await sbInsert('pedidos', extraBase);
               newExtra.es_fiar = efV; newExtra.direccion = dV; newExtra.es_sin_mesa = esmV; newExtra.es_gratis = egV; newExtra.grupo_pedido = gV;
+              newExtra.cliente_fiado_id = clV;
             } else { throw e; }
           }
           pedidosInsertados.push(newExtra);
@@ -3172,6 +3375,8 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     if (fiarInfoEl) fiarInfoEl.style.display = 'none';
     const gratisInfoEl = document.getElementById('gratis-info-section');
     if (gratisInfoEl) gratisInfoEl.style.display = 'none';
+    quitarClienteFiadoSeleccionado();
+    document.getElementById('ing-cliente-fiado').value = '';
     actualizarVisibilidadMetodoPago();
     onHoraChange();
     renderAll();
@@ -3926,11 +4131,14 @@ function renderPendientes() {
           const divididoPre = prellenadoDividido(orders);
           const idsGrupo = orders.map(o => o.id);
           const primero = orders[0];
+          const clienteNombre = primero.cliente_fiado_id
+            ? (ST.clientesFiado.find(c => c.id === primero.cliente_fiado_id)?.nombre || 'Cliente')
+            : 'Sin nombre registrado';
           return `
         <div class="pending-group">
           <div class="pending-group-hdr">
             <div>
-              <div class="pending-group-title" style="color:var(--purple);">Fiado — ${primero.fecha||'—'} ${primero.hora||''}</div>
+              <div class="pending-group-title" style="color:var(--purple);">📒 ${clienteNombre} — ${primero.fecha||'—'} ${primero.hora||''}</div>
               <div class="pending-group-sub">${orders.length} pedido(s)</div>
             </div>
             <div class="pending-group-total">${fmt(total)}</div>
@@ -4842,15 +5050,41 @@ async function moverPedidoAFiado() {
   if (pedidosMover.every(p => p.es_fiar)) { cerrarModalCambiarMesa(); return; }
   const mesaAnterior = pedidosMover[0].mesa;
 
+  // Pide el cliente por nombre (búsqueda simple) — el autocomplete completo
+  // vive en Pedidos, al registrar; aquí no vale la pena duplicarlo. No deja
+  // pasar un fiado sin intentar asociarlo a alguien.
+  const nombreIngresado = (prompt('¿A nombre de quién queda este fiado? (nombre del cliente)') || '').trim();
+  let clienteId = null;
+  if (nombreIngresado) {
+    const existente = ST.clientesFiado.find(c => c.nombre.toLowerCase() === nombreIngresado.toLowerCase());
+    if (existente) {
+      clienteId = existente.id;
+    } else {
+      try {
+        const [row] = await sbInsert('clientes_fiado', { nombre: nombreIngresado });
+        ST.clientesFiado.push(row);
+        ST.clientesFiado.sort((a,b) => a.nombre.localeCompare(b.nombre));
+        clienteId = row.id;
+      } catch (e) {
+        console.error(e);
+        showToast('⚠ No se pudo crear el cliente — el fiado quedará sin cliente asociado', 'warning');
+      }
+    }
+  }
+
   try {
     try {
-      await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, es_gratis: false, mesa: null });
+      await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, es_gratis: false, mesa: null, cliente_fiado_id: clienteId });
     } catch (e) {
-      if ((e.message||'').includes('es_gratis')) {
-        await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, mesa: null });
+      const msg = e.message || '';
+      if (msg.includes('cliente_fiado_id')) {
+        await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, es_gratis: false, mesa: null });
+        showToast('⚠ Falta agregar la columna cliente_fiado_id en Supabase (ver script SQL) — el fiado quedó sin cliente asociado', 'warning');
+      } else if (msg.includes('es_gratis')) {
+        await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, mesa: null, cliente_fiado_id: clienteId });
       } else { throw e; }
     }
-    pedidosMover.forEach(p => { p.es_fiar = true; p.es_domicilio = false; p.es_sin_mesa = false; p.es_gratis = false; p.mesa = null; });
+    pedidosMover.forEach(p => { p.es_fiar = true; p.es_domicilio = false; p.es_sin_mesa = false; p.es_gratis = false; p.mesa = null; p.cliente_fiado_id = clienteId; });
 
     if (mesaAnterior) {
       const quedan = ST.pendientes.filter(x => x.mesa === mesaAnterior).length;
@@ -4971,6 +5205,7 @@ async function guardarProductoExtra() {
     monto_unit: valorUnitario, monto_almuerzo: valorTotal, monto_domicilio: 0, monto_total: valorTotal,
     estado: 'pendiente', es_domicilio: !!ref.es_domicilio, mesa: ref.mesa, para_llevar: false,
     es_fiar: !!ref.es_fiar, es_sin_mesa: !!ref.es_sin_mesa, es_gratis: !!ref.es_gratis, direccion: ref.direccion || '',
+    cliente_fiado_id: ref.cliente_fiado_id || null,
     grupo_pedido: grupoPedido
   };
 
@@ -4980,10 +5215,11 @@ async function guardarProductoExtra() {
       [newPedido] = await sbInsert('pedidos', pedidoData);
     } catch (e) {
       const msg = e.message || '';
-      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido')) {
-        const { es_fiar, direccion, es_sin_mesa, es_gratis, grupo_pedido: gV, ...pedidoBase } = pedidoData;
+      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('cliente_fiado_id')) {
+        const { es_fiar, direccion, es_sin_mesa, es_gratis, grupo_pedido: gV, cliente_fiado_id: clV, ...pedidoBase } = pedidoData;
         [newPedido] = await sbInsert('pedidos', pedidoBase);
         newPedido.es_fiar = es_fiar; newPedido.direccion = direccion; newPedido.es_sin_mesa = es_sin_mesa; newPedido.es_gratis = es_gratis; newPedido.grupo_pedido = gV;
+        newPedido.cliente_fiado_id = clV;
       } else { throw e; }
     }
     ST.pendientes.unshift(newPedido);
@@ -5039,6 +5275,7 @@ function abrirModalAgregarComida(idsGrupo, grupoPedido) {
     idsGrupo: idArr, grupoPedido: grupoPedido || ref.grupo_pedido || null,
     fecha: ref.fecha, turno: ref.turno, mesa: ref.mesa,
     es_domicilio: !!ref.es_domicilio, es_fiar: !!ref.es_fiar, es_sin_mesa: !!ref.es_sin_mesa, es_gratis: !!ref.es_gratis,
+    cliente_fiado_id: ref.cliente_fiado_id || null,
     direccion: ref.direccion || '', metodo: ref.metodo || 'efectivo'
   };
 
@@ -5168,6 +5405,7 @@ async function guardarAgregarComida() {
     monto_unit: montoUnit, monto_almuerzo, monto_domicilio, monto_total,
     estado: 'pendiente', es_domicilio: ctx.es_domicilio, mesa: ctx.mesa, para_llevar: paraLlevar,
     es_fiar: ctx.es_fiar, es_sin_mesa: ctx.es_sin_mesa, es_gratis: ctx.es_gratis, direccion: ctx.direccion,
+    cliente_fiado_id: ctx.cliente_fiado_id || null,
     grupo_pedido: grupoPedido
   };
 
@@ -5177,10 +5415,11 @@ async function guardarAgregarComida() {
       [newPedido] = await sbInsert('pedidos', pedidoData);
     } catch (e) {
       const msg = e.message || '';
-      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido')) {
-        const { es_fiar, direccion, es_sin_mesa, es_gratis, grupo_pedido: gV, ...pedidoBase } = pedidoData;
+      if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('cliente_fiado_id')) {
+        const { es_fiar, direccion, es_sin_mesa, es_gratis, grupo_pedido: gV, cliente_fiado_id: clV, ...pedidoBase } = pedidoData;
         [newPedido] = await sbInsert('pedidos', pedidoBase);
         newPedido.es_fiar = es_fiar; newPedido.direccion = direccion; newPedido.es_sin_mesa = es_sin_mesa; newPedido.es_gratis = es_gratis; newPedido.grupo_pedido = gV;
+        newPedido.cliente_fiado_id = clV;
       } else { throw e; }
     }
     ST.pendientes.unshift(newPedido);
@@ -5374,6 +5613,7 @@ async function agregarEgreso() {
   const fecha  = document.getElementById('egr-fecha').value;
   const cat    = document.getElementById('egr-cat').value;
   const cuenta = document.getElementById('egr-cuenta').value;
+  const turno  = document.getElementById('egr-turno')?.value || null;
   const monto  = valMiles('egr-monto');
   const desc   = document.getElementById('egr-desc').value.trim();
   if (!fecha || !monto || monto <= 0) { showToast('⚠ Completa fecha y monto', 'warning'); return; }
@@ -5383,12 +5623,15 @@ async function agregarEgreso() {
     // OJO: la columna en Supabase se llama "description" (en inglés), no
     // "descripcion" — así quedó creada la tabla "egresos", a diferencia del
     // resto de la app que usa español. Ver ST.egresos.map en egresosCombinados().
-    const [row] = await sbInsertConCuenta('egresos', { fecha, cat, monto, description: desc, cuenta });
+    const [row] = await sbInsertConCuenta('egresos', { fecha, cat, monto, description: desc, cuenta, turno });
     ST.egresos.unshift(row);
     setSyncBadge('ok');
     renderAll();
     document.getElementById('egr-monto').value = '';
     document.getElementById('egr-desc').value  = '';
+    // La fecha vuelve a quedar en hoy — si se registró un gasto de un día
+    // anterior, el siguiente registro no debería heredar esa fecha vieja.
+    document.getElementById('egr-fecha').value = today();
     showToast('✅ Egreso registrado', 'ok');
   } catch(e) { console.error('agregarEgreso', e); showToast(`⚠ Error al registrar egreso: ${(e.message||'').slice(0,160)}`, 'warning'); }
 }
@@ -5410,6 +5653,7 @@ async function guardarEdicionEgreso(id) {
   const descEl   = document.getElementById(`egr-edit-desc-${id}`);
   const catEl    = document.getElementById(`egr-edit-cat-${id}`);
   const cuentaEl = document.getElementById(`egr-edit-cuenta-${id}`);
+  const turnoEl  = document.getElementById(`egr-edit-turno-${id}`);
   const montoEl  = document.getElementById(`egr-edit-monto-${id}`);
   if (!fechaEl || !montoEl) return;
   const fecha  = fechaEl.value;
@@ -5427,8 +5671,17 @@ async function guardarEdicionEgreso(id) {
   try {
     // "description" (en inglés) es el nombre real de esa columna — ver la
     // nota en agregarEgreso().
-    const patch = { fecha, description: descEl.value.trim(), cat: catEl.value, cuenta: cuentaEl.value, monto };
-    await sbPatch('egresos', `id=eq.${id}`, patch);
+    const patch = { fecha, description: descEl.value.trim(), cat: catEl.value, cuenta: cuentaEl.value, turno: turnoEl ? (turnoEl.value || null) : (original ? original.turno : null), monto };
+    try {
+      await sbPatch('egresos', `id=eq.${id}`, patch);
+    } catch (patchErr) {
+      const msg = patchErr.message || '';
+      if (msg.includes('turno')) {
+        const { turno, ...patchSinTurno } = patch;
+        await sbPatch('egresos', `id=eq.${id}`, patchSinTurno);
+        showToast('⚠ El turno no se guardó — falta agregar esa columna en Supabase (ver script SQL)', 'warning');
+      } else { throw patchErr; }
+    }
     const e = ST.egresos.find(x => x.id === id);
     if (e) Object.assign(e, patch);
     egrEditId = null;
@@ -5470,7 +5723,7 @@ function setFEgrSelect(campo, valor) {
 }
 
 // Un egreso pasa el filtro si cumple fecha/período Y (si están activos)
-// categoría, cuenta y método de pago — método se deriva de la cuenta:
+// categoría, cuenta, método de pago y turno — método se deriva de la cuenta:
 // "efectivo" es el único método efectivo, cualquier otra cuenta es transferencia.
 function pasaFiltroEgr(e, f) {
   if (!enFiltroFecha(e.fecha, f)) return false;
@@ -5480,6 +5733,7 @@ function pasaFiltroEgr(e, f) {
     const metodo = (e.cuenta || 'efectivo') === 'efectivo' ? 'efectivo' : 'transferencia';
     if (metodo !== f.metodo) return false;
   }
+  if (f.turno && f.turno !== 'todos' && e.turno !== f.turno) return false;
   return true;
 }
 
@@ -5492,7 +5746,7 @@ function egresosCombinados() {
   // e.description (en inglés) es el nombre real de la columna en Supabase
   // para la tabla "egresos" — ver la nota en agregarEgreso().
   const deEgresos = ST.egresos.map(e => ({
-    id: e.id, fecha: e.fecha, cat: e.cat, descripcion: e.description, monto: e.monto, origen: 'egresos', cuenta: e.cuenta || 'efectivo'
+    id: e.id, fecha: e.fecha, cat: e.cat, descripcion: e.description, monto: e.monto, origen: 'egresos', cuenta: e.cuenta || 'efectivo', turno: e.turno || null
   }));
   // Los gastos que se registran en Cierre siempre salen del efectivo del turno
   // (así se descuentan en calcularAcumuladosCaja) — por eso quedan fijos en
@@ -5523,7 +5777,13 @@ function filaEgresoEdit(e) {
       <option value="transf_almuerzos"${e.cuenta==='transf_almuerzos'?' selected':''}>☀️ Transf. Almuerzos</option>
       <option value="transf_rapidas"${e.cuenta==='transf_rapidas'?' selected':''}>🌙 Transf. Comidas rápidas</option>
     </select></td>
-    <td style="font-size:11px;color:var(--text3);">✍ Manual</td>
+    <td>
+      <select id="egr-edit-turno-${e.id}" style="width:100%;">
+        <option value=""${!e.turno?' selected':''}>— No aplica —</option>
+        <option value="almuerzo"${e.turno==='almuerzo'?' selected':''}>☀️ Almuerzo</option>
+        <option value="cena"${e.turno==='cena'?' selected':''}>🌙 Comidas rápidas</option>
+      </select>
+    </td>
     <td><input type="text" inputmode="numeric" id="egr-edit-monto-${e.id}" value="${Number(e.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
     <td style="white-space:nowrap;display:flex;gap:4px;">
       <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="guardarEdicionEgreso(${e.id})">✓</button>
@@ -5541,9 +5801,12 @@ function renderEgresos() {
         if (e.origen === 'egresos' && egrEditId === e.id) return filaEgresoEdit(e);
         // Los de Cierre muestran de cuál turno vienen (almuerzo o comida
         // rápida) y llevan al Cierre de ese día/turno para editarlos ahí.
+        // Los manuales también lo muestran, si se les asignó un turno.
         const origenTxt = e.origen === 'cierre'
           ? `🧾 Cierre · ${e.turno === 'almuerzo' ? '☀️ Almuerzo' : '🌙 Comida rápida'}`
-          : '✍ Manual';
+          : e.turno
+            ? `✍ Manual · ${e.turno === 'almuerzo' ? '☀️ Almuerzo' : '🌙 Comida rápida'}`
+            : '✍ Manual';
         const acciones = e.origen === 'egresos'
           ? `<button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="editarEgreso(${e.id})">✏️</button>
              <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="eliminarEgreso(${e.id})">✕</button>`
@@ -5677,8 +5940,51 @@ function renderInventario() {
 // ── TABLERO (antes Dashboard + Reportes fusionados) ─────────────────────
 function setFTablero(f, btn) {
   fTablero = f;
+  // Un botón rápido (Hoy/Semana/Mes/Todo) reemplaza cualquier rango
+  // personalizado que hubiera quedado activo.
+  fTableroRango = { desde: '', hasta: '' };
+  const rDesde = document.getElementById('tablero-rango-desde');
+  const rHasta = document.getElementById('tablero-rango-hasta');
+  if (rDesde) rDesde.value = '';
+  if (rHasta) rHasta.value = '';
   document.querySelectorAll('#tab-dashboard .filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  renderTablero();
+}
+
+// Rango de fechas exacto (ej: todo agosto, o agosto+septiembre juntos) —
+// manda por encima de Hoy/Semana/Mes/Todo mientras tenga desde y/o hasta.
+function setFTableroRango() {
+  const desde = document.getElementById('tablero-rango-desde').value;
+  const hasta = document.getElementById('tablero-rango-hasta').value;
+  fTableroRango = { desde, hasta };
+  if (desde || hasta) {
+    document.querySelectorAll('#tab-dashboard .filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  }
+  renderTablero();
+}
+
+// Filtro de fecha del Tablero: usa el rango personalizado si hay algo
+// escrito, si no cae de vuelta al período rápido (fTablero) de siempre.
+function inPTablero(fecha) {
+  if (fTableroRango.desde || fTableroRango.hasta) {
+    if (fTableroRango.desde && fecha < fTableroRango.desde) return false;
+    if (fTableroRango.hasta && fecha > fTableroRango.hasta) return false;
+    return true;
+  }
+  return inP(fecha, fTablero);
+}
+
+// Toggle "¿cuánto tendríamos si los 'gratis' se hubieran cobrado?" — una
+// simulación de proyección, nunca afecta la plata real (efectivo/transferencia
+// de los cierres siguen mostrando lo que de verdad entró a caja).
+function toggleIncluirGratisTablero() {
+  incluirGratisTablero = !incluirGratisTablero;
+  const btn = document.getElementById('btn-toggle-gratis-tablero');
+  if (btn) {
+    btn.classList.toggle('active', incluirGratisTablero);
+    btn.textContent = `🎁 Incluir "gratis" como pagado: ${incluirGratisTablero ? 'ON' : 'OFF'}`;
+  }
   renderTablero();
 }
 
@@ -5697,7 +6003,9 @@ function renderTablero() {
   // el mismo campo que ya usan renderIngresosFinanciero() y renderCaja()).
   // Ya incluye el desayuno, porque calcularVentasFijas lo suma al guardar
   // el cierre — no se vuelve a sumar aparte para no duplicarlo.
-  const cierresPeriodo = ST.cierresDia.filter(c => inP(c.fecha, fTablero));
+  // inPTablero() respeta el rango personalizado (desde/hasta) si hay uno
+  // activo; si no, cae de vuelta al filtro rápido Hoy/Semana/Mes/Todo.
+  const cierresPeriodo = ST.cierresDia.filter(c => inPTablero(c.fecha));
   const tI = cierresPeriodo.reduce((a,c) => a + (c.efectivo||0) + (c.transferencia||0), 0);
   const totalEfectivoCierres      = cierresPeriodo.reduce((a,c) => a + (c.efectivo||0), 0);
   const totalTransferenciaCierres = cierresPeriodo.reduce((a,c) => a + (c.transferencia||0), 0);
@@ -5705,8 +6013,8 @@ function renderTablero() {
   // Detalle (por tipo de plato, top proteínas/sopas/arroces, comidas rápidas
   // por categoría) sí necesita mirar pedido por pedido — el cierre no guarda
   // esa granularidad — pero solo de turnos que ya tienen cierre guardado.
-  const ings = ST.ingresos.filter(i => inP(i.fecha, fTablero) && cerrados.has(`${i.fecha}::${i.turno}`));
-  const egrs = egresosCombinados().filter(e => inP(e.fecha, fTablero));
+  const ings = ST.ingresos.filter(i => inPTablero(i.fecha) && cerrados.has(`${i.fecha}::${i.turno}`));
+  const egrs = egresosCombinados().filter(e => inPTablero(e.fecha));
   const tE   = egrs.reduce((a,b) => a + b.monto, 0);
   const ut   = tI - tE;
   const mg   = tI > 0 ? ((ut/tI)*100).toFixed(1) : 0;
@@ -5716,27 +6024,55 @@ function renderTablero() {
   // así que se necesita "alm" antes de calcularlo.
   // "alm" incluye los gratis (para que las cantidades/top de la sección de
   // abajo cuenten también los almuerzos regalados) — el ticket promedio, en
-  // cambio, solo debe mirar los que sí generaron ingreso.
+  // cambio, solo debe mirar los que sí generaron ingreso (a menos que el
+  // toggle de simulación esté encendido, ver abajo).
   const alm = ings.filter(i => i.turno === 'almuerzo');
   const almPagos    = alm.filter(i => !i.es_gratis);
   const almMonto    = almPagos.reduce((a,b) => a + (b.monto_total||0), 0);
   const almCantidad = almPagos.reduce((a,b) => a + (b.cantidad||1), 0);
 
-  document.getElementById('kpi-ingresos').textContent = fmt(tI);
+  // Simulación "Incluir 'gratis' como pagado" — proyecta cuánto habría
+  // entrado si los regalos de la casa se hubieran cobrado. Solo mueve las
+  // KPI/reportes de más abajo marcados explícitamente; el efectivo/
+  // transferencia reales (rp-ef, rp-trans) y Egresos NUNCA se tocan, porque
+  // esa plata de verdad no entró a caja — es puramente una proyección.
+  const gratisMontoPeriodo = ings.filter(i => i.es_gratis).reduce((a,b)=>a+(b.monto_total||0), 0);
+  const tIMostrado = incluirGratisTablero ? tI + gratisMontoPeriodo : tI;
+  const utMostrado = tIMostrado - tE;
+  const mgMostrado = tIMostrado > 0 ? ((utMostrado/tIMostrado)*100).toFixed(1) : 0;
+  const almBaseTicket = incluirGratisTablero ? alm : almPagos;
+  const almMontoMostrado    = almBaseTicket.reduce((a,b)=>a+(b.monto_total||0),0);
+  const almCantidadMostrado = almBaseTicket.reduce((a,b)=>a+(b.cantidad||1),0);
+
+  document.getElementById('kpi-ingresos').textContent = fmt(tIMostrado);
   document.getElementById('kpi-egresos').textContent  = fmt(tE);
-  document.getElementById('kpi-utilidad').textContent = fmt(ut);
-  document.getElementById('kpi-utilidad').style.color = ut >= 0 ? 'var(--green)' : 'var(--red)';
-  document.getElementById('kpi-margen').textContent   = `Margen: ${mg}%`;
-  document.getElementById('kpi-ticket').textContent   = fmt(almCantidad > 0 ? almMonto / almCantidad : 0);
-  document.getElementById('kpi-promedio').textContent = fmt(tI / diasConVentas);
+  document.getElementById('kpi-utilidad').textContent = fmt(utMostrado);
+  document.getElementById('kpi-utilidad').style.color = utMostrado >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('kpi-margen').textContent   = `Margen: ${mgMostrado}%`;
+  document.getElementById('kpi-ticket').textContent   = fmt(almCantidadMostrado > 0 ? almMontoMostrado / almCantidadMostrado : 0);
+  document.getElementById('kpi-promedio').textContent = fmt(tIMostrado / diasConVentas);
   document.getElementById('kpi-stock').textContent    = ST.inventario.filter(p=>p.stock<=p.minimo).length;
 
   // Alertas
   const al = [];
-  const pendienteDeCierre = ST.ingresos
-    .filter(i => inP(i.fecha, fTablero) && !cerrados.has(`${i.fecha}::${i.turno}`))
-    .reduce((a,b)=>a+montoIngreso(b),0);
-  if (pendienteDeCierre > 0) al.push({t:'info', m:`🔓 Hay ${fmt(pendienteDeCierre)} en pedidos pagados de turnos sin cerrar — no están incluidos en este panel. Ciérralos desde Cierre para que aparezcan aquí.`});
+  // Turnos sin cerrar en el período: agrupados por fecha+turno para poder
+  // decir EXACTAMENTE cuáles faltan, no solo el total pendiente.
+  const turnosSinCerrarMap = {};
+  ST.ingresos.filter(i => inPTablero(i.fecha)).forEach(i => {
+    const key = `${i.fecha}::${i.turno}`;
+    if (cerrados.has(key)) return;
+    if (!turnosSinCerrarMap[key]) turnosSinCerrarMap[key] = { fecha: i.fecha, turno: i.turno, monto: 0 };
+    turnosSinCerrarMap[key].monto += montoIngreso(i);
+  });
+  const turnosSinCerrar = Object.values(turnosSinCerrarMap)
+    .sort((a,b) => a.fecha.localeCompare(b.fecha) || a.turno.localeCompare(b.turno));
+  const pendienteDeCierre = turnosSinCerrar.reduce((a,b)=>a+b.monto,0);
+  if (turnosSinCerrar.length) {
+    const detalle = turnosSinCerrar.map(t =>
+      `${t.fecha} (${t.turno==='cena'?'🌙 Comidas rápidas':'☀️ Almuerzo'}) — ${fmt(t.monto)}`
+    ).join('; ');
+    al.push({t:'info', m:`🔓 Turnos sin cerrar: ${detalle}. Total: ${fmt(pendienteDeCierre)}. Ciérralos desde Cierre para que aparezcan aquí.`});
+  }
   const pendTotal = ST.pendientes.reduce((a,b)=>a+montoIngreso(b),0);
   if (ST.pendientes.length > 0) al.push({t:'info', m:`⏳ ${ST.pendientes.length} pedido(s) pendiente(s) de cobro · ${fmt(pendTotal)} por recaudar`});
   if (tE > tI && tI > 0) al.push({t:'warning', m:`⚠ Gastos mayores a ingresos en este período. Egresos: ${fmt(tE)}`});
@@ -5744,6 +6080,7 @@ function renderTablero() {
   const bs = ST.inventario.filter(p=>p.stock<=p.minimo).length;
   if (bs > 0) al.push({t:'warning', m:`📦 ${bs} producto(s) con stock bajo en inventario`});
   if (tI > 0 && ut > 0) al.push({t:'ok', m:`✅ ¡Rentable! Utilidad del período: ${fmt(ut)} (${mg}% margen)`});
+  if (incluirGratisTablero && gratisMontoPeriodo > 0) al.push({t:'info', m:`🎁 Modo simulación activo: se están sumando ${fmt(gratisMontoPeriodo)} de pedidos "gratis" como si se hubieran cobrado. Esto es una proyección — ese dinero no entró realmente a caja.`});
   document.getElementById('alertZone').innerHTML = al.map(a=>`<div class="alert ${a.t}">${a.m}</div>`).join('');
 
   renderGraficosTablero();
@@ -5756,12 +6093,12 @@ function renderTablero() {
   document.getElementById('rp-psopa').textContent = cnt('porcion-sopa');
   document.getElementById('rp-parroz').textContent= cnt('porcion-arroz');
   document.getElementById('rp-pprot').textContent = cnt('porcion-proteina');
-  document.getElementById('rp-tal').textContent   = fmt(almPagos.reduce((a,b)=>a+(b.monto_total||0),0));
+  document.getElementById('rp-tal').textContent   = fmt(almMontoMostrado);
 
   document.getElementById('rp-ef').textContent    = fmt(totalEfectivoCierres);
   document.getElementById('rp-trans').textContent = fmt(totalTransferenciaCierres);
-  document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+montoIngreso(b),0));
-  document.getElementById('rp-ting').textContent  = fmt(tI);
+  document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(incluirGratisTablero ? (b.monto_total||0) : montoIngreso(b)),0));
+  document.getElementById('rp-ting').textContent  = fmt(tIMostrado);
 
   document.getElementById('rp-nom').textContent   = fmt(egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
   document.getElementById('rp-prov').textContent  = fmt(egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
@@ -6891,6 +7228,39 @@ function renderAuditoria() {
   }
 }
 
+// ── Badge de notificación de Auditoría (numerito en la pestaña) ────────
+// Usa localStorage (no hay tabla nueva en Supabase para esto) para recordar
+// qué eventos (ajustes manuales + pedidos eliminados) ya se vieron — el
+// badge muestra cuántos son nuevos y desaparece al entrar a la pestaña.
+const AUDITORIA_VISTOS_KEY = 'elLobo_auditoria_vistos';
+
+function auditoriaEventosIds() {
+  const ajustesIds = ST.cierresDia
+    .filter(c => c.ajuste_manual)
+    .map(c => `ajuste:${c.fecha}:${c.turno}`);
+  const elimIds = ST.pedidosEliminados.map(e => `elim:${e.id}`);
+  return [...ajustesIds, ...elimIds];
+}
+
+function auditoriaVistosGuardados() {
+  try { return new Set(JSON.parse(localStorage.getItem(AUDITORIA_VISTOS_KEY) || '[]')); }
+  catch { return new Set(); }
+}
+
+function actualizarBadgeAuditoria() {
+  const badge = document.getElementById('audit-badge');
+  if (!badge) return;
+  const vistos = auditoriaVistosGuardados();
+  const nuevos = auditoriaEventosIds().filter(id => !vistos.has(id));
+  badge.textContent = nuevos.length;
+  badge.style.display = nuevos.length > 0 ? 'inline' : 'none';
+}
+
+function marcarAuditoriaVista() {
+  try { localStorage.setItem(AUDITORIA_VISTOS_KEY, JSON.stringify(auditoriaEventosIds())); } catch(e) {}
+  actualizarBadgeAuditoria();
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // BLOQUE 4 — Dashboard, tabs, renderAll y arranque
 // ══════════════════════════════════════════════════════════════════════
@@ -7091,6 +7461,7 @@ function showTab(id, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
   if (el) el.classList.add('active');
+  if (id === 'auditoria') marcarAuditoriaVista();
   renderAll();
 }
 
@@ -7107,7 +7478,9 @@ function renderAll() {
   aplicarGateAdmin('egresos', renderEgresos);
   aplicarGateAdmin('caja',    renderCaja);
   aplicarGateAdmin('auditoria', renderAuditoria);
+  aplicarGateAdmin('datos', null);
   renderPendientesNotasBadge();
+  actualizarBadgeAuditoria();
 }
 
 // ── ARRANQUE ──────────────────────────────────────────────────────────
