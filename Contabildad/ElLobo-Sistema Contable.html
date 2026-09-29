@@ -6549,8 +6549,14 @@ function renderTablero() {
     ).join('; ');
     al.push({t:'info', m:`🔓 Turnos sin cerrar: ${detalle}. Total: ${fmt(pendienteDeCierre)}. Ciérralos desde Cierre para que aparezcan aquí.`});
   }
-  const pendTotal = ST.pendientes.reduce((a,b)=>a+montoIngreso(b),0);
-  if (ST.pendientes.length > 0) al.push({t:'info', m:`⏳ ${ST.pendientes.length} pedido(s) pendiente(s) de cobro · ${fmt(pendTotal)} por recaudar`});
+  // Excluye fiados — ST.pendientes los mezcla con los normales, pero ya
+  // tienen su propia alerta más abajo ("en fiados por cobrar") con un
+  // cálculo que neta abonos; contarlos acá también los duplicaría con un
+  // número que no cuadra. Mismo filtro que usa el badge de la pestaña
+  // Pendientes (ST.pendientes.filter(p => !p.es_fiar)).
+  const pendientesNoFiados = ST.pendientes.filter(p => !p.es_fiar);
+  const pendTotal = pendientesNoFiados.reduce((a,b)=>a+montoIngreso(b),0);
+  if (pendientesNoFiados.length > 0) al.push({t:'info', m:`⏳ ${pendientesNoFiados.length} pedido(s) pendiente(s) de cobro · ${fmt(pendTotal)} por recaudar`});
 
   // Fiados por cobrar: mismo cálculo que el badge de renderFiados() —
   // saldo de clientes con deuda + huérfanos sin cliente asignado. NO se
