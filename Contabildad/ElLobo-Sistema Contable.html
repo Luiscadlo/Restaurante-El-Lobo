@@ -4275,6 +4275,26 @@ function gruposFiadoDeCliente(clienteId) {
   return grupos;
 }
 
+// Fiados "huérfanos": es_fiar=true pero SIN cliente_fiado_id — pasa con
+// fiados viejos, de antes de que el cliente fuera obligatorio al registrar.
+// Los datos siguen intactos en Supabase, solo faltaba dónde mostrarlos (no
+// caen en ningún cliente de calcularSaldoFiado()/gruposFiadoDeCliente(), que
+// filtran por clienteId) — por eso viven en su propia sección, siempre
+// visible, para que asignarles un cliente no dependa de acordarse de buscarlos.
+function gruposFiadoHuerfanos() {
+  const map = {};
+  ST.pendientes.filter(p => p.es_fiar === true && !p.cliente_fiado_id).forEach(p => {
+    const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
+    if (!map[grupoKey]) map[grupoKey] = { orders: [] };
+    map[grupoKey].orders.push(p);
+  });
+  const grupos = Object.values(map);
+  const clave = o => `${o.fecha||''} ${o.hora||''}`;
+  grupos.forEach(g => g.orders.sort((a,b) => clave(a).localeCompare(clave(b))));
+  grupos.sort((a,b) => clave(a.orders[0]).localeCompare(clave(b.orders[0])));
+  return grupos;
+}
+
 // Saldo pendiente de un cliente:
 //   saldo = (pedidos fiados pendientes) − (abonos sin aplicar todavía a
 //   ningún pedido completo). El "sobrante" de abonos existe porque un abono
@@ -4312,18 +4332,66 @@ function renderFiados() {
     .filter(x => x.saldo > 0.5)
     .sort((a,b) => b.saldo - a.saldo);
 
+  // Huérfanos: fiados sin cliente_fiado_id, invisibles en cualquier otro
+  // lado (ni Pendientes ni el listado por cliente de arriba los agarra).
+  // Se muestran SIEMPRE que existan, para no repetir el hueco de visibilidad
+  // que causó este arreglo.
+  const huerfanos = gruposFiadoHuerfanos();
+
   const badge = document.getElementById('fiados-badge');
   if (badge) {
-    badge.textContent = clientesConSaldo.length;
-    badge.style.display = clientesConSaldo.length > 0 ? 'inline' : 'none';
+    const total = clientesConSaldo.length + huerfanos.length;
+    badge.textContent = total;
+    badge.style.display = total > 0 ? 'inline' : 'none';
+    badge.style.background = huerfanos.length > 0 ? 'var(--red, #e05c5c)' : 'var(--orange)';
   }
 
+  const htmlHuerfanos = !huerfanos.length ? '' : `
+  <div class="alert warning" style="flex-direction:column;align-items:stretch;gap:10px;">
+    <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;">
+      ⚠ ${huerfanos.length} pedido(s) fiado(s) sin cliente asignado
+    </div>
+    <div style="font-size:11px;opacity:0.85;">
+      Son fiados viejos, de antes de que el cliente fuera obligatorio. Los datos siguen intactos —
+      asígnales un cliente para que entren a su saldo, o cancélalos si no valen la pena rescatar.
+    </div>
+    ${huerfanos.map(g => {
+      const total = g.orders.reduce((a,p) => a + (p.monto_total||0), 0);
+      const detalle = g.orders.map(p => `${LABELS[p.pedido]||p.pedido}${p.detalle ? ': ' + p.detalle : ''}`).join(' · ');
+      const idsGrupo = g.orders.map(o => o.id);
+      const primero = g.orders[0];
+      const key = primero.grupo_pedido || `id${primero.id}`;
+      const opciones = ST.clientesFiado.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+      return `
+      <div class="report-block" style="padding:12px;">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <div style="font-size:12px;color:var(--text);">${primero.fecha||'—'} ${primero.hora||''}</div>
+            <div style="font-size:11px;color:var(--text3);max-width:340px;">${detalle||'—'}</div>
+          </div>
+          <div class="amount-pos" style="font-family:'Syne',sans-serif;font-weight:700;">${fmt(total)}</div>
+        </div>
+        <div class="pending-pay-bar" style="padding:0;background:none;border:none;">
+          <select id="huerfano-cliente-${key}">
+            <option value="">— Elegir cliente —</option>
+            ${opciones}
+          </select>
+          <button class="btn btn-outline" onclick="asignarClienteAHuerfano([${idsGrupo.join(',')}],'${key}')">Asignar</button>
+          <input type="text" id="huerfano-nuevo-${key}" placeholder="+ Cliente nuevo…" style="max-width:160px;">
+          <button class="btn btn-outline" onclick="crearClienteYAsignarHuerfano([${idsGrupo.join(',')}],'${key}')">Crear y asignar</button>
+          <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancelar este pedido">✕ Cancelar</button>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+
   if (!clientesConSaldo.length) {
-    zone.innerHTML = `<div class="empty"><div class="empty-icon">📒</div><div class="empty-text">Sin fiados pendientes</div></div>`;
+    zone.innerHTML = htmlHuerfanos || `<div class="empty"><div class="empty-icon">📒</div><div class="empty-text">Sin fiados pendientes</div></div>`;
+    if (huerfanos.length) zone.innerHTML += `<div class="empty"><div class="empty-icon">📒</div><div class="empty-text">Sin fiados con cliente pendientes</div></div>`;
     return;
   }
 
-  zone.innerHTML = clientesConSaldo.map(({ cliente, saldo }) => {
+  zone.innerHTML = htmlHuerfanos + clientesConSaldo.map(({ cliente, saldo }) => {
     const grupos = gruposFiadoDeCliente(cliente.id);
     const abonos = ST.abonosFiado.filter(a => a.cliente_fiado_id === cliente.id)
       .sort((a,b) => b.fecha.localeCompare(a.fecha));
@@ -4387,6 +4455,53 @@ function renderFiados() {
       </div>
     </div>`;
   }).join('');
+}
+
+// Asigna retroactivamente un cliente a TODOS los ids de un grupo_pedido
+// huérfano de una sola vez (nunca queda un pedido con ítems de dos clientes
+// distintos). Tras el patch, el grupo entra directo a calcularSaldoFiado()/
+// gruposFiadoDeCliente() de ese cliente en el siguiente renderAll().
+async function asignarClienteAHuerfano(idsGrupo, key) {
+  const sel = document.getElementById(`huerfano-cliente-${key}`);
+  const clienteId = sel ? parseInt(sel.value, 10) : NaN;
+  if (!clienteId) { showToast('⚠ Elige un cliente de la lista', 'warning'); return; }
+  try {
+    await sbPatch('pedidos', `id=in.(${idsGrupo.join(',')})`, { cliente_fiado_id: clienteId });
+    idsGrupo.forEach(id => {
+      const p = ST.pendientes.find(x => x.id === id);
+      if (p) p.cliente_fiado_id = clienteId;
+    });
+    setSyncBadge('ok');
+    showToast('✅ Cliente asignado a ese fiado', 'ok');
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast(`⚠ Error al asignar el cliente: ${(e.message||'').slice(0,160)}`, 'warning');
+  }
+}
+
+// Igual que arriba, pero primero crea el cliente_fiado desde el mini
+// formulario "+ Cliente nuevo" y de una vez le asigna el pedido huérfano.
+async function crearClienteYAsignarHuerfano(idsGrupo, key) {
+  const input = document.getElementById(`huerfano-nuevo-${key}`);
+  const nombre = input ? input.value.trim() : '';
+  if (!nombre) { showToast('⚠ Escribe el nombre del cliente nuevo', 'warning'); return; }
+  try {
+    const [row] = await sbInsert('clientes_fiado', { nombre });
+    ST.clientesFiado.push(row);
+    ST.clientesFiado.sort((a,b) => a.nombre.localeCompare(b.nombre));
+    await sbPatch('pedidos', `id=in.(${idsGrupo.join(',')})`, { cliente_fiado_id: row.id });
+    idsGrupo.forEach(id => {
+      const p = ST.pendientes.find(x => x.id === id);
+      if (p) p.cliente_fiado_id = row.id;
+    });
+    setSyncBadge('ok');
+    showToast(`✅ Cliente "${row.nombre}" creado y asignado`, 'ok');
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast(`⚠ Error al crear el cliente: ${(e.message||'').slice(0,160)}`, 'warning');
+  }
 }
 
 // Registra un abono y lo reparte automáticamente contra los pedidos fiados
