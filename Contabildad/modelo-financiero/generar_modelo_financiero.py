@@ -157,6 +157,8 @@ def cargar_datos_reales(path_excel):
     gastos_cierre = hoja("Gastos_Cierre")
     inventario = hoja("Inventario")
     movs_caja = hoja("Movimientos_Caja")
+    pendientes = hoja("Pedidos_Pendientes")
+    abonos = hoja("Abonos_Fiado")
 
     for df in (cierres, pedidos, egresos, gastos_cierre, movs_caja):
         if not df.empty and "fecha" in df.columns:
@@ -209,16 +211,68 @@ def cargar_datos_reales(path_excel):
 
     hist = pd.DataFrame(filas).sort_values("periodo").reset_index(drop=True)
 
-    caja_acumulada = float(movs_caja["monto"].sum()) if not movs_caja.empty and "monto" in movs_caja.columns else None
-    # Nota: "caja_acumulada" suma movimientos_caja.monto tal cual — es una
-    # cifra de referencia rápida, no un saldo formal (los traspasos entre
-    # cuentas pueden inflar/desinflar esta suma; no se usa en el Estado de
-    # Resultados, solo como dato adicional del Balance General).
+    # "monto" en movimientos_caja SIEMPRE se guarda positivo (ver
+    # agregarMovimientoCaja() en el HTML) — el signo lo da "tipo": 'aporte'
+    # suma, 'gasto' resta, 'traspaso' es neto $0 (solo mueve plata entre las
+    # 3 cuentas, no entra ni sale del negocio). Sumar "monto" tal cual, sin
+    # mirar "tipo", inflaba caja_acumulada cada vez que había un gasto o un
+    # traspaso registrado como movimiento de Caja.
+    if not movs_caja.empty and {"monto", "tipo"}.issubset(movs_caja.columns):
+        signo = movs_caja["tipo"].map({"aporte": 1, "gasto": -1, "traspaso": 0}).fillna(0)
+        caja_acumulada = float((movs_caja["monto"] * signo).sum())
+    else:
+        caja_acumulada = None
     valor_inventario = None
     if not inventario.empty and {"stock", "costo"}.issubset(inventario.columns):
         valor_inventario = float((inventario["stock"] * inventario["costo"]).sum())
 
-    return hist, {"caja_acumulada": caja_acumulada, "valor_inventario": valor_inventario}
+    cuentas_por_cobrar_fiados = calcular_cuentas_por_cobrar_fiados(pendientes, abonos, pedidos)
+
+    return hist, {
+        "caja_acumulada": caja_acumulada,
+        "valor_inventario": valor_inventario,
+        "cuentas_por_cobrar_fiados": cuentas_por_cobrar_fiados,
+    }
+
+
+def calcular_cuentas_por_cobrar_fiados(pendientes, abonos, pagados):
+    """saldo_cliente = pendiente_cliente - max(0, abonos_cliente -
+    pagado_via_abono_cliente). Total = suma de saldo_cliente > 0 entre
+    todos los clientes, más los fiados pendientes sin cliente_fiado_id
+    asignado (huérfanos — siguen siendo plata por cobrar aunque
+    todavía no tengan a quién cobrarle).
+
+    Misma fórmula que calcularSaldoFiado() y gruposFiadoHuerfanos() en el
+    sistema JS (ElLobo-Sistema Contable.html), para que este número cuadre
+    con lo que muestra la pestaña Fiados y el aviso del Tablero."""
+    if pendientes.empty or "es_fiar" not in pendientes.columns:
+        return 0.0
+    fiados_pend = pendientes[pendientes["es_fiar"] == True]
+    if fiados_pend.empty:
+        return 0.0
+    con_cliente = fiados_pend[fiados_pend["cliente_fiado_id"].notna()]
+    huerfanos = fiados_pend[fiados_pend["cliente_fiado_id"].isna()]
+    total_huerfanos = float(huerfanos["monto_total"].sum())
+    if con_cliente.empty:
+        return total_huerfanos
+    pendiente_por_cliente = con_cliente.groupby("cliente_fiado_id")["monto_total"].sum()
+    abonos_por_cliente = (
+        abonos.groupby("cliente_fiado_id")["monto"].sum()
+        if not abonos.empty and "cliente_fiado_id" in abonos.columns
+        else pd.Series(dtype=float)
+    )
+    if not pagados.empty and "pagado_via_abono" in pagados.columns and "cliente_fiado_id" in pagados.columns:
+        pagado_via_abono_por_cliente = (
+            pagados[pagados["pagado_via_abono"] == True]
+            .groupby("cliente_fiado_id")["monto_total"].sum()
+        )
+    else:
+        pagado_via_abono_por_cliente = pd.Series(dtype=float)
+    saldo = pendiente_por_cliente.subtract(
+        abonos_por_cliente.subtract(pagado_via_abono_por_cliente, fill_value=0).clip(lower=0),
+        fill_value=0
+    )
+    return float(saldo[saldo > 0.5].sum()) + total_huerfanos
 
 
 def datos_de_ejemplo(n_meses=12):
@@ -249,7 +303,11 @@ def datos_de_ejemplo(n_meses=12):
             otros_gastos=round(random.uniform(150_000, 400_000), -3),
         ))
     hist = pd.DataFrame(filas)
-    extra = {"caja_acumulada": 8_400_000, "valor_inventario": 1_650_000}
+    extra = {
+        "caja_acumulada": 8_400_000,
+        "valor_inventario": 1_650_000,
+        "cuentas_por_cobrar_fiados": 950_000,
+    }
     return hist, extra
 
 
@@ -587,8 +645,22 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
     r += 1
     fila_cxc = r
     label(ws, r, "Cuentas por Cobrar (fiados pendientes)")
-    for c in range(col_ini, col_fin + 1):
-        numero(ws, r, c, "[PENDIENTE — enlazar con saldo de fiados]", pendiente=True)
+    # Este saldo es un SNAPSHOT de HOY (calculado desde Pedidos_Pendientes +
+    # Abonos_Fiado en el momento de exportar) — a diferencia de Caja o
+    # Inventario, no hay forma de reconstruir "cuánto se debía en marzo",
+    # así que solo va en la última columna histórica (el mes más reciente)
+    # y se sostiene plano en la proyección; los meses históricos previos
+    # quedan [PENDIENTE] con una nota que explica por qué.
+    cxc = extra.get("cuentas_por_cobrar_fiados")
+    if cxc is not None and n_hist:
+        for i in range(n_hist - 1):
+            numero(ws, r, col_ini + i, "[PENDIENTE — sin historial, solo hay snapshot de hoy]", pendiente=True)
+        numero(ws, r, col_ini + n_hist - 1, cxc)
+        for c in cols_fcst:
+            numero(ws, r, c, cxc)
+    else:
+        for c in range(col_ini, col_fin + 1):
+            numero(ws, r, c, "[PENDIENTE — enlazar con saldo de fiados]", pendiente=True)
     r += 1
     fila_inv = r
     label(ws, r, "Inventario")
@@ -644,7 +716,7 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
         cl = get_column_letter(c)
         cc = numero(ws, r, c, f"=ROUND({cl}{fila_total_activos}-{cl}{fila_total_pasivos}-{cl}{fila_total_patrimonio},0)")
         cc.font = Font(italic=True, size=9, color=GRIS_NOTA)
-    nota(ws, r + 1, "No da 0 todavía a propósito: Cuentas por Cobrar y Aportes de Capital están marcados [PENDIENTE] — al completarlos, cuadra.")
+    nota(ws, r + 1, "No da 0 todavía a propósito: Aportes de Capital está [PENDIENTE] en todos los meses, y Cuentas por Cobrar lo está solo en los meses históricos previos al más reciente (no hay forma de reconstruir su saldo de meses pasados) — al completarlos, cuadra.")
     r += 3
 
     # ══ FLUJO DE CAJA (estructura) ═══════════════════════════════════
