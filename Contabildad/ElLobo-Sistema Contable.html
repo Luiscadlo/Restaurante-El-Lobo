@@ -1976,6 +1976,39 @@ async function sbGet(tabla, qs = '') {
   return r.json();
 }
 
+// Trae una tabla COMPLETA en lotes — la API REST de Supabase/PostgREST no
+// devuelve más filas que su tope por llamada (por defecto, o el que esté
+// puesto en Settings → API → "Max Rows"), así que sbGet() sola se queda
+// corta en cuanto una tabla supera ese tope — algo que ya pasa en
+// producción con meses de operación (pedidos, cierres_dia, egresos), y que
+// hace que filas viejas (incluidos fiados pendientes de hace tiempo) dejen
+// de cargarse sin ningún aviso. Pide count=exact para leer el total real en
+// el header Content-Range y seguir pidiendo lotes hasta traerlos todos, sin
+// asumir de antemano cuál es el tope del servidor (por si es menor a 1000).
+// Preserva el "order=" (u otros filtros) que traiga qs.
+async function sbGetAll(tabla, qs = '') {
+  const LOTE = 1000;
+  let offset = 0;
+  let acumulado = [];
+  for (;;) {
+    const qsLote = (qs ? qs + '&' : '') + `limit=${LOTE}&offset=${offset}`;
+    const r = await fetch(`${SB_URL}/rest/v1/${tabla}?${qsLote}`, {
+      headers: sbH({ 'Prefer': 'count=exact' })
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const lote = await r.json();
+    acumulado = acumulado.concat(lote);
+    if (!lote.length) break;
+    offset += lote.length;
+    // "Content-Range: 0-999/12345" — el total real (después de la barra)
+    // manda por encima de cuántas filas trajo ESTE lote, que puede venir
+    // topada por un "Max Rows" más bajo que el limit= que pedimos.
+    const total = parseInt((r.headers.get('content-range') || '').split('/')[1], 10);
+    if (Number.isFinite(total) ? offset >= total : lote.length < LOTE) break;
+  }
+  return acumulado;
+}
+
 async function sbInsert(tabla, data) {
   const r = await fetch(`${SB_URL}/rest/v1/${tabla}`, {
     method: 'POST',
@@ -2088,19 +2121,19 @@ async function loadState() {
   setSyncBadge('syncing');
   try {
     const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado] = await Promise.all([
-      sbGet('pedidos',     'order=created_at.desc'),
-      sbGet('egresos',     'order=created_at.desc'),
-      sbGet('inventario',  'order=nombre.asc'),
-      sbGet('consumos',    'order=fecha.desc'),
-      sbGet('gastos_dia',  'order=fecha.desc'),
-      sbGet('mesas',       'order=numero.asc'),
-      sbGet('cierres_dia', 'order=fecha.desc').catch(() => []),
-      sbGet('aperturas_turno', 'order=created_at.desc').catch(() => []),
-      sbGet('notas_dia',   'order=created_at.desc').catch(() => []),
-      sbGet('movimientos_caja', 'order=created_at.desc').catch(() => []),
-      sbGet('ingresos_extra', 'order=fecha.desc').catch(() => []),
-      sbGet('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
-      sbGet('clientes_fiado', 'order=nombre.asc').catch(() => [])
+      sbGetAll('pedidos',     'order=created_at.desc'),
+      sbGetAll('egresos',     'order=created_at.desc'),
+      sbGetAll('inventario',  'order=nombre.asc'),
+      sbGetAll('consumos',    'order=fecha.desc'),
+      sbGetAll('gastos_dia',  'order=fecha.desc'),
+      sbGetAll('mesas',       'order=numero.asc'),
+      sbGetAll('cierres_dia', 'order=fecha.desc').catch(() => []),
+      sbGetAll('aperturas_turno', 'order=created_at.desc').catch(() => []),
+      sbGetAll('notas_dia',   'order=created_at.desc').catch(() => []),
+      sbGetAll('movimientos_caja', 'order=created_at.desc').catch(() => []),
+      sbGetAll('ingresos_extra', 'order=fecha.desc').catch(() => []),
+      sbGetAll('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
+      sbGetAll('clientes_fiado', 'order=nombre.asc').catch(() => [])
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
