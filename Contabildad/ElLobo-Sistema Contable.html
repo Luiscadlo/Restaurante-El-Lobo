@@ -1984,10 +1984,13 @@ async function sbGet(tabla, qs = '') {
 // hace que filas viejas (incluidos fiados pendientes de hace tiempo) dejen
 // de cargarse sin ningún aviso. Pide count=exact para leer el total real en
 // el header Content-Range y seguir pidiendo lotes hasta traerlos todos, sin
-// asumir de antemano cuál es el tope del servidor (por si es menor a 1000).
-// Preserva el "order=" (u otros filtros) que traiga qs.
+// asumir de antemano cuál es el tope del servidor (por si es menor a LOTE).
+// Preserva el "order=" (u otros filtros) que traiga qs. LOTE coincide con
+// "Max Rows" en Settings → API de Supabase (subido a 5000) — si vuelve a
+// cambiar allá, actualízalo aquí también para aprovecharlo (si no, igual
+// funciona bien, solo hace más viajes de los necesarios).
 async function sbGetAll(tabla, qs = '') {
-  const LOTE = 1000;
+  const LOTE = 5000;
   let offset = 0;
   let acumulado = [];
   for (;;) {
