@@ -6551,6 +6551,25 @@ function renderTablero() {
   }
   const pendTotal = ST.pendientes.reduce((a,b)=>a+montoIngreso(b),0);
   if (ST.pendientes.length > 0) al.push({t:'info', m:`⏳ ${ST.pendientes.length} pedido(s) pendiente(s) de cobro · ${fmt(pendTotal)} por recaudar`});
+
+  // Fiados por cobrar: mismo cálculo que el badge de renderFiados() —
+  // saldo de clientes con deuda + huérfanos sin cliente asignado. NO se
+  // filtra por el rango de fecha del Tablero (Hoy/Semana/Mes/Todo) porque
+  // es un saldo acumulado, no un ingreso de ese período — igual que el
+  // aviso de stock bajo tampoco se filtra por fecha.
+  const totalFiadoClientes = ST.clientesFiado
+    .map(c => calcularSaldoFiado(c.id).saldo)
+    .reduce((a,b) => a + Math.max(b, 0), 0);
+  const totalFiadoHuerfanos = gruposFiadoHuerfanos()
+    .reduce((a,g) => a + g.orders.reduce((x,p) => x + (p.monto_total||0), 0), 0);
+  const totalFiados = totalFiadoClientes + totalFiadoHuerfanos;
+  if (totalFiados > 0) {
+    const notaHuerfanos = totalFiadoHuerfanos > 0
+      ? ` (incluye ${fmt(totalFiadoHuerfanos)} sin cliente asignado)`
+      : '';
+    al.push({t:'info', m:`💰 ${fmt(totalFiados)} en fiados por cobrar${notaHuerfanos}`});
+  }
+
   if (tE > tI && tI > 0) al.push({t:'warning', m:`⚠ Gastos mayores a ingresos en este período. Egresos: ${fmt(tE)}`});
   if (mg < 20 && tI > 0) al.push({t:'info',    m:`💡 Margen del ${mg}%. Un restaurante saludable apunta a 25%+`});
   const bs = ST.inventario.filter(p=>p.stock<=p.minimo).length;
