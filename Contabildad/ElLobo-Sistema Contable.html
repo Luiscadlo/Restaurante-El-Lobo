@@ -1514,11 +1514,11 @@
     </div>
     <div class="panel" style="margin-top:20px;">
       <div class="panel-header">
-        <div class="panel-title">🗑 Pedidos pagados eliminados</div>
+        <div class="panel-title">🗑 Pedidos eliminados / cancelados</div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Eliminado el</th><th>Pedido original</th><th>Ubicación</th><th>Detalle</th><th>Monto</th></tr></thead>
+          <thead><tr><th>Eliminado el</th><th>Motivo</th><th>Pedido original</th><th>Ubicación</th><th>Detalle</th><th>Monto</th></tr></thead>
           <tbody id="auditoria-eliminados-body"></tbody>
         </table>
       </div>
@@ -3578,7 +3578,7 @@ async function eliminarGrupoIngreso(ids) {
         const [row] = await sbInsert('pedidos_eliminados', {
           pedido_id: p.id, fecha: p.fecha, hora: p.hora || '', turno: p.turno,
           pedido: p.pedido, detalle: p.detalle || '', ubicacion, metodo: p.metodo,
-          monto_total: p.monto_total || 0
+          monto_total: p.monto_total || 0, motivo: 'eliminado'
         });
         if (row) ST.pedidosEliminados.unshift(row);
       }
@@ -3876,6 +3876,25 @@ async function cancelarPendiente(pedidoId) {
   if (!confirm('¿Cancelar este pedido pendiente?')) return;
   try {
     const ped = ST.pendientes.find(p => p.id === pedidoId);
+
+    // Rastro en Auditoría — distinto de eliminarGrupoIngreso(): este pedido
+    // nunca llegó a pagarse, así que queda con motivo:'cancelado'. Si falla
+    // (ej. falta la columna motivo todavía), no bloquea la cancelación.
+    if (ped) {
+      try {
+        const ubicacion = ped.es_gratis ? 'Gratis' : ped.es_fiar ? 'Fiado' : ped.es_sin_mesa ? 'Sin mesa' : ped.es_domicilio ? 'Domicilio' : ped.mesa ? `Mesa ${ped.mesa}` : '—';
+        const [row] = await sbInsert('pedidos_eliminados', {
+          pedido_id: ped.id, fecha: ped.fecha, hora: ped.hora || '', turno: ped.turno,
+          pedido: ped.pedido, detalle: ped.detalle || '', ubicacion, metodo: ped.metodo,
+          monto_total: ped.monto_total || 0, motivo: 'cancelado'
+        });
+        if (row) ST.pedidosEliminados.unshift(row);
+      } catch (e) {
+        console.error(e);
+        showToast('⚠ Se canceló, pero no quedó registrado en Auditoría (falta la columna motivo en pedidos_eliminados)', 'warning');
+      }
+    }
+
     await sbDelete('pedidos', `id=eq.${pedidoId}`);
     ST.pendientes = ST.pendientes.filter(p => p.id !== pedidoId);
 
@@ -3898,6 +3917,24 @@ async function cancelarPendiente(pedidoId) {
 async function cancelarGrupoPendiente(ids, mesaNum) {
   if (!confirm(`¿Cancelar este pedido completo (${ids.length} ítem${ids.length > 1 ? 's' : ''})?`)) return;
   try {
+    // Mismo rastro en Auditoría que cancelarPendiente(), pero para TODOS los
+    // ids del grupo (nunca queda un pedido a medio registrar en Auditoría).
+    const objetos = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
+    try {
+      for (const p of objetos) {
+        const ubicacion = p.es_gratis ? 'Gratis' : p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
+        const [row] = await sbInsert('pedidos_eliminados', {
+          pedido_id: p.id, fecha: p.fecha, hora: p.hora || '', turno: p.turno,
+          pedido: p.pedido, detalle: p.detalle || '', ubicacion, metodo: p.metodo,
+          monto_total: p.monto_total || 0, motivo: 'cancelado'
+        });
+        if (row) ST.pedidosEliminados.unshift(row);
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('⚠ Se canceló, pero no quedó registrado en Auditoría (falta la columna motivo en pedidos_eliminados)', 'warning');
+    }
+
     await sbDelete('pedidos', `id=in.(${ids.join(',')})`);
     ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
 
@@ -7780,12 +7817,13 @@ function renderAuditoria() {
     elimBody.innerHTML = eliminados.length
       ? eliminados.map(e => `<tr>
           <td>${new Date(e.created_at).toLocaleString('es-CO')}</td>
+          <td><span class="badge ${e.motivo==='cancelado'?'badge-gray':'badge-red'}">${e.motivo==='cancelado'?'Cancelado':'Eliminado'}</span></td>
           <td>${e.fecha}${e.hora ? ' · ' + e.hora : ''}</td>
           <td><span class="badge badge-gray">${e.ubicacion || '—'}</span></td>
           <td style="color:var(--text2);">${LABELS[e.pedido]||e.pedido}${e.detalle ? ' — ' + e.detalle : ''}</td>
           <td class="amount-neg">${fmt(e.monto_total||0)}</td>
         </tr>`).join('')
-      : `<tr><td colspan="5"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">Sin pedidos eliminados registrados</div></div></td></tr>`;
+      : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">Sin pedidos eliminados registrados</div></div></td></tr>`;
   }
 }
 
