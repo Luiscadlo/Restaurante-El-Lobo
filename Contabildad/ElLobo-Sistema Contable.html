@@ -410,6 +410,7 @@
   <!-- Operativas — acceso libre, para el día a día en el mostrador -->
   <div class="tab active" onclick="showTab('ingresos',this)">Pedidos</div>
   <div class="tab" onclick="showTab('pendientes',this)" id="tab-nav-pendientes">Pendientes <span id="pend-badge" style="display:none;background:var(--orange);color:#0f0e0c;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
+  <div class="tab" onclick="showTab('fiados',this)" id="tab-nav-fiados">Fiados <span id="fiados-badge" style="display:none;background:var(--orange);color:#0f0e0c;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
   <div class="tab" onclick="showTab('diaadia',this)">Cierre</div>
   <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
   <div class="tab" onclick="showTab('menu',this)">Menú</div>
@@ -866,11 +867,21 @@
   <!-- Sin mesa pendientes -->
   <div id="pendientes-sinmesa-zone"></div>
 
-  <!-- Fiados pendientes -->
-  <div id="pendientes-fiados-zone"></div>
-
   <!-- Gratis pendientes -->
   <div id="pendientes-gratis-zone"></div>
+</section>
+
+<!-- ===== FIADOS (agrupados por cliente, con abonos contra el saldo total) ===== -->
+<section class="section" id="tab-fiados">
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">📒 Clientes con saldo pendiente</div>
+      <div style="font-size:11px;color:var(--text3);">Los abonos se aplican solos al pedido más viejo primero</div>
+    </div>
+    <div class="panel-body">
+      <div id="fiados-clientes-zone"></div>
+    </div>
+  </div>
 </section>
 
 <!-- ===== EGRESOS (acceso con contraseña) ===== -->
@@ -2081,7 +2092,8 @@ let ST = {
   movimientosCaja: [], // gastos generales y aportes de capital (sección Caja)
   ingresosExtra: [], // ingresos adicionales personalizados (sección Ingresos)
   pedidosEliminados: [], // auditoría de pedidos pagados eliminados
-  clientesFiado: [] // clientes registrados para asociar a pedidos fiados
+  clientesFiado: [], // clientes registrados para asociar a pedidos fiados
+  abonosFiado: [] // abonos parciales contra el saldo total de un cliente fiado
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -2123,7 +2135,7 @@ function showToast(msg, tipo = 'info', accion = null) {
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado] = await Promise.all([
+    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado, abonosFiado] = await Promise.all([
       sbGetAll('pedidos',     'order=created_at.desc'),
       sbGetAll('egresos',     'order=created_at.desc'),
       sbGetAll('inventario',  'order=nombre.asc'),
@@ -2136,7 +2148,8 @@ async function loadState() {
       sbGetAll('movimientos_caja', 'order=created_at.desc').catch(() => []),
       sbGetAll('ingresos_extra', 'order=fecha.desc').catch(() => []),
       sbGetAll('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
-      sbGetAll('clientes_fiado', 'order=nombre.asc').catch(() => [])
+      sbGetAll('clientes_fiado', 'order=nombre.asc').catch(() => []),
+      sbGetAll('abonos_fiado', 'order=fecha.desc').catch(() => [])
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
@@ -2153,6 +2166,7 @@ async function loadState() {
     ST.ingresosExtra   = ingresosExtra;
     ST.pedidosEliminados = pedidosEliminados;
     ST.clientesFiado   = clientesFiado;
+    ST.abonosFiado     = abonosFiado;
 
     setSyncBadge('ok');
   } catch (e) {
@@ -2346,6 +2360,7 @@ function exportarExcelCompleto() {
   addSheet('Notas_Dia', ST.notasDia);
   addSheet('Pedidos_Eliminados', ST.pedidosEliminados);
   if (ST.clientesFiado?.length) addSheet('Clientes_Fiado', ST.clientesFiado);
+  if (ST.abonosFiado?.length)   addSheet('Abonos_Fiado', ST.abonosFiado);
   XLSX.writeFile(wb, `ElLobo_datos_${today()}.xlsx`);
   showToast('✅ Excel exportado', 'ok');
 }
@@ -3901,8 +3916,9 @@ async function cancelarGrupoPendiente(ids, mesaNum) {
 
 // ── Render PENDIENTES ──────────────────────────────────────────────────
 function renderPendientes() {
-  // Badge en nav
-  const cnt = ST.pendientes.length;
+  // Badge en nav — los fiados NO cuentan aquí, viven aparte en su propia
+  // pestaña "Fiados" (con su propio badge, ver renderFiados()).
+  const cnt = ST.pendientes.filter(p => !p.es_fiar).length;
   const badge = document.getElementById('pend-badge');
   if (badge) { badge.textContent = cnt; badge.style.display = cnt > 0 ? 'inline' : 'none'; }
 
@@ -3912,24 +3928,22 @@ function renderPendientes() {
   // Agrupar — dentro de una misma mesa puede haber más de un pedido distinto
   // (mesa compartida por dos grupos de personas): se agrupa por mesa + grupo_pedido,
   // no solo por mesa. Los pedidos viejos sin grupo_pedido (antes de este cambio)
-  // se agrupan juntos por mesa como venían funcionando. Los fiados, "sin mesa"
-  // y "gratis" se agrupan igual que los domicilios — un mismo pedido puede
-  // traer varios platos y deben pagarse/confirmarse todos juntos, nunca
-  // separados (si no, el total del pedido se ve partido en el historial).
+  // se agrupan juntos por mesa como venían funcionando. "Sin mesa" y "gratis"
+  // se agrupan igual que los domicilios — un mismo pedido puede traer varios
+  // platos y deben pagarse/confirmarse todos juntos, nunca separados (si no,
+  // el total del pedido se ve partido en el historial). Los fiados NO se
+  // agrupan aquí — viven aparte, en la pestaña "Fiados" (ver renderFiados()).
   const mesaGruposMap = {}; // "mesa::grupo" -> { mesa, orders: [] }
   const domicilioGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — un domicilio puede traer varios almuerzos
-  const fiadoGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — un fiado puede traer varios platos
   const sinMesaGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — sin mesa puede traer varios platos
   const gratisGruposMap = {}; // grupo (o "legacy-id") -> { orders: [] } — gratis puede traer varios platos
   ST.pendientes.forEach(p => {
-    if (p.es_gratis === true) {
+    if (p.es_fiar === true) {
+      return; // vive en la pestaña Fiados, no aquí
+    } else if (p.es_gratis === true) {
       const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
       if (!gratisGruposMap[grupoKey]) gratisGruposMap[grupoKey] = { orders: [] };
       gratisGruposMap[grupoKey].orders.push(p);
-    } else if (p.es_fiar === true) {
-      const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
-      if (!fiadoGruposMap[grupoKey]) fiadoGruposMap[grupoKey] = { orders: [] };
-      fiadoGruposMap[grupoKey].orders.push(p);
     } else if (p.es_sin_mesa === true) {
       const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
       if (!sinMesaGruposMap[grupoKey]) sinMesaGruposMap[grupoKey] = { orders: [] };
@@ -3949,14 +3963,12 @@ function renderPendientes() {
 
   const mesasZone   = document.getElementById('pendientes-mesas-zone');
   const domZone     = document.getElementById('pendientes-domicilios-zone');
-  const fiadosZone  = document.getElementById('pendientes-fiados-zone');
   const sinMesaZone = document.getElementById('pendientes-sinmesa-zone');
   const gratisZone  = document.getElementById('pendientes-gratis-zone');
 
-  if (!Object.keys(mesaGruposMap).length && !Object.keys(domicilioGruposMap).length && !Object.keys(fiadoGruposMap).length && !Object.keys(sinMesaGruposMap).length && !Object.keys(gratisGruposMap).length) {
+  if (!Object.keys(mesaGruposMap).length && !Object.keys(domicilioGruposMap).length && !Object.keys(sinMesaGruposMap).length && !Object.keys(gratisGruposMap).length) {
     mesasZone.innerHTML = `<div class="empty"><div class="empty-icon">🍽</div><div class="empty-text">No hay pedidos pendientes</div></div>`;
     domZone.innerHTML   = '';
-    if (fiadosZone)  fiadosZone.innerHTML  = '';
     if (sinMesaZone) sinMesaZone.innerHTML = '';
     if (gratisZone)  gratisZone.innerHTML  = '';
     return;
@@ -4174,77 +4186,6 @@ function renderPendientes() {
     }
   }
 
-  // Fiados — agrupados por grupo_pedido, igual que domicilios: un fiado puede
-  // traer varios platos y se pagan/editan/cancelan todos juntos, con las
-  // mismas capacidades que un pedido pendiente normal.
-  const gruposFiadoOrdenados = Object.values(fiadoGruposMap);
-  gruposFiadoOrdenados.forEach(g => g.orders.sort((a,b) => (a.hora||'').localeCompare(b.hora||'')));
-  gruposFiadoOrdenados.sort((a, b) => (a.orders[0].hora||'').localeCompare(b.orders[0].hora||''));
-
-  if (fiadosZone) {
-    if (gruposFiadoOrdenados.length) {
-      fiadosZone.innerHTML = `
-        <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--purple);">📒 Fiados pendientes</span></div>
-        ${gruposFiadoOrdenados.map(grupo => {
-          const orders = grupo.orders;
-          const key = `fiar-${orders[0].grupo_pedido || orders[0].id}`;
-          const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
-          const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
-          const divididoPre = prellenadoDividido(orders);
-          const idsGrupo = orders.map(o => o.id);
-          const primero = orders[0];
-          const clienteNombre = primero.cliente_fiado_id
-            ? (ST.clientesFiado.find(c => c.id === primero.cliente_fiado_id)?.nombre || 'Cliente')
-            : 'Sin nombre registrado';
-          return `
-        <div class="pending-group">
-          <div class="pending-group-hdr">
-            <div>
-              <div class="pending-group-title" style="color:var(--purple);">📒 ${clienteNombre} — ${primero.fecha||'—'} ${primero.hora||''}</div>
-              <div class="pending-group-sub">${orders.length} pedido(s)</div>
-            </div>
-            <div class="pending-group-total">${fmt(total)}</div>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Hora</th><th>Tipo</th><th>Detalle</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
-              <tbody>${orders.map(p => `
-                <tr>
-                  <td>${p.hora||'—'}</td>
-                  <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
-                  <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.detalle||'—'}</td>
-                  <td>${p.cantidad||1}</td>
-                  <td class="amount-pos">${fmt(p.monto_total||0)}</td>
-                  <td style="display:flex;gap:4px;white-space:nowrap;">
-                    <button class="btn btn-edit" onclick="abrirModalEditarPedido(${p.id})" title="Cambiar tipo/valor o agregar nota">✏️</button>
-                    <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetallePedido(${p.id})" title="Ver detalle completo">👁</button>
-                    <button class="btn btn-danger" onclick="cancelarPendiente(${p.id})">✕</button>
-                  </td>
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="pending-pay-bar">
-            <select id="metodo-${key}" onchange="onMetodoPendienteChange('${key}')" style="${divididoPre?'display:none;':''}">
-              <option value="efectivo"${metodoInicial==='efectivo'?' selected':''}>Efectivo</option>
-              <option value="transferencia"${metodoInicial==='transferencia'?' selected':''}>Transferencia</option>
-            </select>
-            <input type="text" inputmode="numeric" id="pago-con-${key}" class="vuelto-inline" placeholder="Pagó con $"
-              style="${divididoPre ? 'display:none;' : (metodoInicial==='efectivo'?'':'display:none;')}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
-            ${htmlPagoDividido(key, total, divididoPre)}
-            <button class="btn btn-primary" onclick="marcarGrupoFiadoPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
-            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
-            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
-            <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Pasa este fiado a una mesa o sin mesa">🔄 Ubicar en mesa</button>
-            <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancela TODO este fiado">✕ Cancelar</button>
-            <span id="vuelto-${key}" class="vuelto-box"></span>
-          </div>
-        </div>`; }).join('')}`;
-    } else {
-      fiadosZone.innerHTML = '';
-    }
-  }
-
   // Gratis — agrupados por grupo_pedido igual que los demás. No tiene barra
   // de pago (no hay método ni pago dividido: no genera ingreso), solo un
   // botón para confirmar que ya se entregó.
@@ -4301,6 +4242,248 @@ function renderPendientes() {
     } else {
       gratisZone.innerHTML = '';
     }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FIADOS — agrupados por cliente, con abonos parciales contra su saldo
+// TOTAL (no contra un pedido puntual). Antes vivían mezclados dentro de
+// Pendientes; ahora tienen su propia pestaña. Ver migracion_supabase_
+// abonos_fiado.sql (tabla abonos_fiado + pedidos.pagado_via_abono).
+// ══════════════════════════════════════════════════════════════════════
+
+// Qué tarjetas de cliente están expandidas ahora mismo (se conserva entre
+// renders para que no se cierren solas cada vez que renderAll() refresca).
+let fiadosExpandido = new Set();
+
+// Agrupa los pedidos fiados PENDIENTES de un cliente por grupo_pedido (un
+// mismo pedido/visita puede traer varios platos) — igual criterio que ya
+// usaba fiadoGruposMap en Pendientes, ordenados del más viejo al más nuevo
+// (fecha+hora), porque tanto el detalle como registrarAbonoFiado() necesitan
+// pagar/mostrar los pedidos en ese orden.
+function gruposFiadoDeCliente(clienteId) {
+  const map = {};
+  ST.pendientes.filter(p => p.es_fiar === true && p.cliente_fiado_id === clienteId).forEach(p => {
+    const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
+    if (!map[grupoKey]) map[grupoKey] = { orders: [] };
+    map[grupoKey].orders.push(p);
+  });
+  const grupos = Object.values(map);
+  const clave = o => `${o.fecha||''} ${o.hora||''}`;
+  grupos.forEach(g => g.orders.sort((a,b) => clave(a).localeCompare(clave(b))));
+  grupos.sort((a,b) => clave(a.orders[0]).localeCompare(clave(b.orders[0])));
+  return grupos;
+}
+
+// Saldo pendiente de un cliente:
+//   saldo = (pedidos fiados pendientes) − (abonos sin aplicar todavía a
+//   ningún pedido completo). El "sobrante" de abonos existe porque un abono
+//   puede no alcanzar a cubrir el siguiente pedido completo (nunca se parte
+//   uno a la mitad) — ese sobrante se resta directo del saldo en vez de
+//   perderse, y es justo lo que registrarAbonoFiado() reparte después.
+function calcularSaldoFiado(clienteId) {
+  const totalPendiente = ST.pendientes
+    .filter(p => p.es_fiar === true && p.cliente_fiado_id === clienteId)
+    .reduce((a,p) => a + (p.monto_total||0), 0);
+  const totalAbonos = ST.abonosFiado
+    .filter(a => a.cliente_fiado_id === clienteId)
+    .reduce((a,b) => a + (b.monto||0), 0);
+  const totalPagadoViaAbono = ST.ingresos
+    .filter(p => p.cliente_fiado_id === clienteId && p.pagado_via_abono === true)
+    .reduce((a,p) => a + (p.monto_total||0), 0);
+  const sobrante = totalAbonos - totalPagadoViaAbono;
+  return { totalPendiente, totalAbonos, totalPagadoViaAbono, sobrante, saldo: totalPendiente - sobrante };
+}
+
+function toggleFiadoCliente(clienteId) {
+  if (fiadosExpandido.has(clienteId)) fiadosExpandido.delete(clienteId);
+  else fiadosExpandido.add(clienteId);
+  renderFiados();
+}
+
+function renderFiados() {
+  const zone = document.getElementById('fiados-clientes-zone');
+  if (!zone) return;
+
+  // Solo clientes con saldo > 0 estorban la vista — los que ya quedaron en
+  // $0 no se muestran (ni colapsados: simplemente no tienen nada pendiente).
+  const clientesConSaldo = ST.clientesFiado
+    .map(c => ({ cliente: c, ...calcularSaldoFiado(c.id) }))
+    .filter(x => x.saldo > 0.5)
+    .sort((a,b) => b.saldo - a.saldo);
+
+  const badge = document.getElementById('fiados-badge');
+  if (badge) {
+    badge.textContent = clientesConSaldo.length;
+    badge.style.display = clientesConSaldo.length > 0 ? 'inline' : 'none';
+  }
+
+  if (!clientesConSaldo.length) {
+    zone.innerHTML = `<div class="empty"><div class="empty-icon">📒</div><div class="empty-text">Sin fiados pendientes</div></div>`;
+    return;
+  }
+
+  zone.innerHTML = clientesConSaldo.map(({ cliente, saldo }) => {
+    const grupos = gruposFiadoDeCliente(cliente.id);
+    const abonos = ST.abonosFiado.filter(a => a.cliente_fiado_id === cliente.id)
+      .sort((a,b) => b.fecha.localeCompare(a.fecha));
+    const abierto = fiadosExpandido.has(cliente.id);
+
+    const filasPedidos = grupos.length
+      ? grupos.map(g => {
+          const total = g.orders.reduce((a,p) => a + (p.monto_total||0), 0);
+          const detalle = g.orders.map(p => `${LABELS[p.pedido]||p.pedido}${p.detalle ? ': ' + p.detalle : ''}`).join(' · ');
+          const idsGrupo = g.orders.map(o => o.id);
+          const primero = g.orders[0];
+          return `<tr>
+            <td>${primero.fecha||'—'} ${primero.hora||''}</td>
+            <td style="color:var(--text3);font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detalle||'—'}</td>
+            <td class="amount-pos">${fmt(total)}</td>
+            <td><button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancelar este pedido fiado">✕</button></td>
+          </tr>`;
+        }).join('')
+      : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin pedidos pendientes — el saldo viene de un abono todavía sin aplicar del todo.</div></td></tr>`;
+
+    const filasAbonos = abonos.length
+      ? abonos.map(a => `<tr>
+          <td>${a.fecha}</td>
+          <td class="amount-pos">${fmt(a.monto)}</td>
+          <td><span class="badge ${a.cuenta==='efectivo'?'badge-green':'badge-blue'}">${a.cuenta==='efectivo'?'💵 Efectivo':'📲 Transferencia'}</span></td>
+          <td style="color:var(--text3);font-size:11px;">${a.nota||'—'}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin abonos registrados todavía.</div></td></tr>`;
+
+    return `
+    <div class="pending-group">
+      <div class="pending-group-hdr" style="cursor:pointer;" onclick="toggleFiadoCliente(${cliente.id})">
+        <div>
+          <div class="pending-group-title" style="color:var(--purple);">📒 ${cliente.nombre}</div>
+          <div class="pending-group-sub">${grupos.length} pedido(s) pendiente(s) · ${abonos.length} abono(s) — ${abierto ? 'clic para colapsar' : 'clic para ver detalle'}</div>
+        </div>
+        <div class="pending-group-total">${fmt(saldo)}</div>
+      </div>
+      <div style="${abierto ? '' : 'display:none;'}">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Pedido</th><th>Detalle</th><th>Monto</th><th></th></tr></thead>
+            <tbody>${filasPedidos}</tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Abono</th><th>Monto</th><th>Cuenta</th><th>Nota</th></tr></thead>
+            <tbody>${filasAbonos}</tbody>
+          </table>
+        </div>
+        <div class="pending-pay-bar">
+          <input type="text" inputmode="numeric" id="abono-monto-${cliente.id}" placeholder="Monto del abono" class="vuelto-inline" oninput="formatMilesInput(this)">
+          <select id="abono-cuenta-${cliente.id}">
+            <option value="efectivo">💵 Efectivo</option>
+            <option value="transferencia">📲 Transferencia</option>
+          </select>
+          <input type="text" id="abono-nota-${cliente.id}" placeholder="Nota (opcional)" style="max-width:220px;">
+          <button class="btn btn-primary" onclick="registrarAbonoFiado(${cliente.id})">+ Registrar abono</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Registra un abono y lo reparte automáticamente contra los pedidos fiados
+// pendientes del cliente, del más viejo al más nuevo, un grupo_pedido
+// completo a la vez (nunca se parte una visita a la mitad) — ver la
+// migración y los comentarios de calcularSaldoFiado() para la fórmula.
+async function registrarAbonoFiado(clienteId) {
+  const cliente = ST.clientesFiado.find(c => c.id === clienteId);
+  if (!cliente) return;
+  const monto  = valMiles(`abono-monto-${clienteId}`);
+  const cuentaEl = document.getElementById(`abono-cuenta-${clienteId}`);
+  const notaEl   = document.getElementById(`abono-nota-${clienteId}`);
+  const cuenta = cuentaEl ? cuentaEl.value : 'efectivo';
+  const nota   = notaEl ? notaEl.value.trim() : '';
+  if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
+
+  try {
+    const [abonoRow] = await sbInsertConCuenta('abonos_fiado', {
+      cliente_fiado_id: clienteId, fecha: today(), monto, cuenta, nota: nota || null
+    });
+    ST.abonosFiado.unshift(abonoRow);
+
+    // "disponible" = este abono + lo que sobraba de abonos anteriores sin
+    // aplicar — calcularSaldoFiado().sobrante ya lo suma todo (incluido el
+    // que se acaba de insertar), así que es exactamente lo que hay para
+    // repartir ahora.
+    let disponible = calcularSaldoFiado(clienteId).sobrante;
+
+    const grupos = gruposFiadoDeCliente(clienteId);
+    const gruposPagados = [];
+    let idx = 0;
+    for (; idx < grupos.length; idx++) {
+      const grupo = grupos[idx];
+      const totalGrupo = grupo.orders.reduce((a,p) => a + (p.monto_total||0), 0);
+      if (disponible + 0.01 < totalGrupo) break; // no alcanza este grupo completo — para aquí
+      for (const p of grupo.orders) {
+        const patchFull = armarPatchPago(cuenta, null, false, {
+          fecha: today(), fecha_original: p.fecha, pagado_via_abono: true
+        });
+        let patchData = patchFull;
+        try {
+          await sbPatch('pedidos', `id=eq.${p.id}`, patchFull);
+        } catch (e) {
+          const msg = e.message || '';
+          if (msg.includes('fecha_original') || msg.includes('pagado_via_abono') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
+            const { fecha_original, pagado_via_abono, monto_efectivo, monto_transferencia, ...base } = patchFull;
+            patchData = base;
+            await sbPatch('pedidos', `id=eq.${p.id}`, patchData);
+          } else { throw e; }
+        }
+        Object.assign(p, patchData);
+      }
+      ST.ingresos = [...grupo.orders, ...ST.ingresos];
+      ST.pendientes = ST.pendientes.filter(p => !grupo.orders.some(o => o.id === p.id));
+      disponible -= totalGrupo;
+      gruposPagados.push(grupo);
+    }
+    const siguienteGrupo = grupos[idx]; // el primero que no alcanzó a cubrirse (o undefined)
+
+    // Lo que sobra (no alcanzó para el siguiente pedido completo) entra a
+    // Caja HOY igual — la plata ya llegó, aunque ningún pedido se haya
+    // terminado de marcar pagado. "aporte" es el único tipo de movimiento
+    // de Caja que solo suma y nunca se valida contra dejar la cuenta en
+    // negativo — correcto para un ingreso real como este.
+    if (disponible > 0.5) {
+      const turnoRef = siguienteGrupo?.orders[0]?.turno
+        || gruposPagados[gruposPagados.length - 1]?.orders[0]?.turno
+        || 'almuerzo';
+      const cuentaCaja = cuenta === 'efectivo' ? 'efectivo' : (turnoRef === 'almuerzo' ? 'transf_almuerzos' : 'transf_rapidas');
+      try {
+        const [movRow] = await sbInsertConCuenta('movimientos_caja', {
+          fecha: today(), tipo: 'aporte', cuenta: cuentaCaja, monto: disponible,
+          descripcion: `Abono fiado — ${cliente.nombre}`
+        });
+        ST.movimientosCaja.unshift(movRow);
+      } catch (e) {
+        console.error(e);
+        showToast('⚠ El abono se guardó pero el sobrante no se pudo registrar en Caja — revísalo a mano', 'warning');
+      }
+    }
+
+    setSyncBadge('ok');
+    const montoEl = document.getElementById(`abono-monto-${clienteId}`);
+    if (montoEl) montoEl.value = '';
+    if (notaEl) notaEl.value = '';
+
+    const saldoFinal = calcularSaldoFiado(clienteId).saldo;
+    showToast(
+      saldoFinal <= 0.5
+        ? `✅ Fiado de ${cliente.nombre} saldado por completo`
+        : `✅ Abono de ${fmt(monto)} registrado — ${cliente.nombre} debe ${fmt(saldoFinal)}`,
+      'ok'
+    );
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast(`⚠ Error al registrar el abono: ${(e.message||'').slice(0,160)}`, 'warning');
   }
 }
 
@@ -7733,6 +7916,7 @@ function renderAll() {
   // Operativas — sin contraseña
   renderIngresos();
   renderPendientes();
+  renderFiados();
   renderDiaADia();
   renderInventario();
   // Administrativas — todas detrás de la misma contraseña compartida
