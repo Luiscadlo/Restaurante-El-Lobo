@@ -28,7 +28,7 @@ Opciones:
 |---|---|
 | `<archivo_exportado.xlsx>` | Excel exportado desde la pestaña Datos |
 | `--meses-proyeccion N` | Meses a proyectar hacia adelante (por defecto 6) |
-| `--salida archivo.xlsx` | Nombre del archivo generado (por defecto `ElLobo_Modelo_Financiero.xlsx`) |
+| `--salida archivo.xlsx` | Nombre del archivo generado. Por defecto se arma solo (`ElLobo_Modelo_Financiero_REAL.xlsx` con datos reales, `_DEMO.xlsx` con `--demo`) y siempre se guarda en esta misma carpeta, sin importar desde dónde corras el comando — así nunca hay dudas de si un archivo es de prueba o de datos reales. |
 
 ## 3. Uso de prueba con datos ficticios
 

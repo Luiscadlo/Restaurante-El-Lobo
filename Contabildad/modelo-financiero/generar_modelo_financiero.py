@@ -42,6 +42,13 @@ Requiere: pip install openpyxl pandas
 import sys
 import argparse
 from datetime import date
+from pathlib import Path
+
+# El modelo generado SIEMPRE se guarda en esta misma carpeta
+# (modelo-financiero/), sin importar desde qué directorio se corra el
+# script — así no se dispersan copias sueltas en la raíz del repo o en
+# donde sea que estuviera parada la terminal.
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 # En Windows, la consola (cmd/PowerShell) no siempre usa UTF-8 por defecto,
 # y los prints con emoji (✅) revientan con UnicodeEncodeError aunque el
@@ -159,8 +166,9 @@ def cargar_datos_reales(path_excel):
     movs_caja = hoja("Movimientos_Caja")
     pendientes = hoja("Pedidos_Pendientes")
     abonos = hoja("Abonos_Fiado")
+    aperturas = hoja("Aperturas_Turno")
 
-    for df in (cierres, pedidos, egresos, gastos_cierre, movs_caja):
+    for df in (cierres, pedidos, egresos, gastos_cierre, movs_caja, aperturas):
         if not df.empty and "fecha" in df.columns:
             df["fecha"] = pd.to_datetime(df["fecha"])
             df["periodo"] = df["fecha"].dt.to_period("M")
@@ -170,6 +178,29 @@ def cargar_datos_reales(path_excel):
         | (set(egresos["periodo"]) if "periodo" in egresos.columns else set())
     )
 
+    def ingreso_turno_cierres(cierres_mes, turno):
+        """Total real de un turno en un mes: efectivo + transferencia +
+        ajuste manual — MISMA fórmula que ajustesDeCierre() en el sistema,
+        para que cuadre con el KPI de Ingresos del Tablero. No se
+        reconstruye sumando Pedidos_Pagados porque el desayuno (sumado al
+        cierre de almuerzo al abrir el turno) y los ajustes manuales no
+        generan filas de pedido."""
+        del_turno = cierres_mes[cierres_mes.get("turno") == turno] if not cierres_mes.empty else pd.DataFrame()
+        if del_turno.empty:
+            return 0.0
+        base = float(del_turno[["efectivo", "transferencia"]].sum().sum()) if {"efectivo", "transferencia"}.issubset(del_turno.columns) else 0.0
+        if "ajuste_efectivo" in del_turno.columns:
+            ajuste_ef = del_turno["ajuste_efectivo"]
+            if "ajuste_manual" in del_turno.columns:
+                ajuste_ef = ajuste_ef.fillna(del_turno["ajuste_manual"])
+        elif "ajuste_manual" in del_turno.columns:
+            ajuste_ef = del_turno["ajuste_manual"]
+        else:
+            ajuste_ef = pd.Series(dtype=float)
+        ajuste_ef_total = float(ajuste_ef.fillna(0).sum()) if not ajuste_ef.empty else 0.0
+        ajuste_tr_total = float(del_turno["ajuste_transferencia"].fillna(0).sum()) if "ajuste_transferencia" in del_turno.columns else 0.0
+        return base + ajuste_ef_total + ajuste_tr_total
+
     filas = []
     for periodo in meses:
         ing_alm = pedidos[(pedidos.get("periodo") == periodo) & (pedidos.get("turno") == "almuerzo")] if not pedidos.empty else pd.DataFrame()
@@ -177,12 +208,24 @@ def cargar_datos_reales(path_excel):
         cierres_mes = cierres[cierres["periodo"] == periodo] if not cierres.empty else pd.DataFrame()
         egresos_mes = egresos[egresos["periodo"] == periodo] if not egresos.empty else pd.DataFrame()
         gastos_mes = gastos_cierre[gastos_cierre["periodo"] == periodo] if not gastos_cierre.empty else pd.DataFrame()
+        aperturas_mes = aperturas[aperturas["periodo"] == periodo] if not aperturas.empty and "periodo" in aperturas.columns else pd.DataFrame()
 
-        ingresos_totales = float(cierres_mes[["efectivo", "transferencia"]].sum().sum()) if not cierres_mes.empty else 0.0
         vol_alm = int(ing_alm["cantidad"].sum()) if not ing_alm.empty and "cantidad" in ing_alm else len(ing_alm)
         vol_cena = int(ing_cena["cantidad"].sum()) if not ing_cena.empty and "cantidad" in ing_cena else len(ing_cena)
-        ingresos_alm = float(ing_alm["monto_total"].sum()) if not ing_alm.empty else 0.0
-        ingresos_cena = float(ing_cena["monto_total"].sum()) if not ing_cena.empty else 0.0
+        # Ingresos: SIEMPRE desde Cierres_Dia (igual que renderTablero() del
+        # sistema) y no sumando Pedidos_Pagados — el desayuno se suma directo
+        # al cierre de almuerzo al abrir el turno (calcularVentasFijas()) y
+        # los ajustes manuales de cierre tampoco generan fila de pedido, así
+        # que sumar solo pedidos siempre se quedaba corto frente al Tablero.
+        ingresos_alm = ingreso_turno_cierres(cierres_mes, "almuerzo")
+        ingresos_cena = ingreso_turno_cierres(cierres_mes, "cena")
+        if not aperturas_mes.empty and {"turno", "venta_desayuno"}.issubset(aperturas_mes.columns):
+            desayuno_mes = aperturas_mes[aperturas_mes["turno"] == "almuerzo"]
+            ingresos_desayuno = float(desayuno_mes["venta_desayuno"].fillna(0).sum())
+            if "venta_desayuno_transferencia" in desayuno_mes.columns:
+                ingresos_desayuno += float(desayuno_mes["venta_desayuno_transferencia"].fillna(0).sum())
+        else:
+            ingresos_desayuno = 0.0
 
         def suma_cat(df, cat):
             # "egresos" guarda la categoría en la columna "cat"; "gastos_dia"
@@ -202,11 +245,12 @@ def cargar_datos_reales(path_excel):
 
         filas.append(dict(
             periodo=str(periodo), anio=periodo.year, mes=periodo.month,
-            ingresos_almuerzo=ingresos_alm or ingresos_totales * 0.55,
-            ingresos_cena=ingresos_cena or ingresos_totales * 0.45,
+            ingresos_almuerzo=ingresos_alm,
+            ingresos_cena=ingresos_cena,
             volumen_almuerzo=max(vol_alm, 1), volumen_cena=max(vol_cena, 1),
             costo_insumos=costo_insumos, nomina=nomina,
             arriendo_servicios=arriendo_serv, otros_gastos=otros,
+            ingresos_desayuno=ingresos_desayuno,
         ))
 
     hist = pd.DataFrame(filas).sort_values("periodo").reset_index(drop=True)
@@ -301,6 +345,7 @@ def datos_de_ejemplo(n_meses=12):
             nomina=2_500_000,
             arriendo_servicios=1_200_000,
             otros_gastos=round(random.uniform(150_000, 400_000), -3),
+            ingresos_desayuno=round(ing_alm * 0.08, -3),
         ))
     hist = pd.DataFrame(filas)
     extra = {
@@ -590,6 +635,11 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
     r += 1
     banner(ws, r, "Revenue Schedule — Volumen × Ticket Promedio", col_fin=col_fin)
     r += 2
+    fila_desayuno = r
+    label(ws, r, "· de los cuales, venta de desayuno (informativo)")
+    for i in range(n_hist):
+        numero(ws, r, col_ini + i, float(hist_df.iloc[i]["ingresos_desayuno"]))
+    r += 1
     fila_vol_alm = r
     label(ws, r, "Volumen pedidos — Almuerzo")
     for i in range(n_hist):
@@ -599,7 +649,7 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
     label(ws, r, "Ticket promedio — Almuerzo")
     for c in range(col_ini, col_ini + n_hist):
         cl = get_column_letter(c)
-        numero(ws, r, c, f"={cl}{fila_ing_alm}/{cl}{fila_vol_alm}")
+        numero(ws, r, c, f"=({cl}{fila_ing_alm}-{cl}{fila_desayuno})/{cl}{fila_vol_alm}")
     r += 1
     fila_vol_cena = r
     label(ws, r, "Volumen pedidos — Comidas Rápidas")
@@ -944,7 +994,13 @@ def main():
     ap.add_argument("archivo", nargs="?", help="Excel exportado desde la pestaña Datos")
     ap.add_argument("--demo", action="store_true", help="Usar datos de ejemplo")
     ap.add_argument("--meses-proyeccion", type=int, default=6)
-    ap.add_argument("--salida", default="ElLobo_Modelo_Financiero.xlsx")
+    ap.add_argument("--salida", default=None, help=(
+        "Nombre del archivo generado. Por defecto se arma solo — "
+        "ElLobo_Modelo_Financiero_DEMO.xlsx o _REAL.xlsx según el modo — y "
+        "se guarda en esta misma carpeta (modelo-financiero/), sin importar "
+        "desde dónde se corra el script. Si das un nombre suelto (sin ruta) "
+        "también se guarda aquí; si das una ruta con carpeta, se respeta tal cual."
+    ))
     args = ap.parse_args()
 
     if args.demo or not args.archivo:
@@ -953,6 +1009,18 @@ def main():
     else:
         hist_df, extra = cargar_datos_reales(args.archivo)
         es_demo = False
+
+    # Nombre + carpeta de salida: siempre deja claro si es DEMO o REAL (para
+    # no confundir un modelo de prueba con uno de datos reales del negocio),
+    # y siempre aterriza en esta carpeta salvo que se pida una ruta explícita
+    # con directorio propio.
+    if args.salida:
+        salida_path = Path(args.salida)
+        if not salida_path.is_absolute() and salida_path.parent == Path("."):
+            salida_path = SCRIPT_DIR / salida_path.name
+    else:
+        sufijo = "DEMO" if es_demo else "REAL"
+        salida_path = SCRIPT_DIR / f"ElLobo_Modelo_Financiero_{sufijo}.xlsx"
 
     if hist_df.empty:
         print("No se encontraron meses con datos en el archivo. Usa --demo para probar con datos de ejemplo.")
@@ -980,8 +1048,8 @@ def main():
     wb._sheets = [wb["Cover"], wb["Outputs"], wb["Inputs"], wb["Model"]]
     wb.active = 0
 
-    wb.save(args.salida)
-    print(f"✅ Modelo generado: {args.salida}  ({len(hist_df)} meses reales + {len(meses_fcst_labels)} proyectados)")
+    wb.save(salida_path)
+    print(f"✅ Modelo generado: {salida_path}  ({len(hist_df)} meses reales + {len(meses_fcst_labels)} proyectados)")
 
 
 if __name__ == "__main__":
