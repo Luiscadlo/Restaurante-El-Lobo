@@ -4458,6 +4458,22 @@ function renderFiados() {
         </tr>`).join('')
       : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin abonos registrados todavía.</div></td></tr>`;
 
+    // Pedidos de este cliente ya saldados vía abono — mismo filtro que usa
+    // calcularSaldoFiado() para totalPagadoViaAbono. Vive en ST.ingresos
+    // porque registrarAbonoFiado() los mueve ahí al pagarlos.
+    const pagadosViaAbono = ST.ingresos
+      .filter(p => p.cliente_fiado_id === cliente.id && p.pagado_via_abono === true)
+      .sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
+
+    const filasPagados = pagadosViaAbono.length
+      ? pagadosViaAbono.map(p => `<tr>
+          <td>${p.fecha_original || p.fecha || '—'}</td>
+          <td>${p.fecha || '—'}</td>
+          <td style="color:var(--text3);font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${LABELS[p.pedido]||p.pedido}${p.detalle ? ': ' + p.detalle : ''}</td>
+          <td class="amount-pos">${fmt(p.monto_total||0)}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin pedidos pagados vía abono todavía.</div></td></tr>`;
+
     return `
     <div class="pending-group">
       <div class="pending-group-hdr" style="cursor:pointer;" onclick="toggleFiadoCliente(${cliente.id})">
@@ -4478,6 +4494,12 @@ function renderFiados() {
           <table>
             <thead><tr><th>Abono</th><th>Monto</th><th>Cuenta</th><th>Nota</th></tr></thead>
             <tbody>${filasAbonos}</tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Pedido creado</th><th>Pagado el</th><th>Detalle</th><th>Monto</th></tr></thead>
+            <tbody>${filasPagados}</tbody>
           </table>
         </div>
         <div class="pending-pay-bar">
@@ -4576,7 +4598,7 @@ async function registrarAbonoFiado(clienteId) {
       if (disponible + 0.01 < totalGrupo) break; // no alcanza este grupo completo — para aquí
       for (const p of grupo.orders) {
         const patchFull = armarPatchPago(cuenta, null, false, {
-          fecha: today(), fecha_original: p.fecha, pagado_via_abono: true
+          fecha: today(), fecha_original: p.fecha, turno: turnoManual, pagado_via_abono: true
         });
         let patchData = patchFull;
         try {
