@@ -1083,8 +1083,9 @@
       <div class="panel-title">🍽 Menú del día</div>
       <a href="../Menu/Men%C3%BA%20diario-El%20Lobo.html" target="_blank" rel="noopener" class="btn btn-outline" style="font-size:11px;">↗ Abrir en pestaña aparte</a>
     </div>
-    <iframe src="../Menu/Men%C3%BA%20diario-El%20Lobo.html" title="Generador de menú del día — El Lobo"
+    <iframe id="menuFrame" src="../Menu/Men%C3%BA%20diario-El%20Lobo.html" title="Generador de menú del día — El Lobo"
       style="width:100%;height:85vh;min-height:600px;border:none;display:block;"></iframe>
+    <script>document.getElementById('menuFrame').src='../Menu/Men%C3%BA%20diario-El%20Lobo.html?v='+Date.now();</script>
   </div>
 </section>
 
