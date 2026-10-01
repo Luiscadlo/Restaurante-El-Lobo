@@ -1578,10 +1578,31 @@
       <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
     </div>
     <div class="panel">
-      <div class="panel-header"><div class="panel-title">📊 Exportar todos los datos</div></div>
+      <div class="panel-header"><div class="panel-title">📊 Exportar datos a Excel</div></div>
       <div class="panel-body">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Genera un Excel (.xlsx) con una hoja por cada tabla del sistema (pedidos, egresos, cierres, caja, inventario, etc.) — pensado para análisis externo en Excel o Python, no para reimportar. Para respaldo/reimportación, usa el botón "Exportar" (JSON) del encabezado.</div>
-        <button class="btn btn-primary" onclick="exportarExcelCompleto()">📥 Exportar todos los datos a Excel (.xlsx)</button>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Genera un Excel (.xlsx) con una hoja por cada tabla del sistema (pedidos, egresos, cierres, caja, inventario, etc.) — pensado para análisis externo en Excel o Python (es el archivo que lee el modelo financiero), no para reimportar. Para respaldo/reimportación, usa el botón "Exportar" (JSON) del encabezado.</div>
+
+        <div class="filtro-label">Período de los datos históricos a descargar</div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:6px;">
+          <div class="filter-bar" id="datos-presets" style="margin-bottom:0;">
+            <button class="filter-btn active" data-preset="todo"  onclick="setDatosPreset('todo')">Todo el historial</button>
+            <button class="filter-btn" data-preset="anio" onclick="setDatosPreset('anio')">Este año</button>
+            <button class="filter-btn" data-preset="12"   onclick="setDatosPreset('12')">Últimos 12 meses</button>
+            <button class="filter-btn" data-preset="6"    onclick="setDatosPreset('6')">Últimos 6 meses</button>
+            <button class="filter-btn" data-preset="3"    onclick="setDatosPreset('3')">Últimos 3 meses</button>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px;">
+          <span style="color:var(--text3);font-size:11px;">O elige los meses:</span>
+          <input type="month" id="datos-mes-desde" style="padding:8px 10px;width:auto;" title="Desde el mes (incluido)" onchange="setDatosRango('desde')">
+          <span style="color:var(--text3);font-size:11px;">–</span>
+          <input type="month" id="datos-mes-hasta" style="padding:8px 10px;width:auto;" title="Hasta el mes (incluido)" onchange="setDatosRango('hasta')">
+          <button class="filter-btn" title="Quitar el período y exportar todo el historial" onclick="setDatosPreset('todo')">✕</button>
+        </div>
+        <div id="datos-resumen" style="font-size:11px;color:var(--text2);margin-bottom:6px;"></div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:16px;">Se exportan meses completos (del día 1 al último día), así el modelo no trata un mes partido como si fuera un mes entero. Sin período = todo el historial. Inventario, pedidos pendientes (fiados), clientes y abonos de fiado y movimientos de caja siempre van completos: son el estado actual (saldos), no un histórico por fechas.</div>
+
+        <button class="btn btn-primary" onclick="exportarExcelCompleto()">📥 Exportar datos a Excel (.xlsx)</button>
       </div>
     </div>
   </div>
@@ -2415,14 +2436,94 @@ function exportarDatos() {
   URL.revokeObjectURL(a.href);
 }
 
-// Exporta TODO lo que hay en memoria a un Excel con una hoja por tabla —
-// para análisis externo (Excel/Python), no para reimportar (eso lo cubre
-// exportarDatos()/importarDatos(), el respaldo JSON de arriba).
+// Período de los datos a descargar en la pestaña Datos (para el modelo
+// financiero). Va por MESES completos: desde/hasta son "YYYY-MM" (vacío =
+// sin límite = todo el historial). preset marca qué botón rápido está activo
+// ('' cuando se eligieron los meses a mano).
+let fDatos = { preset: 'todo', desde: '', hasta: '' };
+
+// "YYYY-MM" → rango de días inclusivo "YYYY-MM-01" … "YYYY-MM-último".
+function datosRangoFechas() {
+  const ultimoDia = ym => { const [y, m] = ym.split('-').map(Number); return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`; };
+  return { desde: fDatos.desde ? `${fDatos.desde}-01` : '', hasta: fDatos.hasta ? ultimoDia(fDatos.hasta) : '' };
+}
+
+// Una fila entra al período si su fecha cae dentro (extremos incluidos); sin
+// fecha entra siempre (no hay con qué descartarla).
+const enRangoDatos = (fecha, r) => !fecha || ((!r.desde || fecha >= r.desde) && (!r.hasta || fecha <= r.hasta));
+
+function setDatosPreset(preset) {
+  const hoy = new Date();
+  const ym = (y, m) => `${y + Math.floor((m - 1) / 12)}-${String(((m - 1) % 12 + 12) % 12 + 1).padStart(2, '0')}`;
+  const y = hoy.getFullYear(), m = hoy.getMonth() + 1;
+  fDatos = { preset, desde: '', hasta: '' };
+  if (preset === 'anio') fDatos = { preset, desde: `${y}-01`, hasta: ym(y, m) };
+  else if (['12', '6', '3'].includes(preset)) fDatos = { preset, desde: ym(y, m - (Number(preset) - 1)), hasta: ym(y, m) };
+  ['datos-mes-desde', 'datos-mes-hasta'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = id.endsWith('desde') ? fDatos.desde : fDatos.hasta;
+  });
+  renderDatosExport();
+}
+
+// Meses elegidos a mano. Si quedan al revés manda el campo que se acaba de
+// editar y el otro se alinea con él (igual que el rango de fechas de Egresos).
+function setDatosRango(cambio) {
+  const dEl = document.getElementById('datos-mes-desde'), hEl = document.getElementById('datos-mes-hasta');
+  let desde = dEl.value || '', hasta = hEl.value || '';
+  if (desde && hasta && desde > hasta) {
+    if (cambio === 'hasta') desde = hasta; else hasta = desde;
+    dEl.value = desde; hEl.value = hasta;
+  }
+  fDatos = { preset: (desde || hasta) ? '' : 'todo', desde, hasta };
+  renderDatosExport();
+}
+
+// Qué filas de cada hoja entran a la exportación. Los pedidos pagados con
+// pagado_via_abono SIEMPRE van (aunque sean de otro período): sin ellos el
+// saldo de fiados que calcula el modelo (abonos − pagado vía abono) quedaría mal.
+function datosParaExportar() {
+  const r = datosRangoFechas();
+  const porFecha = filas => (filas || []).filter(f => enRangoDatos(f.fecha || (f.created_at || '').slice(0, 10), r));
+  return {
+    r,
+    pagados:    (ST.ingresos || []).filter(p => enRangoDatos(p.fecha, r) || p.pagado_via_abono === true),
+    egresos:    porFecha(ST.egresos),
+    gastos:     porFecha(ST.gastosDia),
+    cierres:    porFecha(ST.cierresDia),
+    aperturas:  porFecha(ST.aperturasTurno),
+    ingExtra:   porFecha(ST.ingresosExtra),
+    consumos:   porFecha(ST.consumos),
+    notas:      porFecha(ST.notasDia),
+    eliminados: porFecha(ST.pedidosEliminados),
+  };
+}
+
+function renderDatosExport() {
+  document.querySelectorAll('#datos-presets .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.preset === fDatos.preset));
+  const el = document.getElementById('datos-resumen');
+  if (!el) return;
+  const d = datosParaExportar();
+  const fechas = [...ST.cierresDia, ...ST.ingresos, ...ST.egresos].map(x => x.fecha).filter(Boolean).sort();
+  const disp = fechas.length ? `Datos en el sistema: del ${fechas[0]} al ${fechas[fechas.length - 1]}.` : 'Todavía no hay datos en el sistema.';
+  const periodo = (d.r.desde || d.r.hasta) ? `Se exportará ${d.r.desde ? 'desde el ' + d.r.desde : 'todo lo anterior'} ${d.r.hasta ? 'hasta el ' + d.r.hasta : 'en adelante'}` : 'Se exportará todo el historial';
+  const mesActual = today().slice(0, 7);
+  const incompleto = (!fDatos.hasta || fDatos.hasta >= mesActual) && fechas.length ? ' Incluye el mes en curso (todavía incompleto).' : '';
+  el.innerHTML = `${disp}<br><strong>${periodo}</strong>: ${d.cierres.length} cierres, ${d.pagados.length} pedidos pagados, ${d.egresos.length} egresos, ${d.gastos.length} gastos de cierre.${incompleto}`;
+}
+
+// Exporta lo que hay en memoria a un Excel con una hoja por tabla — para
+// análisis externo (Excel/Python), no para reimportar (eso lo cubre
+// exportarDatos()/importarDatos(), el respaldo JSON de arriba). El período
+// elegido en la pestaña Datos recorta las hojas de movimientos por fecha; las
+// que son estado actual (inventario, fiados pendientes, clientes, abonos y
+// movimientos de caja) van siempre completas.
 function exportarExcelCompleto() {
   if (typeof XLSX === 'undefined') {
     showToast('⚠ No se pudo cargar la librería de Excel (revisa tu conexión)', 'warning');
     return;
   }
+  const d = datosParaExportar();
   const wb = XLSX.utils.book_new();
   const addSheet = (nombre, filas) => {
     const ws = XLSX.utils.json_to_sheet(filas || []);
@@ -2432,25 +2533,33 @@ function exportarExcelCompleto() {
   // identifican por la columna es_gratis (TRUE) — y también por metodo =
   // 'gratis' — con su monto en monto_total (no suma a ingresos). Pendientes
   // mientras no se marquen como entregados; Pagados una vez entregados.
-  addSheet('Pedidos_Pagados', ST.ingresos);
+  addSheet('Pedidos_Pagados', d.pagados);
   addSheet('Pedidos_Pendientes', ST.pendientes);
-  addSheet('Egresos', ST.egresos);
-  addSheet('Gastos_Cierre', ST.gastosDia);
+  addSheet('Egresos', d.egresos);
+  addSheet('Gastos_Cierre', d.gastos);
   // platos_familia (almuerzos de la familia) se fuerza como columna aunque
   // ningún cierre la traiga todavía (migración sin correr), para que el
   // esquema del Excel sea estable. Vacío = NULL = "no registrado".
-  addSheet('Cierres_Dia', ST.cierresDia.map(c => ({ ...c, platos_familia: c.platos_familia ?? null })));
-  addSheet('Aperturas_Turno', ST.aperturasTurno);
+  addSheet('Cierres_Dia', d.cierres.map(c => ({ ...c, platos_familia: c.platos_familia ?? null })));
+  addSheet('Aperturas_Turno', d.aperturas);
   addSheet('Movimientos_Caja', ST.movimientosCaja);
-  addSheet('Ingresos_Extra', ST.ingresosExtra);
+  addSheet('Ingresos_Extra', d.ingExtra);
   addSheet('Inventario', ST.inventario);
-  addSheet('Consumos', ST.consumos);
-  addSheet('Notas_Dia', ST.notasDia);
-  addSheet('Pedidos_Eliminados', ST.pedidosEliminados);
+  addSheet('Consumos', d.consumos);
+  addSheet('Notas_Dia', d.notas);
+  addSheet('Pedidos_Eliminados', d.eliminados);
   if (ST.clientesFiado?.length) addSheet('Clientes_Fiado', ST.clientesFiado);
   if (ST.abonosFiado?.length)   addSheet('Abonos_Fiado', ST.abonosFiado);
-  XLSX.writeFile(wb, `ElLobo_datos_${today()}.xlsx`);
-  showToast('✅ Excel exportado', 'ok');
+  // Hoja informativa: deja constancia del período con el que se generó el archivo.
+  addSheet('Info_Exportacion', [
+    { dato: 'Exportado el', valor: today() },
+    { dato: 'Período desde', valor: d.r.desde || '(todo el historial)' },
+    { dato: 'Período hasta', valor: d.r.hasta || '(todo el historial)' },
+    { dato: 'Nota', valor: 'Inventario, pedidos pendientes, clientes/abonos de fiado y movimientos de caja van completos (estado actual).' },
+  ]);
+  const sufijo = (fDatos.desde || fDatos.hasta) ? `_${fDatos.desde || 'inicio'}_a_${fDatos.hasta || 'hoy'}` : '';
+  XLSX.writeFile(wb, `ElLobo_datos_${today()}${sufijo}.xlsx`);
+  showToast(`✅ Excel exportado (${d.cierres.length} cierres, ${d.pagados.length} pedidos pagados)`, 'ok');
 }
 
 async function importarDatos(e) {
@@ -8415,7 +8524,7 @@ function renderAll() {
   aplicarGateAdmin('egresos', renderEgresos);
   aplicarGateAdmin('caja',    renderCaja);
   aplicarGateAdmin('auditoria', renderAuditoria);
-  aplicarGateAdmin('datos', null);
+  aplicarGateAdmin('datos', renderDatosExport);
   renderPendientesNotasBadge();
   actualizarBadgeAuditoria();
 }

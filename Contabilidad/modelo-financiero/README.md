@@ -14,8 +14,12 @@ pip install openpyxl pandas
 
 ## 2. Uso con datos reales
 
-1. En el sistema contable, entra a la pestaña **Datos** y pulsa
-   **Exportar todos los datos a Excel** (baja `ElLobo_datos_AAAA-MM-DD.xlsx`).
+1. En el sistema contable, entra a la pestaña **Datos**, elige el **período de los datos
+   históricos** que quieres que use el modelo (todo el historial, este año, últimos 12/6/3 meses
+   o unos meses a mano, siempre meses completos) y pulsa **Exportar datos a Excel** (baja
+   `ElLobo_datos_AAAA-MM-DD.xlsx`; con período elegido el nombre lleva `_AAAA-MM_a_AAAA-MM`).
+   Los meses del período son los que el modelo toma como reales para proyectar; inventario,
+   fiados pendientes y movimientos de caja van siempre completos (son saldos, no un histórico).
 2. Corre el script apuntando a ese archivo:
 
 ```
