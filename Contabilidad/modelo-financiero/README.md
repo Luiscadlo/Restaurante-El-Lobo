@@ -19,7 +19,7 @@ pip install openpyxl pandas
 2. Corre el script apuntando a ese archivo:
 
 ```
-python generar_modelo_financiero.py ElLobo_datos_2026-09-27.xlsx --meses-proyeccion 6
+python generar_modelo_financiero.py ElLobo_datos_2026-09-27.xlsx --hasta 2027-12 --mes 2026-09
 ```
 
 Opciones:
@@ -27,8 +27,23 @@ Opciones:
 | Opción | Descripción |
 |---|---|
 | `<archivo_exportado.xlsx>` | Excel exportado desde la pestaña Datos |
-| `--meses-proyeccion N` | Meses a proyectar hacia adelante (por defecto 6) |
+| `--hasta AAAA-MM` | Último mes de la proyección (por defecto `2027-12`). El script calcula solo cuántos meses proyectar a partir del último mes real. |
+| `--meses-proyeccion N` | Alternativa a `--hasta`: cantidad de meses a proyectar. **Si se pasa, manda** sobre `--hasta`. |
+| `--mes AAAA-MM` | Mes en foco de los gráficos mensuales (por defecto, el último mes con datos reales). Debe ser un mes real. |
 | `--salida archivo.xlsx` | Nombre del archivo generado. Por defecto se arma solo (`ElLobo_Modelo_Financiero_REAL.xlsx` con datos reales, `_DEMO.xlsx` con `--demo`) y siempre se guarda en esta misma carpeta, sin importar desde dónde corras el comando — así nunca hay dudas de si un archivo es de prueba o de datos reales. |
+
+### Plan (para comparar real vs. proyectado)
+
+No hay presupuesto congelado. **Plan(M) = proyección del escenario *Base* a un mes**:
+parte del real del mes anterior (M-1) y aplica los drivers *Base* del primer mes
+proyectado (crecimiento de almuerzo y de comida rápida, costo de insumos % e
+inflación de gastos fijos). Solo existe para meses reales que tengan un mes anterior
+real; el resto queda en blanco y los elementos que dependen del Plan se omiten con una
+nota. Vive en la hoja `Datos_Graficos` como **fórmulas** hacia `Model` e `Inputs`, así
+que si cambias los drivers *Base* el Plan se recalcula. El **Plan anual** es la suma de
+los Plan mensuales (en meses sin real, la proyección del modelo). Ojo: el Plan supone
+meses comparables — si el mes anterior real es parcial (p. ej. el sistema empezó a
+mediados de mes), el Plan del mes siguiente queda muy bajo.
 
 ## 3. Uso de prueba con datos ficticios
 

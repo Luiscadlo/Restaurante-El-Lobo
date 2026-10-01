@@ -945,6 +945,11 @@ def hoja_inputs(wb, meses_fcst_labels):
         r, "Inflación de gastos fijos — nómina / arriendo / servicios / otros (%/mes)",
         [0.003] * len(meses_fcst_labels), [0.006] * len(meses_fcst_labels), [0.012] * len(meses_fcst_labels),
         nota_txt="Aplica a nómina + arriendo/servicios + otros gastos proyectados.")
+    # Fila donde vive el caso "Base" de cada driver (3 filas debajo de la fila
+    # del resultado, ver bloque_driver): el Plan (Datos_Graficos) lo usa SIEMPRE,
+    # sin importar qué escenario esté activo en Inputs!E6.
+    for k in ("crecimiento_almuerzo", "crecimiento_cena", "costo_insumos_pct", "inflacion_gastos"):
+        driver_rows[k + "_base"] = driver_rows[k] + 3
 
     r += 1
     banner(ws, r, "Otros Supuestos", col_fin=col_fin)
@@ -1437,6 +1442,111 @@ def hoja_outputs(wb, model_refs):
     return ws
 
 
+# ══════════════════════════════════════════════════════════════════════
+# HOJA: DATOS_GRAFICOS — tablas de apoyo de los gráficos nuevos
+# ══════════════════════════════════════════════════════════════════════
+def _mes_siguiente(periodo):
+    a, m = int(periodo[:4]), int(periodo[5:])
+    return f"{a + (m == 12)}-{(m % 12) + 1:02d}"
+
+
+def etiqueta_mes(periodo, corto=True):
+    """'2026-09' → 'sep-26' (o 'sep 2026' si corto=False)."""
+    a, m = int(periodo[:4]), int(periodo[5:])
+    return f"{MESES_ES[m - 1]}-{str(a)[2:]}" if corto else f"{MESES_ES[m - 1]} {a}"
+
+
+class DatosGraficos:
+    """Hoja de apoyo: cada gráfico nuevo lee de una tabla de esta hoja. Cada
+    tabla se abre con un banner y una línea de ORIGEN que dice de dónde salen
+    los números: FÓRMULAS hacia Model/Inputs (cuando el dato ya está en el
+    modelo) o "calculado por el script al generar el modelo" (lo que Model no
+    tiene: diario, día de la semana, pedidos). Las tablas mensuales ponen el
+    mes i en la columna COL_DATO + i."""
+    COL_DATO = 3   # C: primera columna de datos (B lleva las etiquetas)
+
+    def __init__(self, wb, ancho_cols=32):
+        ws = wb.create_sheet("Datos_Graficos")
+        ws.sheet_view.showGridLines = False
+        ws.column_dimensions["A"].width = 2
+        ws.column_dimensions["B"].width = 44
+        for c in range(self.COL_DATO, self.COL_DATO + ancho_cols):
+            ws.column_dimensions[get_column_letter(c)].width = 12
+        self.ws, self.col_fin = ws, self.COL_DATO + ancho_cols - 1
+        banner(ws, 2, "Datos de apoyo de los gráficos", col_fin=self.col_fin)
+        nota(ws, 3, "Esta hoja alimenta A_Resultado, B_Ingresos, C_Egresos, E_Proyeccion, F_Familia y G_Extras. No la edites: se regenera con el script. "
+                    "Valores en $ millones (mensual) o $ miles (diario) donde el gráfico lo pide.")
+        self.fila = 5
+        self.refs = {}
+
+    def col(self, i):
+        """Columna (número) de la hoja donde va el mes i de una tabla mensual."""
+        return self.COL_DATO + i
+
+    def seccion(self, titulo, origen):
+        """Abre una tabla (banner + línea de origen) y devuelve la primera fila libre."""
+        banner(self.ws, self.fila, titulo, col_fin=self.col_fin)
+        nota(self.ws, self.fila + 1, origen)
+        return self.fila + 3
+
+    def cerrar(self, ultima_fila):
+        """Deja la siguiente tabla 3 filas debajo de la última escrita."""
+        self.fila = ultima_fila + 3
+
+
+def tabla_plan(dg, ctx):
+    """PLAN = proyección del escenario BASE a un mes: para cada mes real que
+    tenga un mes anterior real, parte del real de ese mes anterior (hoja
+    Model) y aplica los drivers del caso Base del PRIMER mes proyectado
+    (hoja Inputs) — crecimiento de almuerzo y de comida rápida, costo de
+    insumos % e inflación de gastos fijos. No hay presupuesto congelado: el
+    Plan se recalcula con las fórmulas (si cambias los drivers Base, cambia).
+    Meses sin Plan (el primer mes real, o uno sin mes anterior real) quedan
+    en blanco. Plan anual = SUMA de los Plan mensuales (para meses sin real,
+    la proyección del modelo)."""
+    ws, mr, dr = dg.ws, ctx["mr"], ctx["dr"]
+    labels, n_hist = mr["labels_periodo"], mr["n_hist"]
+    r0 = dg.seccion(
+        "Plan = proyección Base a un mes",
+        "FÓRMULAS: real del mes anterior (Model) × drivers del caso Base del primer mes proyectado (Inputs). Pesos ($). Solo meses reales con mes anterior real.")
+    for i, lab in enumerate(labels):
+        c = ws.cell(row=r0, column=dg.col(i), value=lab)
+        c.font = Font(bold=True, color=NEGRO if i < n_hist else AZUL_TEXTO)
+        c.alignment = Alignment(horizontal="center")
+    nombres = ["ing_alm", "ing_cena", "ingresos", "insumos", "nomina", "arriendo", "otros", "egresos", "utilidad"]
+    titulos = ["Plan Ingresos Almuerzo", "Plan Ingresos Comidas Rápidas", "Plan Ingresos Totales", "Plan Insumos", "Plan Nómina",
+               "Plan Arriendo + Servicios", "Plan Otros Gastos", "Plan Egresos Totales", "Plan Utilidad Neta"]
+    filas = {n: r0 + 1 + k for k, n in enumerate(nombres)}
+    for n, t in zip(nombres, titulos):
+        label(ws, filas[n], t, bold=n in ("ingresos", "egresos", "utilidad"))
+    tiene_plan = [False] * len(labels)
+    if ctx["fcst"]:
+        for i in range(1, n_hist):
+            tiene_plan[i] = labels[i] == _mes_siguiente(labels[i - 1])
+        base_f = lambda k: f"Inputs!$F${dr[k + '_base']}"
+        for i in range(n_hist):
+            if not tiene_plan[i]:
+                continue
+            c, cl = dg.col(i), get_column_letter(dg.col(i))
+            cp = get_column_letter(mr["col_ini"] + i - 1)  # columna del mes anterior en Model
+            f = lambda n: f"{cl}{filas[n]}"
+            numero(ws, filas["ing_alm"], c, f"=Model!{cp}{mr['fila_ing_alm']}*(1+{base_f('crecimiento_almuerzo')})")
+            numero(ws, filas["ing_cena"], c, f"=Model!{cp}{mr['fila_ing_cena']}*(1+{base_f('crecimiento_cena')})")
+            numero(ws, filas["ingresos"], c, f"={f('ing_alm')}+{f('ing_cena')}", bold=True)
+            numero(ws, filas["insumos"], c, f"={f('ingresos')}*{base_f('costo_insumos_pct')}")
+            numero(ws, filas["nomina"], c, f"=ABS(Model!{cp}{mr['fila_nomina']})*(1+{base_f('inflacion_gastos')})")
+            numero(ws, filas["arriendo"], c, f"=ABS(Model!{cp}{mr['fila_arriendo']})*(1+{base_f('inflacion_gastos')})")
+            numero(ws, filas["otros"], c, f"=ABS(Model!{cp}{mr['fila_otros']})*(1+{base_f('inflacion_gastos')})")
+            numero(ws, filas["egresos"], c, f"=SUM({f('insumos')}:{f('otros')})", bold=True)
+            numero(ws, filas["utilidad"], c, f"={f('ingresos')}-{f('egresos')}", bold=True)
+    ultima = filas["utilidad"]
+    if not any(tiene_plan):
+        nota(ws, ultima + 1, "Sin Plan: no hay ningún mes real con un mes anterior real (o no hay meses proyectados). Los elementos que dependen del Plan se omiten.")
+        ultima += 1
+    dg.refs["plan"] = dict(filas=filas, tiene_plan=tiene_plan, r_cab=r0)
+    dg.cerrar(ultima)
+
+
 def resolver_mes_foco(mes_arg, hist_df):
     """Mes en foco de los gráficos mensuales (--mes AAAA-MM). Por defecto, el
     último mes con datos reales. Debe ser un mes real (de `hist_df`)."""
@@ -1463,6 +1573,31 @@ def reportar_huerfanas(diario):
         print(f"    {f['origen']}: categoría {f['categoria']!r} — {int(f['n'])} fila(s), ${f['monto']:,.0f}")
 
 
+def etiquetas_proyeccion(hist_df, hasta, meses_proyeccion):
+    """Etiquetas AAAA-MM de los meses proyectados, a partir del último mes real.
+    --meses-proyeccion N (si se pasó) manda; si no, se proyecta hasta --hasta."""
+    ultimo = hist_df.iloc[-1]
+    a, m = int(ultimo["anio"]), int(ultimo["mes"])
+    if meses_proyeccion is not None:
+        n = meses_proyeccion
+    else:
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", hasta or ""):
+            print(f"--hasta debe tener formato AAAA-MM (recibido: {hasta!r}).")
+            sys.exit(1)
+        n = (int(hasta[:4]) - a) * 12 + (int(hasta[5:]) - m)
+        if n < 1:
+            print(f"--hasta {hasta} no es posterior al último mes real ({a}-{m:02d}): no habría meses que proyectar.")
+            sys.exit(1)
+    etiquetas = []
+    for _ in range(n):
+        m += 1
+        if m > 12:
+            m = 1
+            a += 1
+        etiquetas.append(f"{a}-{m:02d}")
+    return etiquetas
+
+
 # ══════════════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════════════
@@ -1470,7 +1605,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("archivo", nargs="?", help="Excel exportado desde la pestaña Datos")
     ap.add_argument("--demo", action="store_true", help="Usar datos de ejemplo")
-    ap.add_argument("--meses-proyeccion", type=int, default=6)
+    ap.add_argument("--hasta", default="2027-12", metavar="AAAA-MM", help=(
+        "Último mes de la proyección (por defecto 2027-12): el script calcula solo "
+        "cuántos meses proyectar a partir del último mes real."
+    ))
+    ap.add_argument("--meses-proyeccion", type=int, default=None, help=(
+        "Alternativa a --hasta: cantidad de meses a proyectar hacia adelante. "
+        "Si se pasa, manda sobre --hasta."
+    ))
     ap.add_argument("--mes", default=None, metavar="AAAA-MM", help=(
         "Mes en foco de los gráficos mensuales (por defecto, el último mes con datos reales)."
     ))
@@ -1509,15 +1651,7 @@ def main():
     mes_foco = resolver_mes_foco(args.mes, hist_df)
     reportar_huerfanas(diario)
 
-    ultimo = hist_df.iloc[-1]
-    a, m = int(ultimo["anio"]), int(ultimo["mes"])
-    meses_fcst_labels = []
-    for _ in range(args.meses_proyeccion):
-        m += 1
-        if m > 12:
-            m = 1
-            a += 1
-        meses_fcst_labels.append(f"{a}-{m:02d}")
+    meses_fcst_labels = etiquetas_proyeccion(hist_df, args.hasta, args.meses_proyeccion)
 
     wb = Workbook()
     wb.remove(wb.active)
@@ -1527,8 +1661,14 @@ def main():
     ws_model, model_refs = hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows)
     hoja_outputs(wb, model_refs)
 
-    # Orden final de hojas: Cover, Outputs, Inputs, Model
-    wb._sheets = [wb["Cover"], wb["Outputs"], wb["Inputs"], wb["Model"]]
+    # Hojas de apoyo y gráficos nuevos (ctx = todo lo que necesitan para armar sus tablas)
+    ctx = dict(hist=hist_df, fcst=meses_fcst_labels, mr=model_refs, dr=driver_rows, diario=diario,
+               mes_foco=mes_foco, es_demo=es_demo, extra=extra)
+    dg = DatosGraficos(wb)
+    tabla_plan(dg, ctx)
+
+    # Orden final de hojas: Cover, Outputs, Inputs, Model, Datos_Graficos
+    wb._sheets = [wb["Cover"], wb["Outputs"], wb["Inputs"], wb["Model"], dg.ws]
     wb.active = 0
 
     wb.save(salida_path)
