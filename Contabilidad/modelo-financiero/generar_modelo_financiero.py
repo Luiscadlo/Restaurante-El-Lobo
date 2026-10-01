@@ -8,7 +8,7 @@ con la MISMA estructura del curso "3-Statement Modeling" de CFI (Cover /
 Outputs / Inputs / Model), simplificado para el tamaño real de El Lobo.
 
 Uso:
-    python generar_modelo_financiero.py <archivo_exportado.xlsx> [--meses-proyeccion N]
+    python generar_modelo_financiero.py <archivo_exportado.xlsx> [--hasta AAAA-MM | --meses-proyeccion N] [--mes AAAA-MM]
     python generar_modelo_financiero.py --demo
 
     <archivo_exportado.xlsx>  El archivo que genera el botón "Exportar todo a
@@ -39,6 +39,7 @@ Qué queda como ESTRUCTURA para completar más adelante (tal como se pidió):
 Requiere: pip install openpyxl pandas
 """
 
+import math
 import re
 import sys
 import argparse
@@ -68,7 +69,16 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
-from openpyxl.chart import BarChart, LineChart, Reference
+from openpyxl.chart import BarChart, LineChart, DoughnutChart, Reference, Series
+from openpyxl.chart.axis import ChartLines
+from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.legend import LegendEntry
+from openpyxl.chart.marker import Marker
+from openpyxl.chart.text import RichText
+from openpyxl.drawing.line import LineProperties
+from openpyxl.drawing.text import Paragraph, ParagraphProperties, CharacterProperties, RichTextProperties
+from openpyxl.formatting.rule import ColorScaleRule, FormulaRule
+from openpyxl.worksheet.pagebreak import Break
 from openpyxl.chart.series import SeriesLabel, DataPoint
 from openpyxl.chart.shapes import GraphicalProperties
 
@@ -730,9 +740,9 @@ def _diario_de_ejemplo(hist, hoy):
             f = d.date().isoformat()
             bruto = alm_neto[j] + desay[j]
             ef = int(round(bruto * rng.uniform(.55, .70), -2))
-            aj = rng.choice([0] * 14 + [-2000, 3000]) if bruto else 0
+            aj = rng.choice([0] * 14 + [-2000, 3000]) if bruto else 0   # el ajuste se descuenta de la transferencia: efectivo + transferencia + ajuste = bruto
             pf = (float(rng.choice([8, 9, 9, 10])) if rng.random() > .15 else None) if reciente else None
-            cierres.append(dict(fecha=f, turno="almuerzo", efectivo=ef, transferencia=bruto - ef, ajuste_efectivo=aj,
+            cierres.append(dict(fecha=f, turno="almuerzo", efectivo=ef, transferencia=bruto - ef - aj, ajuste_efectivo=aj,
                                 ajuste_transferencia=0, manual=(manual_dia is not None and d == manual_dia), platos_familia=pf))
             efc = int(round(cena[j] * rng.uniform(.50, .65), -2))
             cierres.append(dict(fecha=f, turno="cena", efectivo=efc, transferencia=cena[j] - efc, ajuste_efectivo=0,
@@ -838,6 +848,17 @@ def hoja_cover(wb, n_hist, n_fcst, es_demo):
         cell.hyperlink = f"#'{nombre}'!A1"
         ws.cell(row=r, column=5, value=desc).font = FONT_LABEL
         r += 2
+    for nombre, desc in [
+        ("A_Resultado", "¿Cómo me fue este mes? — tarjetas y gráficos #1–#4 y #12"),
+        ("B_Ingresos", "¿De dónde viene la plata? — gráficos #5–#9"),
+        ("C_Egresos", "¿En qué se va la plata? — gráficos #10–#11"),
+        ("E_Proyeccion", "¿Hacia dónde voy? — gráficos #13–#15"),
+        ("F_Familia", "Si la familia pagara — gráficos #16–#18"),
+        ("G_Extras", "Complementarios — gráficos #19–#21"),
+        ("Datos_Graficos", "Tablas de apoyo de los gráficos (no editar)"),
+    ]:
+        ws.cell(row=r, column=3, value=f"· {nombre} — {desc}").font = FONT_LABEL   # una sola celda: se lee completa
+        r += 1
 
     r += 1
     ws.cell(row=r, column=3, value="Resumen del período cargado").font = FONT_BANNER
@@ -931,19 +952,23 @@ def hoja_inputs(wb, meses_fcst_labels):
         return r_result, siguiente
 
     driver_rows = {}
+    # Caso Base de cada driver (valores sin cambios): el Plan en pandas (plan_pandas)
+    # los usa para decidir rangos de ejes y contrastar las fórmulas de Excel.
+    BASE = dict(crecimiento_almuerzo=0.015, crecimiento_cena=0.015, costo_insumos_pct=0.35, inflacion_gastos=0.006)
+    driver_rows["_base_valores"] = BASE
     r = 12
     driver_rows["crecimiento_almuerzo"], r = bloque_driver(
         r, "Crecimiento de ventas — Almuerzo (%/mes)",
-        [0.03] * len(meses_fcst_labels), [0.015] * len(meses_fcst_labels), [0.0] * len(meses_fcst_labels))
+        [0.03] * len(meses_fcst_labels), [BASE["crecimiento_almuerzo"]] * len(meses_fcst_labels), [0.0] * len(meses_fcst_labels))
     driver_rows["crecimiento_cena"], r = bloque_driver(
         r, "Crecimiento de ventas — Comidas rápidas (%/mes)",
-        [0.035] * len(meses_fcst_labels), [0.015] * len(meses_fcst_labels), [-0.01] * len(meses_fcst_labels))
+        [0.035] * len(meses_fcst_labels), [BASE["crecimiento_cena"]] * len(meses_fcst_labels), [-0.01] * len(meses_fcst_labels))
     driver_rows["costo_insumos_pct"], r = bloque_driver(
         r, "Costo de insumos (% de ingresos)",
-        [0.32] * len(meses_fcst_labels), [0.35] * len(meses_fcst_labels), [0.40] * len(meses_fcst_labels))
+        [0.32] * len(meses_fcst_labels), [BASE["costo_insumos_pct"]] * len(meses_fcst_labels), [0.40] * len(meses_fcst_labels))
     driver_rows["inflacion_gastos"], r = bloque_driver(
         r, "Inflación de gastos fijos — nómina / arriendo / servicios / otros (%/mes)",
-        [0.003] * len(meses_fcst_labels), [0.006] * len(meses_fcst_labels), [0.012] * len(meses_fcst_labels),
+        [0.003] * len(meses_fcst_labels), [BASE["inflacion_gastos"]] * len(meses_fcst_labels), [0.012] * len(meses_fcst_labels),
         nota_txt="Aplica a nómina + arriendo/servicios + otros gastos proyectados.")
     # Fila donde vive el caso "Base" de cada driver (3 filas debajo de la fila
     # del resultado, ver bloque_driver): el Plan (Datos_Graficos) lo usa SIEMPRE,
@@ -970,10 +995,12 @@ def hoja_inputs(wb, meses_fcst_labels):
     r += 1
     nota(ws, r, "La familia come sin pagar. Estos supuestos solo se usan para días SIN registro de platos y para meses proyectados (ver Model → Consumo Familiar).")
     r += 2
+    FAM = dict(personas=9, alm_dia=1, dias_proy=26)   # valores por defecto (celdas editables de Inputs)
+    driver_rows["_familia_valores"] = FAM
     entradas = [
-        ("fam_personas", "Personas que comen almuerzo", 9, "0"),
-        ("fam_alm_dia", "Almuerzos por persona por día operado", 1, "0.0#"),
-        ("fam_dias_proy", "Días operados por mes en meses proyectados", 26, "0"),
+        ("fam_personas", "Personas que comen almuerzo", FAM["personas"], "0"),
+        ("fam_alm_dia", "Almuerzos por persona por día operado", FAM["alm_dia"], "0.0#"),
+        ("fam_dias_proy", "Días operados por mes en meses proyectados", FAM["dias_proy"], "0"),
         ("fam_ticket_override", "Ticket almuerzo — override ($)", None, FMT_CONTABLE),
         ("fam_cr_proy", "Consumo familiar de comida rápida proyectado por mes ($)", 0, FMT_CONTABLE),
     ]
@@ -1721,6 +1748,1826 @@ def tabla_plan(dg, ctx):
     dg.cerrar(ultima)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# GRÁFICOS "TIPO PRESENTACIÓN" — infraestructura común
+# ══════════════════════════════════════════════════════════════════════
+# Un color = un significado. TODOS los gráficos nuevos usan SOLO estos nombres:
+# la estética final se ajusta cambiando únicamente este diccionario.
+PALETA = {
+    "ingresos":      "2F6690",   # azul oscuro   — ventas / ingresos
+    "egresos":       "B07AA1",   # malva         — egresos / costos
+    "utilidad":      "3FA66B",   # verde         — utilidad / lo favorable
+    "alerta":        "C0392B",   # rojo          — por debajo de lo esperado / desfavorable
+    "desayuno":      "E8C468",   # amarillo      — turno desayuno
+    "almuerzo":      "4C7EA6",   # azul medio    — turno almuerzo
+    "comida_rapida": "D98B3F",   # naranja       — turno comida rápida
+    "real":          "2F6690",   # lo ya ocurrido (sólido)
+    "proyectado":    "9DB9D3",   # lo proyectado (tono claro)
+    "plan":          "E0A030",   # Plan = proyección Base a un mes
+    "neutro_claro":  "D9D9D9",   # rejillas, referencias, "otros"
+    "neutro_oscuro": "404040",   # títulos y textos
+}
+
+
+def tono_claro(hex_color, factor=0.55):
+    """Mezcla un color con blanco (factor 0 = igual, 1 = blanco): tono claro
+    del MISMO significado, p. ej. el proyectado de una serie real."""
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    return "".join(f"{int(round(c + (255 - c) * factor)):02X}" for c in (r, g, b))
+
+
+# Maquetación: cada gráfico es una "lámina" del tamaño de una página horizontal:
+# título (celda grande) + subtítulo con el hallazgo + gráfico + nota de fuente/escala.
+ANCHO_COL = 10          # ancho de las columnas B..N de las hojas de gráficos
+N_COLS = 13             # B..N
+ALTO_BLOQUE = 31        # filas por lámina (salto de página al final)
+CHART_ANCHO, CHART_ALTO = 25.0, 12.6   # cm
+
+
+def fmt_n(x, dec=0):
+    """Número con separador de miles '.' y decimal ',' (estilo es-CO)."""
+    s = f"{x:,.{dec}f}"
+    return s.replace(",", "§").replace(".", ",").replace("§", ".")
+
+
+def fmt_pesos(x):
+    return ("−" if x < 0 else "") + "$" + fmt_n(abs(x))
+
+
+def fmt_mill(x, dec=1):
+    return ("−" if x < 0 else "") + "$" + fmt_n(abs(x) / 1e6, dec) + " M"
+
+
+def fmt_pct(x, dec=0, signo=False):
+    s = fmt_n(abs(x) * 100, dec) + "%"
+    return (("+" if x > 0 else "−" if x < 0 else "") + s) if signo else (("−" if x < 0 else "") + s)
+
+
+def techo_bonito(x):
+    """Redondea un máximo hacia arriba a un valor 'redondo' para el eje Y."""
+    if x <= 0:
+        return 1
+    import math
+    p = 10 ** math.floor(math.log10(x))
+    for k in (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10):
+        if x <= k * p:
+            return k * p
+    return 10 * p
+
+
+class HojaGraficos:
+    """Una hoja de láminas. Cada lámina = bloque de ALTO_BLOQUE filas con salto
+    de página al final. Las hojas de gráficos no usan cuadrícula."""
+
+    def __init__(self, wb, nombre):
+        ws = wb.create_sheet(nombre)
+        ws.sheet_view.showGridLines = False
+        ws.column_dimensions["A"].width = 2
+        for c in range(2, 2 + N_COLS):
+            ws.column_dimensions[get_column_letter(c)].width = ANCHO_COL
+        ws.column_dimensions[get_column_letter(2 + N_COLS)].width = 2
+        self.ws, self.nombre, self.fila = ws, nombre, 2
+
+    def lamina(self, titulo, subtitulo, nota_txt, alto=ALTO_BLOQUE):
+        """Escribe título, subtítulo y nota de una lámina y devuelve la fila donde
+        anclar el gráfico. `subtitulo` puede ser una fórmula (empieza con '=')."""
+        ws, r = self.ws, self.fila
+        ultima_col = get_column_letter(1 + N_COLS)
+        ws.merge_cells(f"B{r}:{ultima_col}{r}")
+        c = ws.cell(row=r, column=2, value=titulo)
+        c.font = Font(name="Calibri", size=18, bold=True, color=PALETA["neutro_oscuro"])
+        c.alignment = Alignment(vertical="center")
+        ws.row_dimensions[r].height = 30
+        ws.merge_cells(f"B{r + 1}:{ultima_col}{r + 1}")
+        s = ws.cell(row=r + 1, column=2, value=subtitulo)
+        s.font = Font(name="Calibri", size=11, color=PALETA["neutro_oscuro"])
+        s.alignment = Alignment(wrap_text=True, vertical="top")
+        ws.row_dimensions[r + 1].height = 32
+        fila_nota = r + alto - 3
+        ws.merge_cells(f"B{fila_nota}:{ultima_col}{fila_nota}")
+        n = ws.cell(row=fila_nota, column=2, value=nota_txt)
+        n.font = Font(name="Calibri", size=9, italic=True, color=GRIS_NOTA)
+        n.alignment = Alignment(wrap_text=True, vertical="top")
+        ws.row_dimensions[fila_nota].height = 36
+        ws.row_breaks.append(Break(id=r + alto - 1))
+        self.fila = r + alto
+        return r + 3
+
+    def cerrar(self):
+        ws = self.ws
+        ws.print_area = f"A1:{get_column_letter(2 + N_COLS)}{self.fila - 1}"
+        config_impresion(ws, horizontal=True)
+
+
+# ── utilidades de gráficos ────────────────────────────────────────────
+def serie_fila(ws, fila, c1, c2, titulo):
+    return Series(Reference(ws, min_col=c1, max_col=c2, min_row=fila, max_row=fila), title=titulo)
+
+
+def serie_col(ws, col, r1, r2, titulo):
+    return Series(Reference(ws, min_col=col, min_row=r1, max_row=r2), title=titulo)
+
+
+def titulo_eje(axis, texto):
+    """Título de eje SIN overlay (si no, se dibuja encima de las etiquetas)."""
+    axis.title = texto
+    axis.title.overlay = False
+
+
+def ejes(chart, x_titulo=None, y_titulo=None, y_fmt=None, y_min=None, y_max=None, rot_x=None, x_fmt=None):
+    """openpyxl 3.1: sin delete=False los ejes NO se ven."""
+    chart.x_axis.delete = False
+    chart.y_axis.delete = False
+    chart.roundedCorners = False
+    if x_titulo:
+        titulo_eje(chart.x_axis, x_titulo)
+    if y_titulo:
+        titulo_eje(chart.y_axis, y_titulo)
+    if y_fmt:
+        chart.y_axis.number_format = y_fmt
+        chart.y_axis.numFmt.sourceLinked = False
+    if x_fmt:
+        chart.x_axis.number_format = x_fmt
+    if y_min is not None:
+        chart.y_axis.scaling.min = y_min
+    if y_max is not None:
+        chart.y_axis.scaling.max = y_max
+    chart.y_axis.majorGridlines = ChartLines(spPr=GraphicalProperties(ln=LineProperties(solidFill=PALETA["neutro_claro"], w=6350)))
+    if rot_x is not None:
+        chart.x_axis.txPr = RichText(
+            bodyPr=RichTextProperties(rot=int(rot_x * 60000), vert="horz"),
+            p=[Paragraph(pPr=ParagraphProperties(defRPr=CharacterProperties(sz=900)), endParaRPr=CharacterProperties())])
+
+
+def tamano(chart, ancho=CHART_ANCHO, alto=CHART_ALTO):
+    chart.width, chart.height = ancho, alto
+
+
+def leyenda(chart, pos="b", ocultar_idx=()):
+    if chart.legend is None:
+        return
+    chart.legend.position = pos
+    chart.legend.overlay = False
+    chart.legend.legendEntry = [LegendEntry(idx=i, delete=True) for i in ocultar_idx]
+
+
+def sin_leyenda(chart):
+    chart.legend = None
+
+
+def color_serie(s, color, linea=False, ancho_pt=2.25, guion=None, marcador=False, suave=False):
+    """Pinta una serie: barra (relleno) o línea."""
+    if linea:
+        s.graphicalProperties = GraphicalProperties()
+        s.graphicalProperties.line.solidFill = color
+        s.graphicalProperties.line.width = int(ancho_pt * 12700)
+        if guion:
+            s.graphicalProperties.line.dashStyle = guion
+        s.smooth = suave
+        if marcador:
+            s.marker = Marker(symbol="circle", size=6)
+            s.marker.graphicalProperties = GraphicalProperties(solidFill=color)
+            s.marker.graphicalProperties.line.solidFill = color
+        else:
+            s.marker = Marker(symbol="none")
+    else:
+        s.graphicalProperties = GraphicalProperties(solidFill=color)
+        s.graphicalProperties.line.solidFill = color
+        s.invertIfNegative = False   # sin esto, una barra negativa sale hueca (relleno blanco)
+
+
+def serie_invisible(s):
+    s.graphicalProperties = GraphicalProperties(noFill=True)
+    s.graphicalProperties.line.noFill = True
+
+
+def puntos_color(s, colores):
+    """Color por punto (barras): lista de hex, uno por categoría."""
+    s.data_points = [DataPoint(idx=i, spPr=GraphicalProperties(solidFill=c)) for i, c in enumerate(colores) if c]
+
+
+def etiquetas(s, fmt="0.0", pos=None, tam=900, color=None):
+    s.dLbls = DataLabelList()
+    s.dLbls.showVal = True
+    s.dLbls.showSerName = s.dLbls.showCatName = s.dLbls.showLegendKey = s.dLbls.showPercent = False
+    s.dLbls.numFmt = fmt
+    if pos:
+        s.dLbls.position = pos
+    s.dLbls.txPr = RichText(
+        bodyPr=RichTextProperties(),
+        p=[Paragraph(pPr=ParagraphProperties(defRPr=CharacterProperties(sz=tam, b=True, solidFill=color) if color else CharacterProperties(sz=tam)),
+                     endParaRPr=CharacterProperties())])
+
+
+def combo_secundario(bar, linea, y_titulo=None, y_fmt=None, y_min=None, y_max=None):
+    """Barras (eje izq.) + líneas (eje derecho)."""
+    linea.y_axis.axId = 200
+    linea.y_axis.delete = False
+    linea.y_axis.crosses = "max"
+    linea.y_axis.majorGridlines = None
+    if y_titulo:
+        titulo_eje(linea.y_axis, y_titulo)
+    if y_fmt:
+        linea.y_axis.number_format = y_fmt
+        linea.y_axis.numFmt.sourceLinked = False
+    if y_min is not None:
+        linea.y_axis.scaling.min = y_min
+    if y_max is not None:
+        linea.y_axis.scaling.max = y_max
+    bar += linea
+    return bar
+
+
+def nuevo_bar(horizontal=False, apilado=False, ancho_gap=60):
+    ch = BarChart()
+    ch.type = "bar" if horizontal else "col"
+    if apilado:
+        ch.grouping = "stacked"
+    ch.overlap = 100 if apilado else None
+    ch.gapWidth = ancho_gap
+    tamano(ch)
+    return ch
+
+
+def nuevo_linea():
+    ch = LineChart()
+    tamano(ch)
+    return ch
+
+
+# ══════════════════════════════════════════════════════════════════════
+# CONTEXTO DEL MES EN FOCO + utilidades de acceso a Model / Datos_Graficos
+# ══════════════════════════════════════════════════════════════════════
+MESES_LARGOS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+                "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def nombre_mes_largo(periodo):
+    return f"{MESES_LARGOS[int(periodo[5:]) - 1]} {periodo[:4]}"
+
+
+def preparar_foco(ctx):
+    """Calcula (y guarda en ctx) lo que comparten los gráficos del mes en foco."""
+    hist, diario, mf = ctx["hist"], ctx["diario"], ctx["mes_foco"]
+    periodos = list(hist["periodo"])
+    ctx["periodos_reales"] = periodos
+    ctx["i"] = periodos.index(mf)
+    p = pd.Period(mf)
+    ini, fin = p.start_time.normalize(), p.end_time.normalize()
+    ctx["ini"], ctx["fin"] = ini, fin
+    ctx["dias_cal"] = list(pd.date_range(ini, fin))
+    ing = diario["ingresos"]
+    ctx["ing_m"] = ing[(ing.index >= ini) & (ing.index <= fin)]
+    ctx["op_m"] = ctx["ing_m"][ctx["ing_m"]["total"] > 0]
+    egr = diario["egresos"]
+    egr_m = egr[(egr["fecha"] >= ini) & (egr["fecha"] <= fin)] if not egr.empty else egr
+    ctx["egr_m"] = egr_m
+    ctx["egr_dia"] = egr_m.groupby("fecha")["monto"].sum() if not egr_m.empty else pd.Series(dtype=float)
+    ultimo_dato = ing.index.max() if not ing.empty else ini
+    # ¿el mes ya terminó? (hay datos hasta su último día, o hoy ya pasó)
+    ctx["mes_terminado"] = bool(ultimo_dato >= fin or pd.Timestamp(diario["hoy"]) > fin)
+    ctx["nombre_mes"] = nombre_mes_largo(mf)
+    ctx["fila_hist"] = hist.iloc[ctx["i"]]
+
+
+def cm(ctx, clave, i):
+    """Referencia a una celda de Model: clave de model_refs ('fila_ingresos'…)
+    o del bloque de consumo familiar ('dias_op', 'pe_real'…), mes i (0 = primer mes real)."""
+    mr = ctx["mr"]
+    fila = mr[clave] if clave in mr else mr["fam"][clave]
+    return f"Model!{get_column_letter(mr['col_ini'] + i)}{fila}"
+
+
+def hay_plan(ctx, i=None):
+    plan = ctx["dg"].refs.get("plan")
+    return bool(plan and plan["tiene_plan"][ctx["i"] if i is None else i])
+
+
+def cplan(ctx, clave, i=None):
+    """Referencia a una celda del Plan (hoja Datos_Graficos) para el mes i."""
+    dg = ctx["dg"]
+    i = ctx["i"] if i is None else i
+    return f"Datos_Graficos!{get_column_letter(dg.col(i))}{dg.refs['plan']['filas'][clave]}"
+
+
+def escribir_tabla(dg, r0, encabezados, filas, formatos=None, col0=2):
+    """Escribe una tabla vertical en Datos_Graficos: fila de encabezados en r0 y
+    los datos debajo. Valores calculados por el script van en azul (constantes);
+    las fórmulas (empiezan con '=') en negro. Devuelve (primera, última) fila de datos."""
+    ws = dg.ws
+    for j, h in enumerate(encabezados):
+        c = ws.cell(row=r0, column=col0 + j, value=h)
+        c.font = Font(name="Calibri", size=10, bold=True)
+        c.alignment = Alignment(horizontal="center" if j else "left", wrap_text=True)
+    for k, fila in enumerate(filas):
+        for j, v in enumerate(fila):
+            if v is None:
+                continue
+            c = ws.cell(row=r0 + 1 + k, column=col0 + j, value=v)
+            if isinstance(v, str) and not v.startswith("="):
+                c.font = FONT_LABEL
+            else:
+                c.font = FONT_FORMULA if (isinstance(v, str) and v.startswith("=")) else Font(name="Calibri", size=10, color=AZUL_TEXTO)
+                c.number_format = (formatos[j] if formatos and formatos[j] else FMT_CONTABLE)
+    return r0 + 1, r0 + len(filas)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HOJA A_RESULTADO — ¿Cómo me fue este mes?
+# ══════════════════════════════════════════════════════════════════════
+def tabla_tarjetas(dg, ctx):
+    """Tabla de apoyo de las 6 tarjetas: valor del mes, del mes anterior, Plan y
+    variaciones. FÓRMULAS hacia Model / Plan (nada se calcula a mano)."""
+    i = ctx["i"]
+    tiene_ant = i > 0
+    tiene_plan = hay_plan(ctx)
+    r0 = dg.seccion("Tarjetas del mes en foco — " + ctx["nombre_mes"],
+                    "FÓRMULAS hacia Model (mes en foco y mes anterior) y hacia el Plan (Datos_Graficos). Diario = mensual ÷ días operados.")
+    dias = lambda j: cm(ctx, "dias_op", j)
+    costos = lambda j: f"-({cm(ctx,'fila_costo_insumos',j)}+{cm(ctx,'fila_nomina',j)}+{cm(ctx,'fila_arriendo',j)}+{cm(ctx,'fila_otros',j)})"
+    def valor(clave, j):
+        return {
+            "ingreso": f"=IF({dias(j)}=0,0,{cm(ctx,'fila_ingresos',j)}/{dias(j)})",
+            "gasto": f"=IF({dias(j)}=0,0,({costos(j)})/{dias(j)})",
+            "utilidad": f"=IF({dias(j)}=0,0,{cm(ctx,'fila_utilidad_neta',j)}/{dias(j)})",
+            "pe": f"={cm(ctx,'pe_real',j)}",
+            "ticket": f"={cm(ctx,'fila_tkt_alm',j)}",
+            "dias": f"={dias(j)}",
+        }[clave]
+    plan_claves = {"ingreso": "ingresos", "gasto": "egresos", "utilidad": "utilidad"}
+    filas, orden = [], ["ingreso", "gasto", "utilidad", "pe", "ticket", "dias"]
+    nombres = {"ingreso": "Ingreso diario promedio", "gasto": "Gasto diario promedio", "utilidad": "Utilidad diaria promedio",
+               "pe": "Punto de equilibrio diario", "ticket": "Ticket promedio almuerzo", "dias": "Días operados"}
+    for k, clave in enumerate(orden):
+        r = r0 + 1 + k
+        plan = None
+        if tiene_plan and clave in plan_claves:
+            plan = f"=IF({dias(i)}=0,0,{cplan(ctx, plan_claves[clave])}/{dias(i)})"
+        filas.append([
+            nombres[clave], valor(clave, i),
+            valor(clave, i - 1) if tiene_ant else None, plan,
+            f'=IF(OR(D{r}="",D{r}=0),"",C{r}/D{r}-1)',
+            f'=IF(OR(E{r}="",E{r}=0),"",C{r}/E{r}-1)',
+        ])
+    a, b = escribir_tabla(dg, r0, ["Indicador", "Mes en foco", "Mes anterior", "Plan", "Var. vs mes anterior", "Var. vs Plan"],
+                          filas, formatos=[None, FMT_CONTABLE, FMT_CONTABLE, FMT_CONTABLE, FMT_PCT, FMT_PCT])
+    dg.refs["tarjetas"] = dict(filas={c: a + k for k, c in enumerate(orden)})
+    dg.cerrar(b)
+
+
+def tarjeta(ws, fila, col, titulo, ref_valor, fmt_valor, ref_ant, ref_plan, fav_sube=True, con_plan=True):
+    """Una tarjeta KPI (3 columnas × 5 filas): título, valor grande y dos
+    líneas ▲▼ (vs mes anterior y vs Plan). Verde = favorable, rojo = desfavorable."""
+    c0, c2 = get_column_letter(col), get_column_letter(col + 2)
+    relleno = PatternFill("solid", fgColor=tono_claro(PALETA["neutro_claro"], 0.65))
+    for r in range(fila, fila + 5):
+        for c in range(col, col + 3):
+            ws.cell(row=r, column=c).fill = relleno
+        ws.cell(row=r, column=col).border = Border(left=Side(style="thick", color=PALETA["ingresos"]))
+    ws.merge_cells(f"{c0}{fila}:{c2}{fila}")
+    t = ws.cell(row=fila, column=col, value=titulo)
+    t.font = Font(name="Calibri", size=10, bold=True, color=GRIS_NOTA)
+    t.alignment = Alignment(horizontal="left", indent=1)
+    ws.merge_cells(f"{c0}{fila + 1}:{c2}{fila + 2}")
+    v = ws.cell(row=fila + 1, column=col, value=ref_valor)
+    v.font = Font(name="Calibri", size=22, bold=True, color=PALETA["neutro_oscuro"])
+    v.number_format = fmt_valor
+    v.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    lineas = [(fila + 3, ref_ant, "mes anterior", True)]
+    if con_plan:
+        lineas.append((fila + 4, ref_plan, "Plan", True))
+    for r, ref, txt, _ in lineas:
+        ws.merge_cells(f"{c0}{r}:{c2}{r}")
+        x = ws.cell(row=r, column=col, value=ref)
+        x.font = Font(name="Calibri", size=10, bold=True)
+        x.alignment = Alignment(horizontal="left", indent=1)
+        bien, mal = PALETA["utilidad"], PALETA["alerta"]
+        sube_c, baja_c = (bien, mal) if fav_sube else (mal, bien)
+        ws.conditional_formatting.add(f"{c0}{r}", FormulaRule(formula=[f'LEFT({c0}{r},1)="▲"'], font=Font(color=sube_c, bold=True)))
+        ws.conditional_formatting.add(f"{c0}{r}", FormulaRule(formula=[f'LEFT({c0}{r},1)="▼"'], font=Font(color=baja_c, bold=True)))
+
+
+def f_var_texto(celda_var, etiqueta):
+    """Texto '▲ 12,3% vs mes anterior' a partir de una celda de variación (o vacío).
+    FIXED respeta el separador decimal de la configuración regional (TEXT con "0.0" no)."""
+    return f'=IF({celda_var}="","sin {etiqueta}",IF({celda_var}>=0,"▲ ","▼ ")&FIXED(ABS({celda_var})*100,1)&"% vs {etiqueta}")'
+
+
+def f_mill(expr, dec=1):
+    """Fórmula-texto de un monto en $ millones, locale-safe: FIXED(x/1e6, 1)."""
+    return f"FIXED(({expr})/1000000,{dec})"
+
+
+def f_signo_pct(expr):
+    """Fórmula-texto '+12%' / '−5%' (entero) de una variación."""
+    return f'IF(({expr})>=0,"+","−")&FIXED(ABS({expr})*100,0)&"%"'
+
+
+def hoja_a_resultado(wb, ctx):
+    dg = ctx["dg"]
+    tabla_tarjetas(dg, ctx)
+    h = HojaGraficos(wb, "A_Resultado")
+    ws, i = h.ws, ctx["i"]
+    fh = ctx["fila_hist"]
+    T = dg.refs["tarjetas"]["filas"]
+    dgc = lambda clave, col: f"Datos_Graficos!{col}{T[clave]}"
+
+    # ── Lámina 0: tarjetas ──────────────────────────────────────────
+    ingresos_mes = float(fh["ingresos_almuerzo"] + fh["ingresos_cena"])
+    egresos_mes = float(fh["costo_insumos"] + fh["nomina"] + fh["arriendo_servicios"] + fh["otros_gastos"])
+    r = h.lamina(
+        f"¿Cómo me fue este mes? — {ctx['nombre_mes'].capitalize()}",
+        f"En {ctx['nombre_mes']} se vendieron {fmt_pesos(ingresos_mes)} y se gastaron {fmt_pesos(egresos_mes)} en {int(fh['dias_operados'])} días operados: "
+        f"quedaron {fmt_pesos(ingresos_mes - egresos_mes)} de utilidad.",
+        "Cada tarjeta compara con el mes anterior y, las tres primeras, con el Plan = proyección Base a un mes (real del mes anterior × drivers Base de Inputs). "
+        "▲▼ en verde = favorable, en rojo = desfavorable (en gasto y punto de equilibrio, subir es desfavorable). Todo diario = mensual ÷ días operados. "
+        "Fuente: hoja Model (fórmulas).")
+    tiles = [
+        ("INGRESO DIARIO PROMEDIO", "ingreso", True, True), ("GASTO DIARIO PROMEDIO", "gasto", False, True), ("UTILIDAD DIARIA PROMEDIO", "utilidad", True, True),
+        ("PUNTO DE EQUILIBRIO DIARIO", "pe", False, False), ("TICKET PROMEDIO ALMUERZO", "ticket", True, False), ("DÍAS OPERADOS", "dias", True, False),
+    ]
+    for k, (titulo, clave, fav_sube, con_plan) in enumerate(tiles):
+        fila = r + 1 + (k // 3) * 7
+        col = 2 + (k % 3) * 4
+        tarjeta(ws, fila, col, titulo, f"={dgc(clave, 'C')}", "$ #,##0" if clave != "dias" else "0",
+                f_var_texto(dgc(clave, "F"), "mes anterior"), f_var_texto(dgc(clave, "G"), "Plan"), fav_sube=fav_sube,
+                con_plan=con_plan and hay_plan(ctx))
+    if not hay_plan(ctx):
+        nota(ws, r + 15, "Sin Plan para este mes (necesita un mes anterior real y meses proyectados): las líneas 'vs Plan' se omiten.", col=2)
+
+    for g in (grafico_1, grafico_2, grafico_3, grafico_4, grafico_12):
+        g(h, ctx)
+    h.cerrar()
+    return h
+
+
+# ── #1 Ingreso diario vs. gasto diario promedio ───────────────────────
+def grafico_1(h, ctx):
+    ws, dg, i, fh = h.ws, ctx["dg"], ctx["i"], ctx["fila_hist"]
+    op = ctx["op_m"]
+    ingresos_mes = float(fh["ingresos_almuerzo"] + fh["ingresos_cena"])
+    egresos_mes = float(fh["costo_insumos"] + fh["nomina"] + fh["arriendo_servicios"] + fh["otros_gastos"])
+    n = max(int(fh["dias_operados"]), 1)
+    ing_prom, gas_prom = ingresos_mes / n, egresos_mes / n
+    por_debajo = int((op["total"] < gas_prom).sum())
+    r = h.lamina(
+        f"Ingreso diario vs. gasto diario promedio — {ctx['nombre_mes'].capitalize()}",
+        f"El ingreso diario promedio fue {fmt_pesos(ing_prom)} y el gasto diario promedio {fmt_pesos(gas_prom)}; "
+        f"en {por_debajo} de {len(op)} días operados el ingreso quedó por debajo del gasto diario promedio.",
+        "Escala: $ miles por día. Barras en rojo = días con ingreso menor al gasto diario promedio (el gasto total del mes ÷ días operados, incluye arriendo, nómina e insumos). "
+        "Solo días operados. Fuente: Cierres_Dia (ingresos) y Egresos + Gastos_Cierre (gasto promedio, vía Model).")
+    T = dg.refs["tarjetas"]["filas"]
+    r0 = dg.seccion("#1 — Ingreso diario del mes en foco ($ miles)",
+                    "Barras: calculado por el script al generar el modelo (Cierres_Dia). Líneas: FÓRMULAS hacia la tabla de tarjetas (promedios ÷ 1.000).")
+    filas = []
+    for d, row in op.iterrows():
+        v = row["total"] / 1000
+        filas.append([f"{d.day} {DIAS_SEMANA[d.dayofweek]}", None if row["total"] < gas_prom else v, v if row["total"] < gas_prom else None,
+                      f"=Datos_Graficos!$C${T['ingreso']}/1000", f"=Datos_Graficos!$C${T['gasto']}/1000"])
+    a, b = escribir_tabla(dg, r0, ["Día", "Ingreso ≥ gasto prom.", "Ingreso < gasto prom.", "Ingreso diario promedio", "Gasto diario promedio"],
+                          filas, formatos=[None, "#,##0", "#,##0", "#,##0", "#,##0"])
+    dg.cerrar(b)
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    bar = nuevo_bar(ancho_gap=40)
+    bar.overlap = 100
+    for col, color, nom in ((3, PALETA["ingresos"], "Ingreso del día"), (4, PALETA["alerta"], "Ingreso < gasto diario promedio")):
+        s = serie_col(dg.ws, col, a, b, nom)
+        color_serie(s, color)
+        bar.series.append(s)
+    bar.set_categories(cats)
+    techo = techo_bonito(max(op["total"].max() / 1000, ing_prom / 1000, gas_prom / 1000) * 1.06)
+    ejes(bar, x_titulo="Día operado", y_titulo="$ miles por día", y_fmt="#,##0", y_min=0, y_max=techo, rot_x=-90)
+    linea = nuevo_linea()
+    for col, color, nom, guion in ((5, PALETA["ingresos"], "Ingreso diario promedio", "dash"), (6, PALETA["egresos"], "Gasto diario promedio", "solid")):
+        s = serie_col(dg.ws, col, a, b, nom)
+        color_serie(s, color, linea=True, ancho_pt=2.5, guion=guion)
+        linea.series.append(s)
+    linea.set_categories(cats)
+    bar += linea
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ── helper: cascada (barras apiladas con base invisible) ───────────────
+def tabla_cascada(dg, titulo, origen, pasos, dec=1):
+    """Cascada en $ millones con FÓRMULAS. `pasos` = [(etiqueta, formula_en_pesos, tipo)],
+    tipo: 'total' (barra desde 0 hasta el valor) o 'delta' (flotante: suma/resta al acumulado).
+    Soporta valores que cruzan el cero (separa la parte positiva de la negativa).
+    Devuelve (primera, última fila, columnas) para armar el gráfico."""
+    r0 = dg.seccion(titulo, origen)
+    enc = ["Paso", "Valor ($ M)", "Inicio", "Fin", "Base (+)", "Valor (+)", "Base (−)", "Valor (−)"]
+    filas = []
+    for k, (et, f, tipo) in enumerate(pasos):
+        r = r0 + 1 + k
+        valor = f"=({f[1:] if f.startswith('=') else f})/1000000"
+        if tipo == "total":
+            ini, fin = "=0", f"=C{r}"
+        else:
+            ini, fin = (f"=E{r - 1}" if k else "=0"), f"=D{r}+C{r}"
+        filas.append([et, valor, ini, fin,
+                      f"=MAX(MIN(D{r},E{r}),0)", f"=MAX(MAX(D{r},E{r}),0)-MAX(MIN(D{r},E{r}),0)",
+                      f"=MIN(MAX(D{r},E{r}),0)", f"=MIN(MIN(D{r},E{r}),0)-MIN(MAX(D{r},E{r}),0)"])
+    # (columnas: B etiqueta, C valor, D inicio, E fin, F base+, G val+, H base−, I val−)
+    fmt_lab = "#,##0." + "0" * dec + ";-#,##0." + "0" * dec + ";;"   # las etiquetas heredan este formato: sin ceros
+    a, b = escribir_tabla(dg, r0, enc, filas, formatos=[None, "#,##0.00", "#,##0.00", "#,##0.00", "#,##0.00", fmt_lab, "#,##0.00", fmt_lab])
+    return a, b
+
+
+def grafico_cascada(h, dg, a, b, colores, y_titulo="$ millones", etiqueta_fmt="#,##0.0;-#,##0.0;;", y_fmt="#,##0.0"):
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    ch = nuevo_bar(apilado=True, ancho_gap=45)
+    series = []
+    for col, nom, visible in ((6, "Base (+)", False), (7, "Valor (+)", True), (8, "Base (−)", False), (9, "Valor (−)", True)):
+        s = serie_col(dg.ws, col, a, b, nom)
+        if visible:
+            color_serie(s, PALETA["neutro_claro"])
+            puntos_color(s, colores)
+            etiquetas(s, fmt=etiqueta_fmt, pos="inEnd", color="FFFFFF")
+        else:
+            serie_invisible(s)
+        ch.series.append(s)
+        series.append(s)
+    ch.set_categories(cats)
+    ejes(ch, y_titulo=y_titulo, y_fmt=y_fmt)
+    sin_leyenda(ch)
+    return ch
+
+
+# ── #2 ¿De cada $100 vendidos, cuánto queda? ──────────────────────────
+def grafico_2(h, ctx):
+    ws, dg, i, fh = h.ws, ctx["dg"], ctx["i"], ctx["fila_hist"]
+    ing = float(fh["ingresos_almuerzo"] + fh["ingresos_cena"])
+    ins, nom, arr, otr = (float(fh[k]) for k in ("costo_insumos", "nomina", "arriendo_servicios", "otros_gastos"))
+    ut = ing - ins - nom - arr - otr
+    por100 = lambda x: fmt_n(100 * x / ing, 1) if ing else "0"
+    r = h.lamina(
+        f"De cada $100 vendidos, ¿cuánto queda? — {ctx['nombre_mes'].capitalize()}",
+        f"De cada $100 vendidos: ${por100(ins)} van a insumos, ${por100(nom)} a nómina, ${por100(arr)} a arriendo y servicios, ${por100(otr)} a otros gastos "
+        f"y quedan ${por100(ut)} de utilidad.",
+        "Escala: $ millones del mes. La barra azul es el total vendido; cada paso resta un rubro hasta llegar a la utilidad. "
+        "Fuente: hoja Model — Estado de Resultados (fórmulas).")
+    pasos = [("Ingresos", f"={cm(ctx,'fila_ingresos',i)}", "total"),
+             ("Insumos", f"={cm(ctx,'fila_costo_insumos',i)}", "delta"),
+             ("Nómina", f"={cm(ctx,'fila_nomina',i)}", "delta"),
+             ("Arriendo y servicios", f"={cm(ctx,'fila_arriendo',i)}", "delta"),
+             ("Otros", f"={cm(ctx,'fila_otros',i)}", "delta"),
+             ("Utilidad", f"={cm(ctx,'fila_utilidad_neta',i)}", "total")]
+    a, b = tabla_cascada(dg, "#2 — Cascada de resultados del mes en foco ($ M)", "FÓRMULAS hacia Model. Las columnas Base son invisibles: sostienen las barras flotantes.", pasos)
+    dg.cerrar(b)
+    colores = [PALETA["ingresos"]] + [PALETA["egresos"]] * 4 + [PALETA["utilidad"] if ut >= 0 else PALETA["alerta"]]
+    ch = grafico_cascada(h, dg, a, b, colores)
+    ejes(ch, x_titulo="Paso del estado de resultados", y_titulo="$ millones", y_fmt="#,##0.0")
+    ws.add_chart(ch, f"B{r}")
+
+
+# ── #3 Evolución mensual: ingresos, egresos y margen ──────────────────
+def meses_del_anio(ctx, anio):
+    """Lista de 12 periodos AAAA-MM del año, con su índice en Model (None si ese
+    mes no está en el modelo: antes del primer mes real o después de la proyección)."""
+    labels = ctx["mr"]["labels_periodo"]
+    out = []
+    for m in range(1, 13):
+        p = f"{anio}-{m:02d}"
+        out.append((p, labels.index(p) if p in labels else None))
+    return out
+
+
+def margen_mes(hist_idx, p):
+    """Margen neto de un mes real (utilidad ÷ ingresos), desde `hist` indexado por periodo."""
+    ing = float(hist_idx.loc[p, "ingresos_almuerzo"] + hist_idx.loc[p, "ingresos_cena"])
+    egr = float(hist_idx.loc[p, "costo_insumos"] + hist_idx.loc[p, "nomina"] + hist_idx.loc[p, "arriendo_servicios"] + hist_idx.loc[p, "otros_gastos"])
+    return (ing - egr) / ing if ing else 0.0
+
+
+def grafico_3(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    mr, n_hist = ctx["mr"], ctx["mr"]["n_hist"]
+    anio = int(ctx["mes_foco"][:4])
+    meses = meses_del_anio(ctx, anio)
+    labels_real = ctx["periodos_reales"]
+    # hallazgo: variación del último mes real del año vs. el anterior
+    reales_anio = [p for p, ix in meses if ix is not None and ix < n_hist]
+    hist = ctx["hist"].set_index("periodo")
+    ing = lambda p: float(hist.loc[p, "ingresos_almuerzo"] + hist.loc[p, "ingresos_cena"])
+    if len(reales_anio) >= 2 and ing(reales_anio[-2]) > 0:
+        hallazgo = (f"Los ingresos de {nombre_mes_largo(reales_anio[-1])} fueron {fmt_mill(ing(reales_anio[-1]))}, "
+                    f"{fmt_pct(ing(reales_anio[-1]) / ing(reales_anio[-2]) - 1, 1, True)} frente a {nombre_mes_largo(reales_anio[-2])} ({fmt_mill(ing(reales_anio[-2]))}).")
+    elif reales_anio:
+        hallazgo = f"Los ingresos de {nombre_mes_largo(reales_anio[-1])} fueron {fmt_mill(ing(reales_anio[-1]))} (no hay mes anterior real para comparar)."
+    if len(reales_anio) >= 2 and reales_anio[-1] == ctx["mes_foco"]:
+        hallazgo += aviso_dias(ctx)
+    else:
+        hallazgo = "No hay meses reales en este año."
+    r = h.lamina(
+        f"Evolución mensual {anio}: ingresos, egresos y margen",
+        hallazgo,
+        f"Escala: $ millones por mes (barras, eje izquierdo desde 0) y margen neto % (línea, eje derecho). Tono sólido = real; tono claro = proyectado "
+        f"(escenario activo de Inputs). Los meses de {anio} que no están en el modelo quedan vacíos. Fuente: hoja Model (fórmulas).")
+    r0 = dg.seccion(f"#3 — Evolución mensual {anio} ($ M y margen)", "FÓRMULAS hacia Model. Mes i del año en la columna C+i; vacío si ese mes no está en el modelo.")
+    ws_d = dg.ws
+    label(ws_d, r0, "Mes")
+    filas = {"ing": r0 + 1, "egr": r0 + 2, "mgr": r0 + 3, "mgp": r0 + 4}
+    label(ws_d, filas["ing"], "Ingresos ($ M)"); label(ws_d, filas["egr"], "Egresos ($ M)")
+    label(ws_d, filas["mgr"], "Margen neto — real"); label(ws_d, filas["mgp"], "Margen neto — proyectado")
+    colores_i, colores_e = [], []
+    for k, (p, ix) in enumerate(meses):
+        c = dg.col(k)
+        ws_d.cell(row=r0, column=c, value=etiqueta_mes(p)).font = Font(bold=True)
+        ws_d.cell(row=r0, column=c).alignment = Alignment(horizontal="center")
+        real = ix is not None and ix < n_hist
+        colores_i.append(PALETA["ingresos"] if real else tono_claro(PALETA["ingresos"]))
+        colores_e.append(PALETA["egresos"] if real else tono_claro(PALETA["egresos"]))
+        if ix is None:
+            continue
+        ing_f, egr_f = cm(ctx, "fila_ingresos", ix), f"-({cm(ctx,'fila_costo_insumos',ix)}+{cm(ctx,'fila_nomina',ix)}+{cm(ctx,'fila_arriendo',ix)}+{cm(ctx,'fila_otros',ix)})"
+        numero(ws_d, filas["ing"], c, f"={ing_f}/1000000").number_format = "#,##0.0"
+        numero(ws_d, filas["egr"], c, f"=({egr_f})/1000000").number_format = "#,##0.0"
+        mg = f"=IF({ing_f}=0,0,{cm(ctx,'fila_utilidad_neta',ix)}/{ing_f})"
+        numero(ws_d, filas["mgr" if real else "mgp"], c, mg, pct=True)
+    dg.cerrar(filas["mgp"])
+    c1, c2 = dg.col(0), dg.col(11)
+    cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=r0)
+    bar = nuevo_bar(ancho_gap=70)
+    s_i = serie_fila(ws_d, filas["ing"], c1, c2, "Ingresos"); color_serie(s_i, PALETA["ingresos"]); puntos_color(s_i, colores_i)
+    s_e = serie_fila(ws_d, filas["egr"], c1, c2, "Egresos"); color_serie(s_e, PALETA["egresos"]); puntos_color(s_e, colores_e)
+    bar.series += [s_i, s_e]
+    bar.set_categories(cats)
+    ejes(bar, x_titulo="Mes", y_titulo="$ millones", y_fmt="#,##0.0", y_min=0)
+    linea = nuevo_linea()
+    s_mr = serie_fila(ws_d, filas["mgr"], c1, c2, "Margen neto (real)"); color_serie(s_mr, PALETA["utilidad"], linea=True, marcador=True)
+    s_mp = serie_fila(ws_d, filas["mgp"], c1, c2, "Margen neto (proyectado)"); color_serie(s_mp, PALETA["utilidad"], linea=True, guion="dash", marcador=True)
+    linea.series += [s_mr, s_mp]
+    linea.set_categories(cats)
+    # margen real puede salirse de 0–40 % (p. ej. un primer mes parcial): el eje se amplía solo cuando hace falta
+    margenes = [margen_mes(hist, p) for p in reales_anio] or [0.0]
+    mg_max, mg_min = max(0.40, math.ceil(max(margenes) * 10) / 10), min(0.0, math.floor(min(margenes) * 10) / 10)
+    combo_secundario(bar, linea, y_titulo="Margen neto", y_fmt="0%", y_min=mg_min, y_max=mg_max)
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ── Plan en pandas (contraste de las fórmulas + rango de ejes) ─────────
+def plan_pandas(ctx, i):
+    """Plan(M) calculado en pandas con la MISMA regla que las fórmulas de la tabla
+    Plan: real del mes anterior × drivers Base del primer mes proyectado. Solo se
+    usa para decidir rangos de ejes y para contrastar las fórmulas en las pruebas."""
+    b = ctx["dr"]["_base_valores"]
+    hist = ctx["hist"]
+    prev = hist.iloc[i - 1]
+    alm = float(prev["ingresos_almuerzo"]) * (1 + b["crecimiento_almuerzo"])
+    cena = float(prev["ingresos_cena"]) * (1 + b["crecimiento_cena"])
+    ing = alm + cena
+    ins = ing * b["costo_insumos_pct"]
+    nom = float(prev["nomina"]) * (1 + b["inflacion_gastos"])
+    arr = float(prev["arriendo_servicios"]) * (1 + b["inflacion_gastos"])
+    otr = float(prev["otros_gastos"]) * (1 + b["inflacion_gastos"])
+    egr = ins + nom + arr + otr
+    return dict(ing_alm=alm, ing_cena=cena, ingresos=ing, insumos=ins, nomina=nom, arriendo=arr, otros=otr, egresos=egr, utilidad=ing - egr)
+
+
+# ── #4 Real vs. Plan ──────────────────────────────────────────────────
+def grafico_4(h, ctx):
+    ws, dg, i, fh = h.ws, ctx["dg"], ctx["i"], ctx["fila_hist"]
+    titulo = f"Real vs. Plan — {ctx['nombre_mes'].capitalize()}"
+    if not hay_plan(ctx):
+        h.lamina(titulo, "Sin Plan para este mes: el Plan necesita un mes anterior real y meses proyectados.",
+                 "Plan = proyección Base a un mes (real del mes anterior × drivers Base del primer mes proyectado). "
+                 "Omitido para este mes; se genera cuando el mes en foco tiene un mes anterior real.")
+        return
+    rubros = [("Ingresos", f"={cm(ctx,'fila_ingresos',i)}", "ingresos", True),
+              ("Insumos", f"=-{cm(ctx,'fila_costo_insumos',i)}", "insumos", False),
+              ("Nómina", f"=-{cm(ctx,'fila_nomina',i)}", "nomina", False),
+              ("Arriendo y servicios", f"=-{cm(ctx,'fila_arriendo',i)}", "arriendo", False),
+              ("Otros", f"=-{cm(ctx,'fila_otros',i)}", "otros", False),
+              ("Utilidad", f"={cm(ctx,'fila_utilidad_neta',i)}", "utilidad", True)]
+    r0 = dg.seccion("#4 — Real vs. Plan del mes en foco",
+                    "FÓRMULAS: real (Model) y Plan (tabla Plan). Favorable / desfavorable por rubro (en costos, gastar más que el Plan es desfavorable).")
+    pl = plan_pandas(ctx, i)
+    real_ut = float(fh["ingresos_almuerzo"] + fh["ingresos_cena"] - fh["costo_insumos"] - fh["nomina"] - fh["arriendo_servicios"] - fh["otros_gastos"])
+    reales = dict(ingresos=float(fh["ingresos_almuerzo"] + fh["ingresos_cena"]), insumos=float(fh["costo_insumos"]), nomina=float(fh["nomina"]),
+                  arriendo=float(fh["arriendo_servicios"]), otros=float(fh["otros_gastos"]), utilidad=real_ut)
+    variaciones = [reales[c] / pl[c] - 1 for _n, _f, c, _e in rubros if pl[c]]
+    peor = max([abs(v) for v in variaciones] + [0.0])
+    # eje de −30 % a +30 %; solo se amplía (a 60 % o 100 %) si hay variaciones mayores. Las barras más
+    # grandes se recortan en el borde del eje: el valor REAL va siempre en el nombre de la categoría.
+    tope = 0.30 if peor <= 0.30 else 0.60 if peor <= 0.60 else 1.00
+    filas = []
+    for k, (nom, f_real, clave_plan, es_ingreso) in enumerate(rubros):
+        rr, sg = r0 + 1 + k, ("" if es_ingreso else "-")
+        recorte = f"MAX(-{tope},MIN({tope},E{rr}))"
+        filas.append([nom, f_real, f"={cplan(ctx, clave_plan)}", f"=IF(D{rr}=0,0,C{rr}/D{rr}-1)",
+                      f'=B{rr}&"  ("&{f_signo_pct(f"E{rr}")}&")"',
+                      f"=IF({sg}E{rr}>=0,{recorte},0)", f"=IF({sg}E{rr}<0,{recorte},0)"])
+    a, b = escribir_tabla(dg, r0, ["Rubro", "Real ($)", "Plan ($)", "Variación % real", "Rubro (con variación)", "Favorable (graficado)", "Desfavorable (graficado)"],
+                          filas, formatos=[None, FMT_CONTABLE, FMT_CONTABLE, "+0.0%;-0.0%;0.0%", None, "+0%;-0%;;", "+0%;-0%;;"])
+    dg.cerrar(b)
+    sub = (f'="Utilidad real "&{f_mill(f"Datos_Graficos!C{b}")}&" M frente a "&{f_mill(f"Datos_Graficos!D{b}")}&" M de Plan ("&{f_signo_pct(f"Datos_Graficos!E{b}")}&")."')
+    r = h.lamina(
+        titulo, sub,
+        "Escala: variación % del real contra el Plan (= proyección Base a un mes). Verde = favorable (más ingresos/utilidad o menos costo que el Plan), rojo = desfavorable. "
+        + (f"El eje se amplió a ±{int(tope * 100)} % porque hay variaciones mayores: las barras más largas se recortan en el borde y su valor real está entre paréntesis en el nombre del rubro. "
+           if tope > 0.30 else "Eje de −30 % a +30 %. ")
+        + "Fuente: Model y Plan (fórmulas).")
+    cats = Reference(dg.ws, min_col=6, min_row=a, max_row=b)
+    bar = nuevo_bar(horizontal=True, ancho_gap=45)
+    bar.overlap = 100
+    s_f = serie_col(dg.ws, 7, a, b, "Favorable"); color_serie(s_f, PALETA["utilidad"])
+    s_d = serie_col(dg.ws, 8, a, b, "Desfavorable"); color_serie(s_d, PALETA["alerta"])
+    bar.series += [s_f, s_d]
+    bar.set_categories(cats)
+    bar.x_axis.scaling.orientation = "maxMin"        # primer rubro arriba
+    ejes(bar, y_titulo="Variación % vs. Plan", y_fmt="+0%;-0%;0%", y_min=-tope, y_max=tope)
+    bar.y_axis.majorUnit = 0.1 if tope <= 0.3 else 0.2 if tope <= 0.6 else 0.25
+    bar.y_axis.crosses = "max"                       # eje de valores abajo aunque las categorías vayan invertidas
+    bar.x_axis.tickLblPos = "low"                    # nombres de rubros a la izquierda aunque haya barras negativas
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ── #12 Ritmo del mes: utilidad acumulada vs. meta ────────────────────
+def grafico_12(h, ctx):
+    ws, dg, i = h.ws, ctx["dg"], ctx["i"]
+    titulo = f"Ritmo del mes: utilidad acumulada vs. meta — {ctx['nombre_mes'].capitalize()}"
+    if not hay_plan(ctx):
+        h.lamina(titulo, "Sin Plan para este mes: la meta sale de la utilidad del Plan.",
+                 "Meta = utilidad Plan del mes repartida en partes iguales por día operado esperado. Omitido porque este mes no tiene Plan.")
+        return
+    dias = ctx["dias_cal"]
+    ing, egr = ctx["ing_m"]["total"], ctx["egr_dia"]
+    ultimo_dato = min(ctx["ing_m"].index.max(), ctx["fin"])
+    util_dia = [float(ing.get(d, 0.0) - egr.get(d, 0.0)) for d in dias]
+    acum = list(np.cumsum(util_dia))
+    ult_real = max(k for k, d in enumerate(dias) if d <= ultimo_dato)
+    # días operados esperados: 26 si el mes no ha terminado; los reales si ya terminó
+    if ctx["mes_terminado"]:
+        operados = set(ctx["op_m"].index)
+        k_d = [int(v) for v in np.cumsum([1 if d in operados else 0 for d in dias])]
+        n_esp = max(len(operados), 1)
+        esp_txt = f"{len(operados)} días operados reales (el mes ya terminó)"
+    else:
+        n_esp = 26
+        k_d = [min(n_esp, int(v)) for v in np.cumsum([1 if d.dayofweek != 6 else 0 for d in dias])]
+        esp_txt = "26 días operados esperados (el mes no ha terminado)"
+    plan_ut = cplan(ctx, "utilidad")
+    r0 = dg.seccion("#12 — Ritmo del mes: utilidad acumulada ($ M)",
+                    "Real: calculado por el script (Cierres_Dia − Egresos/Gastos_Cierre por fecha). Meta: FÓRMULA = utilidad Plan × días operados esperados hasta ese día ÷ total esperado.")
+    filas = [[str(d.day), (acum[k] / 1e6 if k <= ult_real else None), f"={plan_ut}/1000000*{k_d[k]}/{n_esp}"] for k, d in enumerate(dias)]
+    a, b = escribir_tabla(dg, r0, ["Día del mes", "Utilidad acumulada real ($ M)", "Meta lineal ($ M)"], filas, formatos=[None, "#,##0.00", "#,##0.00"])
+    dg.cerrar(b)
+    fila_u = a + ult_real
+    r = h.lamina(
+        titulo,
+        f'="Al día {dias[ult_real].day} la utilidad acumulada es "&FIXED(Datos_Graficos!C{fila_u},1)&" M frente a "&FIXED(Datos_Graficos!D{fila_u},1)&" M de la meta lineal."',
+        f"Escala: $ millones acumulados por día del mes. Meta lineal = utilidad del Plan del mes ÷ {esp_txt}, sumada solo en días operados. Los egresos entran en su fecha real "
+        "(por eso la línea real puede caer en días de compras, nómina o arriendo). Fuente: Cierres_Dia y Egresos/Gastos_Cierre; la meta es fórmula sobre el Plan.")
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    ch = nuevo_linea()
+    s_r = serie_col(dg.ws, 3, a, b, "Utilidad acumulada real"); color_serie(s_r, PALETA["real"], linea=True, ancho_pt=3)
+    s_m = serie_col(dg.ws, 4, a, b, "Meta lineal (Plan)"); color_serie(s_m, PALETA["plan"], linea=True, ancho_pt=2.5, guion="dash")
+    ch.series += [s_r, s_m]
+    ch.set_categories(cats)
+    ejes(ch, x_titulo="Día del mes", y_titulo="$ millones acumulados", y_fmt="#,##0.0")
+    leyenda(ch, "b")
+    ws.add_chart(ch, f"B{r}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HOJA B_INGRESOS — ¿De dónde viene la plata?
+# ══════════════════════════════════════════════════════════════════════
+def semana_del_mes(fecha):
+    """S1 = días 1–7, S2 = 8–14, S3 = 15–21, S4 = 22–28, S5 = 29–31."""
+    return (fecha.day - 1) // 7 + 1
+
+
+ETIQ_SEMANA = {1: "S1 (1–7)", 2: "S2 (8–14)", 3: "S3 (15–21)", 4: "S4 (22–28)", 5: "S5 (29–31)"}
+
+
+def dias_semana_presentes(ing_df):
+    """Días de la semana (0=lun … 6=dom) con al menos un día operado; el domingo solo si hay ventas."""
+    return sorted(int(d) for d in set(ing_df.index.dayofweek))
+
+
+def anterior_real(ctx):
+    """Periodo del mes real anterior al mes en foco (o None)."""
+    return ctx["periodos_reales"][ctx["i"] - 1] if ctx["i"] > 0 else None
+
+
+def ingresos_de(hist_idx, p):
+    return float(hist_idx.loc[p, "ingresos_almuerzo"] + hist_idx.loc[p, "ingresos_cena"])
+
+
+def hoja_b_ingresos(wb, ctx):
+    h = HojaGraficos(wb, "B_Ingresos")
+    for g in (grafico_5, grafico_6, grafico_7, grafico_8, grafico_9):
+        g(h, ctx)
+    h.cerrar()
+    return h
+
+
+# ── #5 Ingresos por turno (barras apiladas por semana + donut) ─────────
+def grafico_5(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    op = ctx["op_m"].copy()
+    op["semana"] = [semana_del_mes(d) for d in op.index]
+    sem = op.groupby("semana")[["desayuno", "almuerzo_neto", "comida_rapida"]].sum() / 1e6
+    tot = sem.sum()
+    total_mes = float(tot.sum())
+    share = {k: (float(tot[k]) / total_mes if total_mes else 0.0) for k in tot.index}
+    hist = ctx["hist"].set_index("periodo")
+    prev = anterior_real(ctx)
+    var_txt = (f" Los ingresos del mes {fmt_pct(ingresos_de(hist, ctx['mes_foco']) / ingresos_de(hist, prev) - 1, 1, True)} frente a {nombre_mes_largo(prev)}."
+               if prev and ingresos_de(hist, prev) else "")
+    mayor = int(sem.sum(axis=1).idxmax()) if len(sem) else 1
+    r = h.lamina(
+        f"Ingresos por turno — {ctx['nombre_mes'].capitalize()}",
+        f"Almuerzo (neto) aportó {fmt_pct(share['almuerzo_neto'])} de los ingresos, comida rápida {fmt_pct(share['comida_rapida'])} y desayuno {fmt_pct(share['desayuno'])}; "
+        f"la semana {ETIQ_SEMANA[mayor]} fue la de mayor venta ({fmt_mill(float(sem.loc[mayor].sum()) * 1e6)}).{var_txt}{aviso_dias(ctx)}",
+        "Escala: $ millones por semana del mes (S1 = días 1–7 … S5 = 29–31). Almuerzo (neto) = cierre de almuerzo − desayuno (el modelo incluye el desayuno dentro de Ingresos Almuerzo). "
+        "El % de la leyenda es la participación en el mes. Fuente: Cierres_Dia y Aperturas_Turno (calculado por el script).")
+    r0 = dg.seccion("#5 — Ingresos por turno y semana del mes en foco ($ M)",
+                    "Calculado por el script al generar el modelo (Cierres_Dia + Aperturas_Turno). Los encabezados de las series son fórmulas con el % de participación.")
+    filas = [[ETIQ_SEMANA[int(k)], float(sem.loc[k, "desayuno"]), float(sem.loc[k, "almuerzo_neto"]), float(sem.loc[k, "comida_rapida"])] for k in sem.index]
+    a, b = escribir_tabla(dg, r0, ["Semana", "Desayuno", "Almuerzo (neto)", "Comida rápida"], filas, formatos=[None] + ["#,##0.00"] * 3)
+    # encabezados con % de participación (fórmula → nombre de la serie en la leyenda)
+    for col, nom in ((3, "Desayuno"), (4, "Almuerzo (neto)"), (5, "Comida rápida")):
+        L = get_column_letter(col)
+        ws_d = dg.ws
+        ws_d.cell(row=r0, column=col, value=f'="{nom} · "&FIXED(IF(SUM($C${a}:$E${b})=0,0,SUM({L}{a}:{L}{b})/SUM($C${a}:$E${b}))*100,0)&"%"')
+    # participación (donut)
+    rd = b + 2
+    for k, (nom, col) in enumerate((("Desayuno", "C"), ("Almuerzo (neto)", "D"), ("Comida rápida", "E"))):
+        label(dg.ws, rd + k, nom)
+        numero(dg.ws, rd + k, 3, f"=SUM({col}{a}:{col}{b})").number_format = "#,##0.00"
+    dg.cerrar(rd + 2)
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    bar = nuevo_bar(apilado=True, ancho_gap=55)
+    for col, color in ((3, PALETA["desayuno"]), (4, PALETA["almuerzo"]), (5, PALETA["comida_rapida"])):
+        s = Series(Reference(dg.ws, min_col=col, min_row=r0, max_row=b), title_from_data=True)
+        color_serie(s, color)
+        bar.series.append(s)
+    bar.set_categories(cats)
+    ejes(bar, x_titulo="Semana del mes", y_titulo="$ millones", y_fmt="#,##0.0", y_min=0)
+    bar.width = 16.2
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+    don = DoughnutChart()
+    don.holeSize = 55
+    sd = Series(Reference(dg.ws, min_col=3, min_row=rd, max_row=rd + 2), title="Participación")
+    sd.data_points = [DataPoint(idx=k, spPr=GraphicalProperties(solidFill=c)) for k, c in enumerate((PALETA["desayuno"], PALETA["almuerzo"], PALETA["comida_rapida"]))]
+    sd.dLbls = DataLabelList()
+    sd.dLbls.showPercent = True
+    sd.dLbls.showVal = sd.dLbls.showCatName = sd.dLbls.showSerName = sd.dLbls.showLegendKey = False
+    sd.dLbls.txPr = RichText(bodyPr=RichTextProperties(), p=[Paragraph(pPr=ParagraphProperties(defRPr=CharacterProperties(sz=1000, b=True, solidFill="FFFFFF")), endParaRPr=CharacterProperties())])
+    don.series.append(sd)
+    don.set_categories(Reference(dg.ws, min_col=2, min_row=rd, max_row=rd + 2))
+    don.width, don.height = 8.6, CHART_ALTO
+    don.roundedCorners = False
+    don.legend.position = "b"
+    don.legend.overlay = False
+    ws.add_chart(don, f"J{r}")
+
+
+# ── #6 ¿Qué días vendo más? ───────────────────────────────────────────
+def grafico_6(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    ing = ctx["diario"]["ingresos"]
+    op = ctx["op_m"]
+    dows = dias_semana_presentes(op)
+    prom_mes = {d: float(op[op.index.dayofweek == d]["total"].mean()) / 1000 for d in dows}
+    n_dias = {d: int((op.index.dayofweek == d).sum()) for d in dows}
+    prom_general = float(op["total"].mean()) / 1000 if len(op) else 0.0
+    # promedio de los hasta 3 meses reales anteriores, por día de la semana
+    previos = ctx["periodos_reales"][max(0, ctx["i"] - 3):ctx["i"]]
+    prom_prev = {}
+    if previos:
+        sel = ing[(ing.index.to_period("M").astype(str).isin(previos)) & (ing["total"] > 0)]
+        for d in dows:
+            x = sel[sel.index.dayofweek == d]["total"]
+            prom_prev[d] = float(x.mean()) / 1000 if len(x) else None
+    # mejor / peor día: solo entre días con al menos 2 días operados (con 1 solo el promedio no es fiable)
+    cand = [d for d in dows if n_dias[d] >= 2] or dows
+    mejor = max(cand, key=lambda d: prom_mes[d]) if cand else 0
+    peor = min(cand, key=lambda d: prom_mes[d]) if cand else 0
+    hallazgo = (f"El {DIAS_SEMANA[mejor]} vende {fmt_pct(prom_mes[mejor] / prom_general - 1)} más que el promedio del mes y el {DIAS_SEMANA[peor]} {fmt_pct(1 - prom_mes[peor] / prom_general)} menos"
+                f" (promedio por día operado: {fmt_pesos(prom_general * 1000)}).") if prom_general else "No hay días operados en el mes."
+    r = h.lamina(
+        f"¿Qué días vendo más? — {ctx['nombre_mes'].capitalize()}",
+        hallazgo,
+        "Escala: $ miles de ingreso total por día operado, promediado por día de la semana. Verde = mejor día, rojo = peor día (solo entre días con 2 o más observaciones). Línea punteada = promedio de "
+        f"{'mes anterior' if len(previos) == 1 else str(len(previos)) + ' meses anteriores' if previos else 'meses anteriores (no hay datos)'}; línea gris = promedio general del mes. "
+        "Días promediados: " + ", ".join(f"{DIAS_SEMANA[d]} {n_dias[d]}" for d in dows) + ". Fuente: Cierres_Dia (calculado por el script).")
+    r0 = dg.seccion("#6 — Ingreso promedio por día operado, por día de la semana ($ miles)",
+                    "Calculado por el script al generar el modelo (Cierres_Dia). Línea del promedio general = fórmula sobre la tabla.")
+    filas = []
+    a = r0 + 1
+    for k, d in enumerate(dows):
+        filas.append([DIAS_SEMANA[d], prom_mes[d], prom_prev.get(d) if previos else None, prom_general])
+    a, b = escribir_tabla(dg, r0, ["Día", "Promedio del mes", "Promedio meses anteriores", "Promedio general del mes"], filas, formatos=[None] + ["#,##0"] * 3)
+    dg.cerrar(b)
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    bar = nuevo_bar(ancho_gap=55)
+    s = serie_col(dg.ws, 3, a, b, "Promedio por día operado (mes en foco)")
+    color_serie(s, PALETA["ingresos"])
+    puntos_color(s, [PALETA["utilidad"] if d == mejor else PALETA["alerta"] if d == peor else PALETA["ingresos"] for d in dows])
+    etiquetas(s, fmt="#,##0", pos="outEnd")
+    bar.series.append(s)
+    bar.set_categories(cats)
+    techo = techo_bonito(max(list(prom_mes.values()) + [v for v in prom_prev.values() if v] + [prom_general]) * 1.12)
+    ejes(bar, x_titulo="Día de la semana", y_titulo="$ miles por día operado", y_fmt="#,##0", y_min=0, y_max=techo)
+    linea = nuevo_linea()
+    if previos and any(v for v in prom_prev.values()):
+        s2 = serie_col(dg.ws, 4, a, b, "Promedio del mes anterior" if len(previos) == 1 else f"Promedio de los {len(previos)} meses anteriores")
+        color_serie(s2, PALETA["plan"], linea=True, guion="dash", marcador=True)
+        linea.series.append(s2)
+    s3 = serie_col(dg.ws, 5, a, b, "Promedio general del mes")
+    color_serie(s3, PALETA["neutro_oscuro"], linea=True, ancho_pt=1.75)
+    linea.series.append(s3)
+    linea.set_categories(cats)
+    bar += linea
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ── #7 Mapa de calor día × turno ──────────────────────────────────────
+def grafico_7(h, ctx):
+    ws = h.ws
+    op = ctx["op_m"]
+    dows = dias_semana_presentes(op)
+    turnos = [("desayuno", "Desayuno"), ("almuerzo_neto", "Almuerzo (neto)"), ("comida_rapida", "Comida rápida")]
+    mat = {d: {k: float(op[op.index.dayofweek == d][k].mean()) / 1000 for k, _ in turnos} for d in dows}
+    n_dias = {d: int((op.index.dayofweek == d).sum()) for d in dows}
+    celdas = [(d, k, mat[d][k]) for d in dows for k, _ in turnos]
+    mejor = max(celdas, key=lambda x: x[2]) if celdas else None
+    nom_turno = dict(turnos)
+    hallazgo = (f"La combinación más fuerte es {nom_turno[mejor[1]].lower()} del {DIAS_SEMANA[mejor[0]]}: {fmt_pesos(mejor[2] * 1000)} por día operado en promedio."
+                if mejor else "No hay días operados en el mes.")
+    r = h.lamina(
+        f"Mapa de calor: día de la semana × turno — {ctx['nombre_mes'].capitalize()}",
+        hallazgo,
+        "Escala: $ miles de ingreso promedio por día operado; más oscuro = más ingreso. n = número de días operados promediados en cada fila (con pocos días el promedio es poco fiable). "
+        "Fuente: Cierres_Dia y Aperturas_Turno (calculado por el script; las celdas son los valores).", alto=22)
+    # matriz en celdas: etiqueta B:C, tres turnos D:F / G:I / J:L, n en M:N
+    cab = r
+    cols = [("Día", 2, 3), ("Desayuno", 4, 6), ("Almuerzo (neto)", 7, 9), ("Comida rápida", 10, 12), ("n días", 13, 14)]
+    for txt, c1, c2 in cols:
+        ws.merge_cells(start_row=cab, start_column=c1, end_row=cab, end_column=c2)
+        c = ws.cell(row=cab, column=c1, value=txt)
+        c.font = Font(name="Calibri", size=11, bold=True, color=PALETA["neutro_oscuro"])
+        c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[cab].height = 24
+    blanco = Side(style="thin", color="FFFFFF")
+    borde = Border(left=blanco, right=blanco, top=blanco, bottom=blanco)
+    for k, d in enumerate(dows):
+        rr = cab + 1 + k
+        ws.row_dimensions[rr].height = 34
+        for (txt, c1, c2), valor in zip(cols, [DIAS_SEMANA[d].capitalize(), mat[d]["desayuno"], mat[d]["almuerzo_neto"], mat[d]["comida_rapida"], n_dias[d]]):
+            ws.merge_cells(start_row=rr, start_column=c1, end_row=rr, end_column=c2)
+            c = ws.cell(row=rr, column=c1, value=valor)
+            c.alignment = Alignment(horizontal="center", vertical="center")
+            c.font = Font(name="Calibri", size=13 if txt != "Día" else 12, bold=(txt == "Día"), color=PALETA["neutro_oscuro"])
+            if txt not in ("Día", "n días"):
+                c.number_format = "#,##0"
+            for cc in range(c1, c2 + 1):
+                ws.cell(row=rr, column=cc).border = borde
+    rango = f"D{cab + 1}:L{cab + len(dows)}"
+    ws.conditional_formatting.add(rango, ColorScaleRule(start_type="min", start_color="EEF3F9", end_type="max", end_color=tono_claro(PALETA["ingresos"], 0.2)))
+
+
+# ── #8 Pareto de productos ────────────────────────────────────────────
+def tabla_pareto(dg, titulo, serie, etiqueta_total="Valor ($ M)"):
+    """Tabla ordenada de mayor a menor + % acumulado (FÓRMULA). serie: pandas Series (pesos)."""
+    serie = serie[serie > 0].sort_values(ascending=False)
+    r0 = dg.seccion(titulo, "Valores calculados por el script (Pedidos_Pagados sin Gratis, mes en foco); el % acumulado es fórmula.")
+    n = len(serie)
+    filas = [[str(k), float(v) / 1e6, f"=SUM($C${r0 + 1}:C{r0 + 1 + i})/SUM($C${r0 + 1}:$C${r0 + n})"] for i, (k, v) in enumerate(serie.items())]
+    a, b = escribir_tabla(dg, r0, ["Producto", etiqueta_total, "% acumulado"], filas, formatos=[None, "#,##0.0", "0%"])
+    dg.cerrar(b)
+    return a, b, serie
+
+
+def chart_pareto(dg, a, b, alto, y_titulo="$ millones", x_titulo=None):
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    bar = nuevo_bar(ancho_gap=35)
+    s = serie_col(dg.ws, 3, a, b, "Ventas del producto")
+    color_serie(s, PALETA["ingresos"])
+    etiquetas(s, fmt="#,##0.0", pos="outEnd", tam=800)
+    bar.series.append(s)
+    bar.set_categories(cats)
+    ejes(bar, x_titulo=x_titulo, y_titulo=y_titulo, y_fmt="#,##0.0", y_min=0, rot_x=-30)
+    linea = nuevo_linea()
+    s2 = serie_col(dg.ws, 4, a, b, "% acumulado")
+    color_serie(s2, PALETA["alerta"], linea=True, marcador=True)
+    linea.series.append(s2)
+    linea.set_categories(cats)
+    combo_secundario(bar, linea, y_titulo="% acumulado de las ventas", y_fmt="0%", y_min=0, y_max=1)
+    leyenda(bar, "b")
+    bar.width, bar.height = CHART_ANCHO, alto
+    return bar
+
+
+def frase_pareto(serie, que):
+    """'El 80 % de lo vendido en {que} viene de k de N productos: a, b, c.'"""
+    if serie.empty or serie.sum() <= 0:
+        return f"No hay ventas de {que} en el mes."
+    cum = serie.cumsum() / serie.sum()
+    k = int((cum < 0.8).sum()) + 1
+    return f"El {fmt_pct(float(cum.iloc[k - 1]))} de lo vendido en {que} viene de {k} de {len(serie)}: {', '.join(serie.index[:k])}."
+
+
+def grafico_8(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    ped = ctx["diario"]["pedidos"]
+    mf = ctx["mes_foco"]
+    pm = ped[ped["periodo"] == mf] if not ped.empty else ped
+    alm = pm[pm["turno"] == "almuerzo"].groupby("grupo_producto")["monto_total"].sum() if not pm.empty else pd.Series(dtype=float)
+    cr = pm[pm["turno"] == "cena"].groupby("grupo_producto")["monto_total"].sum() if not pm.empty else pd.Series(dtype=float)
+    a1, b1, s1 = tabla_pareto(dg, "#8A — Pareto de almuerzo por tipo de pedido ($ M)", alm)
+    a2, b2, s2 = tabla_pareto(dg, "#8B — Pareto de comida rápida por categoría ($ M)", cr)
+    nota_fuente = ("Fuente: Pedidos_Pagados del mes en foco, sin pedidos Gratis. NO incluye la venta de desayuno ni los ajustes manuales de cierre, por eso los totales son "
+                   "menores que los ingresos del mes. Categorías de comida rápida: copia de PL.comidaRapida del sistema (mantener sincronizada); 'EXTRAS' = productos sueltos.")
+    r = h.lamina(
+        f"¿Qué producto sostiene el negocio? — {ctx['nombre_mes'].capitalize()}",
+        frase_pareto(s1, "almuerzo") + " " + frase_pareto(s2, "comida rápida"),
+        "Escala: $ millones vendidos por producto (barras) y % acumulado (línea, eje derecho 0–100 %). " + nota_fuente)
+    ws.add_chart(chart_pareto(dg, a1, b1, 6.1, x_titulo="Almuerzo — tipo de pedido"), f"B{r}")
+    ws.add_chart(chart_pareto(dg, a2, b2, 6.1, x_titulo="Comida rápida — categoría"), f"B{r + 12}")
+    # segunda lámina: proteínas
+    prot = pm[(pm["turno"] == "almuerzo") & pm["proteina"].notna()].groupby("proteina")["monto_total"].sum().sort_values(ascending=False).head(10) if (not pm.empty and "proteina" in pm.columns) else pd.Series(dtype=float)
+    a3, b3, s3 = tabla_pareto(dg, "#8C — Pareto de almuerzo por proteína, top 10 ($ M)", prot)
+    todo_alm = ped[ped["turno"] == "almuerzo"] if not ped.empty else ped
+    con_prot = int(todo_alm["proteina"].notna().sum()) if (not todo_alm.empty and "proteina" in todo_alm.columns) else 0
+    r = h.lamina(
+        f"¿Qué proteína sostiene el almuerzo? — {ctx['nombre_mes'].capitalize()}",
+        frase_pareto(s3, "los platos con proteína registrada") if len(s3) else
+        f"En {ctx['nombre_mes']} ningún pedido de almuerzo trae la proteína registrada (en todo el periodo cargado solo {con_prot} de {len(todo_alm)} pedidos de almuerzo la traen): no hay datos para este gráfico.",
+        "Escala: $ millones vendidos por proteína (top 10). Solo cuentan pedidos de almuerzo que tienen la proteína registrada (los porciones, extras y otros pedidos sin proteína quedan fuera). "
+        "Fuente: Pedidos_Pagados del mes en foco, sin Gratis.")
+    if len(s3):
+        ws.add_chart(chart_pareto(dg, a3, b3, CHART_ALTO, x_titulo="Proteína"), f"B{r}")
+
+
+# ── #9 ¿Más clientes o cobrar más? ────────────────────────────────────
+def grafico_9(h, ctx):
+    ws, dg, i = h.ws, ctx["dg"], ctx["i"]
+    ped = ctx["diario"]["pedidos"]
+    mf = ctx["mes_foco"]
+    pm = ped[(ped["periodo"] == mf) & (ped["turno"] == "almuerzo")] if not ped.empty else ped
+    op = ctx["op_m"]
+    pm = pm.assign(semana=[semana_del_mes(d) for d in pm["fecha"]]) if not pm.empty else pm
+    vol = pm.groupby("semana")["cantidad"].sum() if not pm.empty else pd.Series(dtype=float)
+    neto = op.assign(semana=[semana_del_mes(d) for d in op.index]).groupby("semana")["almuerzo_neto"].sum()
+    semanas = sorted(set(vol.index) | set(neto.index))
+    ticket = {s: (float(neto.get(s, 0.0)) / float(vol.get(s, 0)) if vol.get(s, 0) else None) for s in semanas}
+    hist = ctx["hist"].set_index("periodo")
+    prev = anterior_real(ctx)
+    def tk(p):
+        return (float(hist.loc[p, "ingresos_almuerzo"] - hist.loc[p, "ingresos_desayuno"]) / max(float(hist.loc[p, "volumen_almuerzo"]), 1))
+    if prev:
+        tk_a, tk_p = tk(mf), tk(prev)
+        v_a, v_p = float(hist.loc[mf, "volumen_almuerzo"]), float(hist.loc[prev, "volumen_almuerzo"])
+        hallazgo = (f"En {ctx['nombre_mes']} el ticket promedio de almuerzo fue {fmt_pesos(tk_a)} ({fmt_pct(tk_a / tk_p - 1, 1, True)} vs {nombre_mes_largo(prev)}) "
+                    f"y el volumen {fmt_n(v_a)} pedidos ({fmt_pct(v_a / v_p - 1, 1, True)}): el crecimiento viene {'sobre todo de más pedidos' if abs(v_a / v_p - 1) > abs(tk_a / tk_p - 1) else 'sobre todo de cobrar más por pedido'}.{aviso_dias(ctx)}")
+    else:
+        hallazgo = f"En {ctx['nombre_mes']} el ticket promedio de almuerzo fue {fmt_pesos(tk(mf))} sobre {fmt_n(float(hist.loc[mf, 'volumen_almuerzo']))} pedidos (no hay mes anterior real para comparar)."
+    r = h.lamina(
+        f"¿Crezco por más clientes o por cobrar más? — {ctx['nombre_mes'].capitalize()}",
+        hallazgo,
+        "Escala: número de pedidos de almuerzo por semana del mes (barras, sin Gratis) y ticket promedio de almuerzo en $ miles (línea, eje derecho). Ticket = ingreso de almuerzo sin desayuno ÷ pedidos. "
+        "Fuente: Pedidos_Pagados y Cierres_Dia (calculado por el script). Segunda lámina: últimos 6 meses.")
+    r0 = dg.seccion("#9A — Pedidos y ticket de almuerzo por semana ($ miles)", "Calculado por el script al generar el modelo (Pedidos_Pagados sin Gratis + Cierres_Dia).")
+    filas = [[ETIQ_SEMANA[int(s)], float(vol.get(s, 0)), (ticket[s] / 1000 if ticket[s] else None)] for s in semanas]
+    a, b = escribir_tabla(dg, r0, ["Semana", "Pedidos de almuerzo", "Ticket promedio ($ miles)"], filas, formatos=[None, "#,##0", "#,##0.0"])
+    dg.cerrar(b)
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    bar = nuevo_bar(ancho_gap=60)
+    s = serie_col(dg.ws, 3, a, b, "Pedidos de almuerzo"); color_serie(s, PALETA["almuerzo"]); etiquetas(s, fmt="#,##0", pos="inBase", color="FFFFFF")
+    bar.series.append(s)
+    bar.set_categories(cats)
+    ejes(bar, x_titulo="Semana del mes", y_titulo="Pedidos", y_fmt="#,##0", y_min=0)
+    linea = nuevo_linea()
+    s2 = serie_col(dg.ws, 4, a, b, "Ticket promedio ($ miles)"); color_serie(s2, PALETA["plan"], linea=True, marcador=True, ancho_pt=3)
+    etiquetas(s2, fmt="#,##0.0", pos="t")
+    linea.series.append(s2)
+    linea.set_categories(cats)
+    combo_secundario(bar, linea, y_titulo="Ticket ($ miles)", y_fmt="#,##0.0", y_min=0)
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+    # segunda vista: últimos 6 meses reales (fórmulas hacia Model)
+    desde = max(0, i - 5)
+    idxs = list(range(desde, i + 1))
+    r = h.lamina(
+        f"¿Crezco por más clientes o por cobrar más? — últimos {len(idxs)} meses",
+        f"En {len(idxs)} mes(es) real(es): el volumen de almuerzo va de {fmt_n(float(hist.iloc[desde]['volumen_almuerzo']))} a {fmt_n(float(hist.iloc[i]['volumen_almuerzo']))} pedidos y "
+        f"el ticket de {fmt_pesos(tk(ctx['periodos_reales'][desde]))} a {fmt_pesos(tk(mf))}.",
+        "Escala: pedidos de almuerzo por mes (barras, sin Gratis) y ticket promedio de almuerzo en $ miles (línea, eje derecho). Mismas definiciones del Revenue Schedule. Fuente: hoja Model (fórmulas).")
+    r0 = dg.seccion("#9B — Pedidos y ticket de almuerzo, últimos meses", "FÓRMULAS hacia Model (Revenue Schedule).")
+    ws_d = dg.ws
+    label(ws_d, r0, "Mes"); label(ws_d, r0 + 1, "Pedidos de almuerzo"); label(ws_d, r0 + 2, "Ticket promedio ($ miles)")
+    for k, ix in enumerate(idxs):
+        c = dg.col(k)
+        ws_d.cell(row=r0, column=c, value=etiqueta_mes(ctx["periodos_reales"][ix])).font = Font(bold=True)
+        numero(ws_d, r0 + 1, c, f"={cm(ctx, 'fila_vol_alm', ix)}").number_format = "#,##0"
+        numero(ws_d, r0 + 2, c, f"={cm(ctx, 'fila_tkt_alm', ix)}/1000").number_format = "#,##0.0"
+    dg.cerrar(r0 + 2)
+    c1, c2 = dg.col(0), dg.col(len(idxs) - 1)
+    cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=r0)
+    bar = nuevo_bar(ancho_gap=60)
+    s = serie_fila(ws_d, r0 + 1, c1, c2, "Pedidos de almuerzo"); color_serie(s, PALETA["almuerzo"]); etiquetas(s, fmt="#,##0", pos="inBase", color="FFFFFF")
+    bar.series.append(s)
+    bar.set_categories(cats)
+    ejes(bar, x_titulo="Mes", y_titulo="Pedidos", y_fmt="#,##0", y_min=0)
+    linea = nuevo_linea()
+    s2 = serie_fila(ws_d, r0 + 2, c1, c2, "Ticket promedio ($ miles)"); color_serie(s2, PALETA["plan"], linea=True, marcador=True, ancho_pt=3)
+    etiquetas(s2, fmt="#,##0.0", pos="t")
+    linea.series.append(s2)
+    linea.set_categories(cats)
+    combo_secundario(bar, linea, y_titulo="Ticket ($ miles)", y_fmt="#,##0.0", y_min=0)
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HOJA C_EGRESOS — ¿En qué se va la plata?
+# ══════════════════════════════════════════════════════════════════════
+def hoja_c_egresos(wb, ctx):
+    h = HojaGraficos(wb, "C_Egresos")
+    for g in (grafico_10, grafico_11):
+        g(h, ctx)
+    h.cerrar()
+    return h
+
+
+def aviso_dias(ctx):
+    """Aviso (texto) cuando el mes anterior tuvo muy distinta cantidad de días operados que
+    el mes en foco (p. ej. un primer mes parcial): las comparaciones vs mes anterior son engañosas."""
+    prev = anterior_real(ctx)
+    if not prev:
+        return ""
+    hist = ctx["hist"].set_index("periodo")
+    n, n_prev = int(hist.loc[ctx["mes_foco"], "dias_operados"]), int(hist.loc[prev, "dias_operados"])
+    if n and (n_prev < 0.8 * n or n_prev > 1.25 * n):
+        return f" Ojo: {nombre_mes_largo(prev)} tuvo {n_prev} días operados frente a {n} de {ctx['nombre_mes']}; la comparación con el mes anterior es poco fiable."
+    return ""
+
+
+# ── #10 Egresos por categoría ─────────────────────────────────────────
+def grafico_10(h, ctx):
+    ws, dg, i, fh = h.ws, ctx["dg"], ctx["i"], ctx["fila_hist"]
+    rubros = [("Insumos", "fila_costo_insumos", float(fh["costo_insumos"])), ("Nómina", "fila_nomina", float(fh["nomina"])),
+              ("Arriendo y servicios", "fila_arriendo", float(fh["arriendo_servicios"])), ("Otros", "fila_otros", float(fh["otros_gastos"]))]
+    orden = sorted(rubros, key=lambda x: -x[2])          # de mayor a menor (los meses reales no dependen de Inputs)
+    ing = float(fh["ingresos_almuerzo"] + fh["ingresos_cena"])
+    total = sum(v for _n, _f, v in rubros)
+    hist = ctx["hist"].set_index("periodo")
+    prev = anterior_real(ctx)
+    var = ""
+    if prev:
+        tot_prev = float(hist.loc[prev, ["costo_insumos", "nomina", "arriendo_servicios", "otros_gastos"]].sum())
+        if tot_prev:
+            var = f", {fmt_pct(total / tot_prev - 1, 1, True)} frente a {nombre_mes_largo(prev)}"
+    mayor = orden[0]
+    r = h.lamina(
+        f"Egresos por categoría — {ctx['nombre_mes'].capitalize()}",
+        f"{mayor[0]} es el mayor egreso: {fmt_mill(mayor[2])} ({fmt_pct(mayor[2] / ing if ing else 0)} de los ingresos). En total se gastaron {fmt_mill(total)} "
+        f"({fmt_pct(total / ing if ing else 0)} de los ingresos){var}." + aviso_dias(ctx),
+        "Escala: $ millones del mes, de mayor a menor. Entre paréntesis, el % de los ingresos del mes. Insumos = Egresos 'proveedor' + gastos de cierre 'proveedor'; no incluye préstamos "
+        "(plata propia, no es gasto del negocio). Fuente: hoja Model (fórmulas).")
+    r0 = dg.seccion("#10 — Egresos por categoría del mes en foco ($ M)", "FÓRMULAS hacia Model. El orden (mayor a menor) se fijó al generar el modelo.")
+    filas = []
+    for k, (nom, clave, _v) in enumerate(orden):
+        rr = r0 + 1 + k
+        ing_ref = cm(ctx, "fila_ingresos", i)
+        filas.append([nom, f"=-{cm(ctx, clave, i)}/1000000", f"=IF({ing_ref}=0,0,C{rr}*1000000/{ing_ref})",
+                      f'=B{rr}&"  ("&FIXED(D{rr}*100,0)&"% de los ingresos)"'])
+    a, b = escribir_tabla(dg, r0, ["Rubro", "Egreso ($ M)", "% de los ingresos", "Rubro (con %)"], filas, formatos=[None, "#,##0.0", "0.0%", None])
+    dg.cerrar(b)
+    cats = Reference(dg.ws, min_col=5, min_row=a, max_row=b)
+    bar = nuevo_bar(horizontal=True, ancho_gap=50)
+    s = serie_col(dg.ws, 3, a, b, "Egreso del mes")
+    color_serie(s, PALETA["egresos"])
+    etiquetas(s, fmt="#,##0.0", pos="outEnd", tam=1000)
+    bar.series.append(s)
+    bar.set_categories(cats)
+    bar.x_axis.scaling.orientation = "maxMin"
+    ejes(bar, y_titulo="$ millones", y_fmt="#,##0.0", y_min=0)
+    bar.y_axis.crosses = "max"
+    bar.width = 16.2
+    sin_leyenda(bar)
+    ws.add_chart(bar, f"B{r}")
+    # opción B: participación en un donut pequeño
+    don = DoughnutChart()
+    don.holeSize = 55
+    sd = Series(Reference(dg.ws, min_col=3, min_row=a, max_row=b), title="Participación")
+    tonos = [PALETA["egresos"], tono_claro(PALETA["egresos"], 0.3), tono_claro(PALETA["egresos"], 0.55), PALETA["neutro_claro"]]
+    sd.data_points = [DataPoint(idx=k, spPr=GraphicalProperties(solidFill=c)) for k, c in enumerate(tonos)]
+    sd.dLbls = DataLabelList()
+    sd.dLbls.showPercent = True
+    sd.dLbls.showVal = sd.dLbls.showCatName = sd.dLbls.showSerName = sd.dLbls.showLegendKey = False
+    sd.dLbls.txPr = RichText(bodyPr=RichTextProperties(), p=[Paragraph(pPr=ParagraphProperties(defRPr=CharacterProperties(sz=1000, b=True, solidFill="404040")), endParaRPr=CharacterProperties())])
+    don.series.append(sd)
+    don.set_categories(Reference(dg.ws, min_col=2, min_row=a, max_row=b))
+    don.width, don.height = 8.6, CHART_ALTO
+    don.legend.position = "b"
+    don.legend.overlay = False
+    don.roundedCorners = False
+    ws.add_chart(don, f"J{r}")
+
+
+# ── #11 Estructura de costos como % de las ventas ─────────────────────
+def grafico_11(h, ctx):
+    ws, dg, i = h.ws, ctx["dg"], ctx["i"]
+    idxs = list(range(max(0, i - 11), i + 1))
+    hist = ctx["hist"].set_index("periodo")
+    per = ctx["periodos_reales"]
+    def pct(p, col):
+        ing = ingresos_de(hist, p)
+        return float(hist.loc[p, col]) / ing if ing else 0.0
+    mf, prev = ctx["mes_foco"], anterior_real(ctx)
+    pp = ""
+    if prev:
+        d = (pct(mf, "costo_insumos") - pct(prev, "costo_insumos")) * 100
+        pp = f" ({'+' if d >= 0 else '−'}{fmt_n(abs(d), 1)} puntos frente a {nombre_mes_largo(prev)})"
+    r = h.lamina(
+        "Estructura de costos como % de las ventas",
+        f"En {ctx['nombre_mes']} los insumos fueron {fmt_pct(pct(mf, 'costo_insumos'))} de las ventas{pp}; el costo primo (insumos + nómina) fue "
+        f"{fmt_pct(pct(mf, 'costo_insumos') + pct(mf, 'nomina'))} y quedó {fmt_pct(1 - (pct(mf, 'costo_insumos') + pct(mf, 'nomina') + pct(mf, 'arriendo_servicios') + pct(mf, 'otros_gastos')))} de utilidad." + aviso_dias(ctx),
+        "Escala: % de los ingresos de cada mes (cada barra suma 100 %: cuatro rubros de costo + utilidad). La línea punteada es el costo primo (insumos + nómina). "
+        f"Últimos {len(idxs)} meses reales. Fuente: hoja Model (fórmulas).")
+    r0 = dg.seccion("#11 — Estructura de costos, % de los ingresos", "FÓRMULAS hacia Model: cada rubro ÷ ingresos del mes.")
+    ws_d = dg.ws
+    nombres = ["Insumos", "Nómina", "Arriendo y servicios", "Otros", "Utilidad", "Costo primo (insumos + nómina)"]
+    claves = ["fila_costo_insumos", "fila_nomina", "fila_arriendo", "fila_otros", "fila_utilidad_neta", None]
+    label(ws_d, r0, "Mes")
+    for k, nom in enumerate(nombres):
+        label(ws_d, r0 + 1 + k, nom)
+    for k, ix in enumerate(idxs):
+        c = dg.col(k)
+        ws_d.cell(row=r0, column=c, value=etiqueta_mes(per[ix])).font = Font(bold=True)
+        ing = cm(ctx, "fila_ingresos", ix)
+        for j, clave in enumerate(claves):
+            if clave is None:
+                f = f"=IF({ing}=0,0,-({cm(ctx,'fila_costo_insumos',ix)}+{cm(ctx,'fila_nomina',ix)})/{ing})"
+            elif clave == "fila_utilidad_neta":
+                f = f"=IF({ing}=0,0,{cm(ctx,clave,ix)}/{ing})"
+            else:
+                f = f"=IF({ing}=0,0,-{cm(ctx,clave,ix)}/{ing})"
+            cel = numero(ws_d, r0 + 1 + j, c, f, pct=True)
+            if j < 5:
+                cel.number_format = "0.0%;-0.0%;;"   # las etiquetas de las barras heredan este formato: sin ceros
+    dg.cerrar(r0 + 6)
+    c1, c2 = dg.col(0), dg.col(len(idxs) - 1)
+    cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=r0)
+    bar = nuevo_bar(apilado=True, ancho_gap=45)
+    colores = [PALETA["egresos"], tono_claro(PALETA["egresos"], 0.3), tono_claro(PALETA["egresos"], 0.55), PALETA["neutro_claro"], PALETA["utilidad"]]
+    for j in range(5):
+        s = serie_fila(ws_d, r0 + 1 + j, c1, c2, nombres[j])
+        color_serie(s, colores[j])
+        if len(idxs) <= 8:
+            etiquetas(s, fmt="0%;-0%;;", pos="ctr", tam=900, color="FFFFFF" if j in (0, 4) else "404040")
+        bar.series.append(s)
+    bar.set_categories(cats)
+    # el eje cubre 0–100 %; solo se amplía si algún mes tiene pérdida (costos > 100 %)
+    maximos = [sum(max(0.0, pct(per[ix], col)) for col in ("costo_insumos", "nomina", "arriendo_servicios", "otros_gastos")) for ix in idxs]
+    minimos = [min(0.0, 1 - sum(pct(per[ix], col) for col in ("costo_insumos", "nomina", "arriendo_servicios", "otros_gastos"))) for ix in idxs]
+    ymax = max(1.0, math.ceil(max(maximos) * 10) / 10)
+    ymin = min(0.0, math.floor(min(minimos) * 10) / 10)
+    ejes(bar, x_titulo="Mes", y_titulo="% de los ingresos", y_fmt="0%", y_min=ymin, y_max=ymax)
+    linea = nuevo_linea()
+    s = serie_fila(ws_d, r0 + 6, c1, c2, nombres[5])
+    color_serie(s, PALETA["neutro_oscuro"], linea=True, guion="dash", marcador=True, ancho_pt=2.25)
+    linea.series.append(s)
+    linea.set_categories(cats)
+    bar += linea
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HOJA E_PROYECCION — ¿Hacia dónde voy?
+# ══════════════════════════════════════════════════════════════════════
+def tabla_ventana(dg, ctx):
+    """Serie MENSUAL de todo el modelo (reales + proyectados), alineada a una ventana
+    de años completos (ene del primer año → dic del último): mes p de la ventana en la
+    columna C+p; vacío si ese mes no está en el modelo. FÓRMULAS hacia Model y Plan.
+    La usan #13 (proyección), #14 (acumulado) y #15 (resumen anual)."""
+    labels, n_hist = ctx["mr"]["labels_periodo"], ctx["mr"]["n_hist"]
+    a0, a1 = int(labels[0][:4]), int(labels[-1][:4])
+    ventana = [f"{a}-{m:02d}" for a in range(a0, a1 + 1) for m in range(1, 13)]
+    ctx["ventana"] = ventana
+    r0 = dg.seccion(f"Serie mensual del modelo, ventana {etiqueta_mes(ventana[0])} → {etiqueta_mes(ventana[-1])} ($ M)",
+                    "FÓRMULAS hacia Model (y Plan). Meses fuera del modelo quedan vacíos. 'Plan o modelo' = Plan del mes (meses reales con Plan) o, si no hay, el valor del Model (real o proyectado).")
+    ws = dg.ws
+    nombres = ["Mes", "Ingresos ($ M)", "Egresos ($ M)", "Utilidad ($ M)", "Utilidad real ($ M)", "Margen neto — real", "Margen neto — proyectado",
+               "Utilidad: Plan o modelo ($ M)", "Utilidad acumulada del año — real ($ M)", "Utilidad acumulada del año — Plan o modelo ($ M)"]
+    filas = {k: r0 + j for j, k in enumerate(("lab", "ing", "egr", "ut", "ut_real", "mg_r", "mg_p", "plan_modelo", "acum_real", "acum_plan"))}
+    for j, nom in enumerate(nombres):
+        label(ws, r0 + j, nom, bold=(j == 0))
+    plan = dg.refs.get("plan")
+    for p, per in enumerate(ventana):
+        c = dg.col(p)
+        ws.cell(row=filas["lab"], column=c, value=etiqueta_mes(per)).font = Font(bold=True)
+        ws.cell(row=filas["lab"], column=c).alignment = Alignment(horizontal="center")
+        if per not in labels:
+            continue
+        ix = labels.index(per)
+        real = ix < n_hist
+        ing = cm(ctx, "fila_ingresos", ix)
+        egr = f"-({cm(ctx,'fila_costo_insumos',ix)}+{cm(ctx,'fila_nomina',ix)}+{cm(ctx,'fila_arriendo',ix)}+{cm(ctx,'fila_otros',ix)})"
+        ut = cm(ctx, "fila_utilidad_neta", ix)
+        numero(ws, filas["ing"], c, f"={ing}/1000000").number_format = "#,##0.0"
+        numero(ws, filas["egr"], c, f"=({egr})/1000000").number_format = "#,##0.0"
+        numero(ws, filas["ut"], c, f"={ut}/1000000").number_format = "#,##0.0"
+        if real:
+            numero(ws, filas["ut_real"], c, f"={ut}/1000000").number_format = "#,##0.0"
+        numero(ws, filas["mg_r" if real else "mg_p"], c, f"=IF({ing}=0,0,{ut}/{ing})", pct=True)
+        if plan and plan["tiene_plan"][ix]:
+            f_pm = f"={cplan(ctx, 'utilidad', ix)}/1000000"
+        else:
+            f_pm = f"={ut}/1000000"
+        numero(ws, filas["plan_modelo"], c, f_pm).number_format = "#,##0.0"
+        # acumulados DENTRO del año (se reinician cada enero)
+        c_ene = dg.col((p // 12) * 12)
+        L_ene, L = get_column_letter(c_ene), get_column_letter(c)
+        if real:
+            numero(ws, filas["acum_real"], c, f"=SUM({L_ene}{filas['ut_real']}:{L}{filas['ut_real']})").number_format = "#,##0.0"
+        numero(ws, filas["acum_plan"], c, f"=SUM({L_ene}{filas['plan_modelo']}:{L}{filas['plan_modelo']})").number_format = "#,##0.0"
+    dg.cerrar(r0 + len(nombres) - 1)
+    dg.refs["ventana"] = dict(filas=filas, n=len(ventana))
+    return filas
+
+
+def hoja_e_proyeccion(wb, ctx):
+    dg = ctx["dg"]
+    tabla_ventana(dg, ctx)
+    h = HojaGraficos(wb, "E_Proyeccion")
+    for g in (grafico_13, grafico_14, grafico_15):
+        g(h, ctx)
+    h.cerrar()
+    return h
+
+
+def _rango_ventana(ctx, p0, p1):
+    dg = ctx["dg"]
+    return dg.col(p0), dg.col(p1)
+
+
+# ── #13 Proyección mensual ────────────────────────────────────────────
+def grafico_13(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    V, F = ctx["ventana"], dg.refs["ventana"]["filas"]
+    labels, n_hist = ctx["mr"]["labels_periodo"], ctx["mr"]["n_hist"]
+    p_ult_real = V.index(labels[n_hist - 1])
+    p_fin = V.index(labels[-1])
+    p_ini = V.index(labels[0])
+    c_ult, c_fin = get_column_letter(dg.col(p_ult_real)), get_column_letter(dg.col(p_fin))
+    sub = (f'="Con el escenario "&Inputs!$E$6&", los ingresos proyectados de {etiqueta_mes(labels[-1])} son "&FIXED(Datos_Graficos!{c_fin}{F["ing"]},1)&" M con margen neto de "'
+           f'&FIXED(Datos_Graficos!{c_fin}{F["mg_p"]}*100,0)&"%, frente a "&FIXED(Datos_Graficos!{c_ult}{F["ing"]},1)&" M de ingresos reales en {etiqueta_mes(labels[n_hist - 1])}."')
+    r = h.lamina(
+        f"Proyección mensual {etiqueta_mes(V[0], False)} – {etiqueta_mes(V[-1], False)}",
+        sub,
+        "Escala: $ millones por mes (barras, eje izquierdo) y margen neto % (línea, eje derecho). Sólido = real; tono claro = proyectado, con el escenario activo de Inputs (celda E6) — una sola línea base. "
+        + (f"Los meses de {etiqueta_mes(V[0], False)} a {etiqueta_mes(V[p_ini - 1], False)} quedan vacíos: el sistema no tiene datos de esos meses. " if p_ini > 0 else "")
+        + "Fuente: hoja Model (fórmulas).")
+    ws_d = dg.ws
+    c1, c2 = dg.col(0), dg.col(len(V) - 1)
+    cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=F["lab"])
+    util = [PALETA["utilidad"] if (p_ini <= p <= p_ult_real) else tono_claro(PALETA["utilidad"]) for p in range(len(V))]
+    bar = nuevo_bar(ancho_gap=50)
+    s1 = serie_fila(ws_d, F["ing"], c1, c2, "Ingresos"); color_serie(s1, PALETA["ingresos"]); puntos_color(s1, [PALETA["ingresos"] if (p_ini <= p <= p_ult_real) else tono_claro(PALETA["ingresos"]) for p in range(len(V))])
+    s2 = serie_fila(ws_d, F["ut"], c1, c2, "Utilidad"); color_serie(s2, PALETA["utilidad"]); puntos_color(s2, util)
+    bar.series += [s1, s2]
+    bar.set_categories(cats)
+    ejes(bar, x_titulo="Mes", y_titulo="$ millones", y_fmt="#,##0.0", rot_x=-90)
+    linea = nuevo_linea()
+    s3 = serie_fila(ws_d, F["mg_r"], c1, c2, "Margen neto (real)"); color_serie(s3, PALETA["neutro_oscuro"], linea=True, marcador=True)
+    s4 = serie_fila(ws_d, F["mg_p"], c1, c2, "Margen neto (proyectado)"); color_serie(s4, PALETA["neutro_oscuro"], linea=True, guion="dash", marcador=True)
+    linea.series += [s3, s4]
+    linea.set_categories(cats)
+    hist = ctx["hist"].set_index("periodo")
+    mg_reales = [margen_mes(hist, p) for p in ctx["periodos_reales"]]
+    mg_max, mg_min = max(0.40, math.ceil(max(mg_reales + [0.0]) * 10) / 10), min(0.0, math.floor(min(mg_reales + [0.0]) * 10) / 10)
+    combo_secundario(bar, linea, y_titulo="Margen neto", y_fmt="0%", y_min=mg_min, y_max=mg_max)
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ── #14 Acumulado del año: real vs Plan / proyección ──────────────────
+def grafico_14(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    V, F = ctx["ventana"], dg.refs["ventana"]["filas"]
+    labels, n_hist = ctx["mr"]["labels_periodo"], ctx["mr"]["n_hist"]
+    anio = int(ctx["mes_foco"][:4])
+    p_ene = V.index(f"{anio}-01")
+    p_dic = p_ene + 11
+    reales_anio = [p for p in labels[:n_hist] if p.startswith(str(anio))]
+    p_ult_real = V.index(reales_anio[-1]) if reales_anio else None
+    c_dic = get_column_letter(dg.col(p_dic))
+    if p_ult_real is not None:
+        c_ur = get_column_letter(dg.col(p_ult_real))
+        sub = (f'="Al cierre de {etiqueta_mes(V[p_ult_real])} la utilidad acumulada real de {anio} es "&FIXED(Datos_Graficos!{c_ur}{F["acum_real"]},1)&" M frente a "'
+               f'&FIXED(Datos_Graficos!{c_ur}{F["acum_plan"]},1)&" M del Plan/proyección; al cierre del año el Plan/proyección acumula "&FIXED(Datos_Graficos!{c_dic}{F["acum_plan"]},1)&" M."')
+    else:
+        sub = f'="El Plan/proyección de {anio} acumula "&FIXED(Datos_Graficos!{c_dic}{F["acum_plan"]},1)&" M (no hay meses reales en ese año)."'
+    r = h.lamina(
+        f"Acumulado del año {anio}: real vs. Plan / proyectado",
+        sub,
+        "Escala: utilidad acumulada del año en $ millones. Línea azul = real. Línea amarilla punteada = Plan (proyección Base a un mes) en los meses reales y proyección del modelo (escenario activo) "
+        "en los meses futuros; los meses reales sin Plan (el primero) cuentan con su valor real. Plan anual = suma de los Plan mensuales. Meses sin datos quedan vacíos. Fuente: hoja Model y Plan (fórmulas).")
+    c1, c2 = dg.col(p_ene), dg.col(p_dic)
+    ws_d = dg.ws
+    cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=F["lab"])
+    ch = nuevo_linea()
+    s1 = serie_fila(ws_d, F["acum_real"], c1, c2, "Utilidad acumulada real"); color_serie(s1, PALETA["real"], linea=True, marcador=True, ancho_pt=3)
+    s2 = serie_fila(ws_d, F["acum_plan"], c1, c2, "Plan / proyección"); color_serie(s2, PALETA["plan"], linea=True, marcador=True, guion="dash", ancho_pt=2.5)
+    ch.series += [s1, s2]
+    ch.set_categories(cats)
+    ejes(ch, x_titulo="Mes", y_titulo="$ millones acumulados", y_fmt="#,##0.0")
+    leyenda(ch, "b")
+    ws.add_chart(ch, f"B{r}")
+
+
+# ── #15 Resumen anual ─────────────────────────────────────────────────
+def grafico_15(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    V, F = ctx["ventana"], dg.refs["ventana"]["filas"]
+    labels, n_hist = ctx["mr"]["labels_periodo"], ctx["mr"]["n_hist"]
+    anios = sorted({int(p[:4]) for p in labels})
+    r0 = dg.seccion("#15 — Resumen anual ($ M)", "FÓRMULAS: suma de la serie mensual del año (Model); Plan anual = suma de los Plan mensuales (meses sin real: la proyección).")
+    filas = []
+    a_ini = r0 + 1
+    for k, a in enumerate(anios):
+        rr = a_ini + k
+        p0 = V.index(f"{a}-01")
+        c1, c2 = get_column_letter(dg.col(p0)), get_column_letter(dg.col(p0 + 11))
+        reales = [p for p in labels[:n_hist] if p.startswith(str(a))]
+        proys = [p for p in labels[n_hist:] if p.startswith(str(a))]
+        tag = "real + proyectado" if reales and proys else ("real" if reales else "proyectado")
+        filas.append([f'="{a} ({tag}) · margen "&FIXED(IF(C{rr}=0,0,E{rr}/C{rr})*100,0)&"%"',
+                      f"=SUM({c1}{F['ing']}:{c2}{F['ing']})", f"=SUM({c1}{F['egr']}:{c2}{F['egr']})", f"=SUM({c1}{F['ut']}:{c2}{F['ut']})",
+                      f"=SUM({c1}{F['plan_modelo']}:{c2}{F['plan_modelo']})"])
+    a, b = escribir_tabla(dg, r0, ["Año", "Ingresos ($ M)", "Egresos ($ M)", "Utilidad ($ M)", "Utilidad Plan/proyección ($ M)"], filas, formatos=[None] + ["#,##0.0"] * 4)
+    dg.cerrar(b)
+    texto = ""
+    if len(anios) >= 2:
+        texto = (f'="Utilidad {anios[0]}: "&FIXED(Datos_Graficos!E{a},1)&" M; {anios[-1]}: "&FIXED(Datos_Graficos!E{b},1)&" M ("&IF(Datos_Graficos!E{a}=0,"n/d",IF(Datos_Graficos!E{b}>=Datos_Graficos!E{a},"+","−")&FIXED(ABS(Datos_Graficos!E{b}/Datos_Graficos!E{a}-1)*100,0)&"%")&" frente a {anios[0]})."')
+    else:
+        texto = f'="Utilidad {anios[0]}: "&FIXED(Datos_Graficos!E{a},1)&" M sobre ingresos de "&FIXED(Datos_Graficos!C{a},1)&" M."'
+    r = h.lamina(
+        f"Resumen anual: {' vs. '.join(str(x) for x in anios)}",
+        texto,
+        "Escala: $ millones por año. " + " ".join(f"{x} combina meses reales y proyectados." if any(p.startswith(str(x)) for p in labels[:n_hist]) and any(p.startswith(str(x)) for p in labels[n_hist:])
+                                                else (f"{x} es proyectado." if not any(p.startswith(str(x)) for p in labels[:n_hist]) else f"{x} es real.") for x in anios)
+        + " 'Utilidad Plan/proyección' = suma de los Plan mensuales (meses sin real: la proyección). El margen anual va en el nombre de cada año. Meses del año fuera del modelo no suman. Fuente: hoja Model (fórmulas).")
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    bar = nuevo_bar(ancho_gap=60)
+    for col, color, nom in ((3, PALETA["ingresos"], "Ingresos"), (4, PALETA["egresos"], "Egresos"), (5, PALETA["utilidad"], "Utilidad"), (6, PALETA["plan"], "Utilidad Plan/proyección")):
+        s = serie_col(dg.ws, col, a, b, nom)
+        color_serie(s, color)
+        etiquetas(s, fmt="#,##0.0", pos="outEnd", tam=900)
+        bar.series.append(s)
+    bar.set_categories(cats)
+    ejes(bar, x_titulo="Año", y_titulo="$ millones", y_fmt="#,##0.0")
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HOJA F_FAMILIA — Si la familia pagara
+# ══════════════════════════════════════════════════════════════════════
+def hoja_f_familia(wb, ctx):
+    h = HojaGraficos(wb, "F_Familia")
+    for g in (grafico_16, grafico_17, grafico_18):
+        g(h, ctx)
+    h.cerrar()
+    return h
+
+
+def _nota_familia(ctx, i):
+    """Nota (fórmula) con el % de días con registro real y los supuestos de Inputs."""
+    dr = ctx["dr"]
+    return (f'="Almuerzo: "&FIXED({cm(ctx, "pct_reg", i)}*100,0)&"% de los días con registro real de platos (el resto se estima con "&Inputs!$E${dr["fam_personas"]}'
+            f'&" personas × "&Inputs!$E${dr["fam_alm_dia"]}&" almuerzo(s) por día, editable en Inputs). Comida rápida: pedidos Gratis a precio de venta (valor real). '
+            f'Escala: $ millones del mes. Nada de esto suma a los ingresos reales. Fuente: hoja Model — Consumo Familiar (fórmulas)."')
+
+
+# ── #16 Cascada: utilidad real → ajustada ─────────────────────────────
+def grafico_16(h, ctx):
+    ws, dg, i = h.ws, ctx["dg"], ctx["i"]
+    pasos = [("Utilidad real", f"={cm(ctx, 'fila_utilidad_neta', i)}", "total"),
+             ("+ Familia: almuerzo", f"={cm(ctx, 'val_alm_tot', i)}", "delta"),
+             ("+ Familia: comida rápida", f"={cm(ctx, 'val_cr', i)}", "delta"),
+             ("Utilidad ajustada", f"={cm(ctx, 'ut_aj', i)}", "total")]
+    a, b = tabla_cascada(dg, "#16 — Utilidad real → utilidad ajustada ($ M)",
+                         "FÓRMULAS hacia Model (Consumo Familiar). Las columnas Base son invisibles: sostienen las barras flotantes.", pasos, dec=2)
+    dg.cerrar(b)
+    sub = (f'="Si la familia hubiera pagado, la utilidad de {ctx["nombre_mes"]} pasaría de "&{f_mill(cm(ctx, "fila_utilidad_neta", i))}&" M a "&{f_mill(cm(ctx, "ut_aj", i))}'
+           f'&" M: +"&{f_mill(cm(ctx, "val_tot", i))}&" M ("&FIXED({cm(ctx, "platos_tot", i)},0)&" almuerzos a precio de venta y "&{f_mill(cm(ctx, "val_cr", i), 2)}&" M de comida rápida)."')
+    r = h.lamina(f"¿Cuánto dejo de ganar por el consumo familiar? — {ctx['nombre_mes'].capitalize()}", sub, _nota_familia(ctx, i))
+    colores = [PALETA["utilidad"], PALETA["almuerzo"], PALETA["comida_rapida"], PALETA["utilidad"]]
+    ch = grafico_cascada(h, dg, a, b, colores)
+    ejes(ch, x_titulo="Paso", y_titulo="$ millones", y_fmt="#,##0.0")
+    ws.add_chart(ch, f"B{r}")
+
+
+# ── #17 Indicadores: reales vs. si la familia pagara ──────────────────
+def grafico_17(h, ctx):
+    ws, i = h.ws, ctx["i"]
+    tiene_ant, tiene_plan = i > 0, hay_plan(ctx)
+    P = lambda k: cplan(ctx, k)
+    dias = cm(ctx, "dias_op", i)
+    # (nombre, clave real, clave ajustada, tipo, favorable_sube, fórmula Plan o None)
+    plan_ing, plan_ut = P("ingresos") if tiene_plan else None, P("utilidad") if tiene_plan else None
+    plan_f = None
+    if tiene_plan:
+        plan_f = {
+            "mg": f"IF({plan_ing}=0,0,{plan_ut}/{plan_ing})",
+            "ins": f"IF({plan_ing}=0,0,{P('insumos')}/{plan_ing})",
+            "primo": f"IF({plan_ing}=0,0,({P('insumos')}+{P('nomina')})/{plan_ing})",
+            "util": f"IF({dias}=0,0,{plan_ut}/{dias})",
+            "pe": f"IF(OR({dias}=0,{plan_ing}=0,{P('insumos')}/{plan_ing}>=1),0,({P('nomina')}+{P('arriendo')}+{P('otros')})/(1-{P('insumos')}/{plan_ing})/{dias})",
+        }
+    filas = [("Margen neto", "mg_real", "mg_aj", "pct", True, "mg"),
+             ("Costo de insumos (% de ventas)", "ins_real", "ins_aj", "pct", False, "ins"),
+             ("Costo primo (% de ventas)", "primo_real", "primo_aj", "pct", False, "primo"),
+             ("Utilidad diaria promedio", "util_dia_real", "util_dia_aj", "money", True, "util"),
+             ("Punto de equilibrio diario", "pe_real", "pe_aj", "money", False, "pe")]
+    fh = ctx["fila_hist"]
+    r = h.lamina(
+        f"Indicadores: reales vs. si la familia pagara — {ctx['nombre_mes'].capitalize()}",
+        f'="Con el consumo familiar a precio de venta, el margen neto pasa de "&FIXED({cm(ctx, "mg_real", i)}*100,1)&"% a "&FIXED({cm(ctx, "mg_aj", i)}*100,1)&"% y el punto de equilibrio diario de $"&FIXED({cm(ctx, "pe_real", i)},0)&" a $"&FIXED({cm(ctx, "pe_aj", i)},0)&"."',
+        "Real = como lo registra el sistema (la familia no paga). Ajustado = sumando el consumo familiar a precio de venta (Model → Consumo Familiar). ▲▼ comparan el valor REAL con el mes anterior y con el Plan "
+        "(Plan = proyección Base a un mes); verde = favorable, rojo = desfavorable. En % se muestra el cambio en puntos (pp). Fuente: hoja Model y Plan (fórmulas).", alto=22)
+    columnas = [("Indicador", 2, 4), ("Real", 5, 6), ("Ajustado", 7, 8), ("Diferencia", 9, 10), ("vs. mes anterior", 11, 12), ("vs. Plan", 13, 14)]
+    cab = r
+    for txt, c1, c2 in columnas:
+        ws.merge_cells(start_row=cab, start_column=c1, end_row=cab, end_column=c2)
+        c = ws.cell(row=cab, column=c1, value=txt)
+        c.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor=PALETA["neutro_oscuro"])
+        c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[cab].height = 24
+    gris = PatternFill("solid", fgColor=tono_claro(PALETA["neutro_claro"], 0.7))
+    for k, (nombre, k_real, k_aj, tipo, fav_sube, k_plan) in enumerate(filas):
+        rr = cab + 1 + k
+        ws.row_dimensions[rr].height = 34
+        real, aj = cm(ctx, k_real, i), cm(ctx, k_aj, i)
+        prev = cm(ctx, k_real, i - 1) if tiene_ant else None
+        if tipo == "pct":
+            f_dif = f"=({aj}-{real})*100"
+            fmt_val, fmt_dif = "0.0%", '+0.0" pp";-0.0" pp";0.0" pp"'
+            f_ant = f'=IF({real}>={prev},"▲ ","▼ ")&FIXED(ABS({real}-{prev})*100,1)&" pp"' if prev else '="—"'
+            f_pl = f'=IF({real}>={plan_f[k_plan]},"▲ ","▼ ")&FIXED(ABS({real}-{plan_f[k_plan]})*100,1)&" pp"' if plan_f else '="—"'
+        else:
+            f_dif = f"={aj}-{real}"
+            fmt_val, fmt_dif = "$ #,##0", '+$ #,##0;-$ #,##0;$ 0'
+            f_ant = f'=IF(OR({prev}=0),"—",IF({real}>={prev},"▲ ","▼ ")&FIXED(ABS({real}/{prev}-1)*100,1)&"%")' if prev else '="—"'
+            f_pl = f'=IF({plan_f[k_plan]}=0,"—",IF({real}>={plan_f[k_plan]},"▲ ","▼ ")&FIXED(ABS({real}/{plan_f[k_plan]}-1)*100,1)&"%")' if plan_f else '="—"'
+        valores = [nombre, f"={real}", f"={aj}", f_dif, f_ant, f_pl]
+        for (txt, c1, c2), v in zip(columnas, valores):
+            ws.merge_cells(start_row=rr, start_column=c1, end_row=rr, end_column=c2)
+            c = ws.cell(row=rr, column=c1, value=v)
+            c.alignment = Alignment(horizontal="left" if txt == "Indicador" else "center", vertical="center", indent=1 if txt == "Indicador" else 0)
+            c.font = Font(name="Calibri", size=12, bold=(txt in ("Indicador", "Ajustado")), color=PALETA["neutro_oscuro"])
+            if txt in ("Real", "Ajustado"):
+                c.number_format = fmt_val
+            elif txt == "Diferencia":
+                c.number_format = fmt_dif
+            for cc in range(c1, c2 + 1):
+                ws.cell(row=rr, column=cc).fill = gris
+                ws.cell(row=rr, column=cc).border = Border(bottom=Side(style="thin", color="FFFFFF"))
+        bien, mal = PALETA["utilidad"], PALETA["alerta"]
+        sube_c, baja_c = (bien, mal) if fav_sube else (mal, bien)
+        for L in ("K", "M"):
+            ws.conditional_formatting.add(f"{L}{rr}", FormulaRule(formula=[f'LEFT({L}{rr},1)="▲"'], font=Font(color=sube_c, bold=True)))
+            ws.conditional_formatting.add(f"{L}{rr}", FormulaRule(formula=[f'LEFT({L}{rr},1)="▼"'], font=Font(color=baja_c, bold=True)))
+    if not tiene_plan:
+        nota(ws, cab + 7, "Sin Plan para este mes: la columna 'vs. Plan' queda en —.", col=2)
+
+
+# ── #18 Peso del consumo familiar en el tiempo ────────────────────────
+def grafico_18(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    labels, n_hist = ctx["mr"]["labels_periodo"], ctx["mr"]["n_hist"]
+    i = ctx["i"]
+    r0 = dg.seccion("#18 — Consumo familiar a precio de venta, por mes ($ M)", "FÓRMULAS hacia Model (Consumo Familiar). La etiqueta del mes lleva el tipo de dato: est. / mixto / reg. / proy.")
+    ws_d = dg.ws
+    nombres = ["Mes (con tipo de dato)", "Almuerzo ($ M)", "Comida rápida ($ M)", "% de las ventas"]
+    for k, nom in enumerate(nombres):
+        label(ws_d, r0 + k, nom, bold=(k == 0))
+    for ix, lab in enumerate(labels):
+        c = dg.col(ix)
+        L = get_column_letter(c)
+        if ix < n_hist:
+            tag = f'IF({cm(ctx, "pct_reg", ix)}>=0.995,"reg.",IF({cm(ctx, "pct_reg", ix)}<=0.005,"est.","mixto"))'
+        else:
+            tag = '"proy."'
+        ws_d.cell(row=r0, column=c, value=f'="{etiqueta_mes(lab)} · "&{tag}').font = Font(bold=True)
+        numero(ws_d, r0 + 1, c, f"={cm(ctx, 'val_alm_tot', ix)}/1000000").number_format = "#,##0.00"
+        numero(ws_d, r0 + 2, c, f"={cm(ctx, 'val_cr', ix)}/1000000").number_format = "#,##0.00"
+        numero(ws_d, r0 + 3, c, f"=IF({cm(ctx, 'fila_ingresos', ix)}=0,0,{cm(ctx, 'val_tot', ix)}/{cm(ctx, 'fila_ingresos', ix)})", pct=True)
+    dg.cerrar(r0 + 3)
+    L_foco = get_column_letter(dg.col(i))
+    sub = (f'="En {ctx["nombre_mes"]} el consumo familiar a precio de venta fue "&FIXED(Datos_Graficos!{L_foco}{r0 + 1}+Datos_Graficos!{L_foco}{r0 + 2},1)&" M, "'
+           f'&FIXED(Datos_Graficos!{L_foco}{r0 + 3}*100,1)&"% de las ventas ("&RIGHT(Datos_Graficos!{L_foco}{r0},LEN(Datos_Graficos!{L_foco}{r0})-FIND("·",Datos_Graficos!{L_foco}{r0})-1)&")."')
+    r = h.lamina(
+        "Peso del consumo familiar en el tiempo",
+        sub,
+        "Escala: $ millones por mes a precio de venta (barras apiladas: almuerzo y comida rápida) y % de las ventas (línea, eje derecho 0–30 %). Tipo de dato de cada mes según el % de días de almuerzo con registro real de platos: "
+        "est. = todo estimado, mixto = parte registrado, reg. = todo registrado, proy. = proyectado con Inputs. Comida rápida siempre es valor real (pedidos Gratis). Fuente: hoja Model (fórmulas).")
+    c1, c2 = dg.col(0), dg.col(len(labels) - 1)
+    cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=r0)
+    bar = nuevo_bar(apilado=True, ancho_gap=45)
+    s1 = serie_fila(ws_d, r0 + 1, c1, c2, "Almuerzo (a precio de venta)"); color_serie(s1, PALETA["almuerzo"])
+    s2 = serie_fila(ws_d, r0 + 2, c1, c2, "Comida rápida (pedidos Gratis)"); color_serie(s2, PALETA["comida_rapida"])
+    bar.series += [s1, s2]
+    bar.set_categories(cats)
+    ejes(bar, x_titulo="Mes · tipo de dato", y_titulo="$ millones", y_fmt="#,##0.0", y_min=0, rot_x=-90)
+    linea = nuevo_linea()
+    s3 = serie_fila(ws_d, r0 + 3, c1, c2, "% de las ventas"); color_serie(s3, PALETA["neutro_oscuro"], linea=True, marcador=True)
+    linea.series.append(s3)
+    linea.set_categories(cats)
+    # eje 0–30 %; solo se deja automático si algún mes real supera 30 % con los supuestos por defecto de Inputs
+    F = ctx["dr"]["_familia_valores"]
+    hh = ctx["hist"]
+    pct_real = [(float(r["valor_alm_registrado"]) + F["personas"] * F["alm_dia"] * float(r["suma_tickets_sin_registro"]) + float(r["valor_cr_registrado"]))
+                / max(float(r["ingresos_almuerzo"] + r["ingresos_cena"]), 1) for _k, r in hh.iterrows()]
+    combo_secundario(bar, linea, y_titulo="% de las ventas", y_fmt="0%", y_min=0, y_max=0.30 if max(pct_real + [0.0]) <= 0.30 else None)
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HOJA G_EXTRAS — complementarios
+# ══════════════════════════════════════════════════════════════════════
+def hoja_g_extras(wb, ctx):
+    h = HojaGraficos(wb, "G_Extras")
+    for g in (grafico_19, grafico_20, grafico_21):
+        g(h, ctx)
+    h.cerrar()
+    return h
+
+
+# ── #19 Cómo me pagan y por dónde vendo ───────────────────────────────
+def grafico_19(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    ped = ctx["diario"]["pedidos"]
+    mf = ctx["mes_foco"]
+    pm = ped[ped["periodo"] == mf] if not ped.empty else ped
+    titulo = f"Cómo me pagan y por dónde vendo — {ctx['nombre_mes'].capitalize()}"
+    nota_base = ("Escala: % de lo vendido en pedidos del mes (100 % por barra). Efectivo/transferencia según el reparto real de cada pedido (el pago dividido cuenta cada parte en su columna). "
+                 "Canal: Domicilio, Para llevar / sin mesa (incluye pedidos marcados 'para llevar'), Mesa; 'Otro' = fiados u otros sin ubicación. Fuente: Pedidos_Pagados del mes en foco, sin Gratis "
+                 "(no incluye desayuno ni ajustes manuales).")
+    if pm.empty:
+        h.lamina(titulo, "No hay pedidos en el mes en foco.", nota_base)
+        return
+    pagos = [("Efectivo", float(pm["pago_efectivo"].sum())), ("Transferencia", float(pm["pago_transferencia"].sum()))]
+    canales = [(c, float(pm[pm["canal"] == c]["monto_total"].sum())) for c in ("Mesa", "Para llevar / sin mesa", "Domicilio", "Otro")]
+    canales = [(c, v) for c, v in canales if v > 0]
+    tot_p, tot_c = sum(v for _c, v in pagos), sum(v for _c, v in canales)
+    sh_p = {c: (v / tot_p if tot_p else 0) for c, v in pagos}
+    sh_c = {c: (v / tot_c if tot_c else 0) for c, v in canales}
+    r = h.lamina(
+        titulo,
+        f"El {fmt_pct(sh_p['Transferencia'])} de lo vendido en pedidos entra por transferencia"
+        + (f" y el {fmt_pct(sh_c.get('Domicilio', 0))} se vende a domicilio" if "Domicilio" in sh_c else "")
+        + (f"; por mesa se vende el {fmt_pct(sh_c['Mesa'])}" if "Mesa" in sh_c else "") + ".",
+        nota_base)
+    series = [(n, v, "pago") for n, v in pagos] + [(n, v, "canal") for n, v in canales]
+    r0 = dg.seccion("#19 — Método de pago y canal de venta ($ M)", "Calculado por el script al generar el modelo (Pedidos_Pagados del mes en foco). Los encabezados llevan el % de cada grupo (fórmula).")
+    filas = [["Cómo me pagan"] + [(v / 1e6 if g == "pago" else None) for _n, v, g in series],
+             ["Por dónde vendo"] + [(v / 1e6 if g == "canal" else None) for _n, v, g in series]]
+    a, b = escribir_tabla(dg, r0, ["Grupo"] + [n for n, _v, _g in series], filas, formatos=[None] + ["#,##0.00"] * len(series))
+    for j, (n, _v, g) in enumerate(series):
+        col = 3 + j
+        L, fila = get_column_letter(col), (a if g == "pago" else b)
+        dg.ws.cell(row=r0, column=col, value=f'="{n} · "&FIXED({L}{fila}/SUM($C{fila}:${get_column_letter(2 + len(series))}{fila})*100,0)&"%"')
+    dg.cerrar(b)
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    bar = nuevo_bar(horizontal=True, apilado=True, ancho_gap=70)
+    bar.grouping = "percentStacked"
+    colores = {"Efectivo": PALETA["neutro_oscuro"], "Transferencia": tono_claro(PALETA["neutro_oscuro"], 0.55), "Mesa": PALETA["ingresos"],
+               "Para llevar / sin mesa": tono_claro(PALETA["ingresos"], 0.4), "Domicilio": tono_claro(PALETA["ingresos"], 0.65), "Otro": PALETA["neutro_claro"]}
+    for j, (n, _v, _g) in enumerate(series):
+        s = Series(Reference(dg.ws, min_col=3 + j, min_row=r0, max_row=b), title_from_data=True)
+        color_serie(s, colores[n])
+        bar.series.append(s)
+    bar.set_categories(cats)
+    bar.x_axis.scaling.orientation = "maxMin"
+    ejes(bar, y_titulo="% de lo vendido", y_fmt="0%")
+    bar.y_axis.crosses = "max"
+    leyenda(bar, "b")
+    ws.add_chart(bar, f"B{r}")
+
+
+# ── #20 ¿Qué gasto crece más rápido que mis ventas? ───────────────────
+def grafico_20(h, ctx):
+    ws, dg, i = h.ws, ctx["dg"], ctx["i"]
+    per, hist = ctx["periodos_reales"], ctx["hist"].set_index("periodo")
+    titulo = "¿Qué gasto crece más rápido que mis ventas?"
+    if len(per) < 2:
+        h.lamina(titulo, "Hace falta al menos 2 meses reales para comparar el crecimiento.", "Índice base 100 = primer mes real. Omitido: solo hay un mes real.")
+        return
+    idxs = list(range(0, i + 1))
+    candidatos = [("Ventas", "fila_ingresos", lambda p: ingresos_de(hist, p), PALETA["ingresos"], False),
+                  ("Insumos", "fila_costo_insumos", lambda p: float(hist.loc[p, "costo_insumos"]), PALETA["egresos"], False),
+                  ("Nómina", "fila_nomina", lambda p: float(hist.loc[p, "nomina"]), tono_claro(PALETA["egresos"], 0.3), False),
+                  ("Arriendo y servicios", "fila_arriendo", lambda p: float(hist.loc[p, "arriendo_servicios"]), tono_claro(PALETA["egresos"], 0.55), False),
+                  ("Otros", "fila_otros", lambda p: float(hist.loc[p, "otros_gastos"]), tono_claro(PALETA["neutro_oscuro"], 0.4), False)]
+    usables = [c for c in candidatos if c[2](per[0]) > 0]
+    omitidos = [c[0] for c in candidatos if c[2](per[0]) <= 0]
+    crec = {c[0]: c[2](per[i]) / c[2](per[0]) - 1 for c in usables}
+    gastos = {k: v for k, v in crec.items() if k != "Ventas"}
+    mas_rapido = max(gastos, key=gastos.get) if gastos else None
+    if mas_rapido is not None and gastos[mas_rapido] > crec.get("Ventas", 0):
+        hallazgo = f"Entre {nombre_mes_largo(per[0])} y {nombre_mes_largo(per[i])} las ventas crecieron {fmt_pct(crec['Ventas'], 0, True)} y {mas_rapido.lower()} {fmt_pct(gastos[mas_rapido], 0, True)}: crece más rápido que las ventas."
+    else:
+        hallazgo = f"Entre {nombre_mes_largo(per[0])} y {nombre_mes_largo(per[i])} las ventas crecieron {fmt_pct(crec.get('Ventas', 0), 0, True)}; ningún rubro de gasto crece más rápido."
+    n_primero, n_foco = int(hist.loc[per[0], "dias_operados"]), int(hist.loc[per[i], "dias_operados"])
+    ojo = (f" Ojo: el primer mes real tuvo {n_primero} días operados y {nombre_mes_largo(per[i])} {n_foco}; el índice mezcla meses de distinto largo." if n_primero and (n_primero < 0.8 * n_foco or n_primero > 1.25 * n_foco) else "")
+    r = h.lamina(
+        titulo, hallazgo + ojo,
+        "Escala: índice base 100 = primer mes real (cada línea parte de 100). Por encima de la línea de ventas = crece más rápido que las ventas. "
+        + (f"Omitidos por tener 0 en el mes base: {', '.join(omitidos)}. " if omitidos else "") + "Fuente: hoja Model (fórmulas).")
+    r0 = dg.seccion("#20 — Índice base 100 (primer mes real = 100)", "FÓRMULAS hacia Model: valor del mes ÷ valor del primer mes real × 100.")
+    ws_d = dg.ws
+    label(ws_d, r0, "Mes")
+    for k, ix in enumerate(idxs):
+        ws_d.cell(row=r0, column=dg.col(k), value=etiqueta_mes(per[ix])).font = Font(bold=True)
+    for j, (nom, clave, _f, _c, _x) in enumerate(usables):
+        label(ws_d, r0 + 1 + j, nom)
+        base = cm(ctx, clave, 0)
+        for k, ix in enumerate(idxs):
+            numero(ws_d, r0 + 1 + j, dg.col(k), f"=IF({base}=0,0,{cm(ctx, clave, ix)}/{base}*100)").number_format = "0"
+    dg.cerrar(r0 + len(usables))
+    c1, c2 = dg.col(0), dg.col(len(idxs) - 1)
+    cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=r0)
+    ch = nuevo_linea()
+    for j, (nom, _cl, _f, color, _x) in enumerate(usables):
+        s = serie_fila(ws_d, r0 + 1 + j, c1, c2, nom)
+        color_serie(s, color, linea=True, marcador=True, ancho_pt=3.25 if nom == "Ventas" else 2.0, guion=None if nom == "Ventas" else "solid")
+        ch.series.append(s)
+    ch.set_categories(cats)
+    ejes(ch, x_titulo="Mes", y_titulo="Índice (primer mes real = 100)", y_fmt="0")
+    leyenda(ch, "b")
+    ws.add_chart(ch, f"B{r}")
+
+
+# ── #21 Plata por cobrar (fiados) por antigüedad ──────────────────────
+def grafico_21(h, ctx):
+    ws, dg = h.ws, ctx["dg"]
+    fi = ctx["diario"]["fiados"]
+    hoy = pd.Timestamp(ctx["diario"]["hoy"])
+    titulo = "Plata por cobrar (fiados) por antigüedad"
+    nota_base = ("Escala: $ miles. Es un SNAPSHOT del día en que se generó el modelo (" + hoy.strftime("%d/%m/%Y") + "): el sistema solo guarda los fiados pendientes de hoy, no el historial de saldos. "
+                 "Antigüedad = días desde la fecha del pedido. Montos brutos de los pedidos fiados pendientes (el saldo de Cuentas por Cobrar del Balance además descuenta abonos). Fuente: Pedidos_Pendientes (es_fiar).")
+    if fi.empty or fi["monto_total"].sum() <= 0:
+        h.lamina(titulo, "No hay fiados pendientes.", nota_base)
+        return
+    edad = (hoy - fi["fecha"]).dt.days
+    cortes = [("0–7 días", 0, 7), ("8–15 días", 8, 15), ("16–30 días", 16, 30), ("Más de 30 días", 31, 10 ** 6)]
+    sumas = [float(fi[(edad >= a_) & (edad <= b_)]["monto_total"].sum()) for _n, a_, b_ in cortes]
+    total = sum(sumas)
+    viejos = sumas[2] + sumas[3]
+    r = h.lamina(
+        titulo,
+        f"Hay {fmt_pesos(total)} en fiados pendientes ({len(fi)} fila(s) de pedido); {fmt_pct(viejos / total if total else 0)} tiene más de 15 días.",
+        nota_base)
+    r0 = dg.seccion("#21 — Fiados pendientes por antigüedad ($ miles)", "Calculado por el script al generar el modelo (Pedidos_Pendientes con es_fiar).")
+    filas = [[n, v / 1000] for (n, _a, _b), v in zip(cortes, sumas)]
+    a, b = escribir_tabla(dg, r0, ["Antigüedad", "Por cobrar ($ miles)"], filas, formatos=[None, "#,##0"])
+    dg.cerrar(b)
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    bar = nuevo_bar(ancho_gap=60)
+    s = serie_col(dg.ws, 3, a, b, "Por cobrar")
+    color_serie(s, PALETA["utilidad"])
+    puntos_color(s, [PALETA["utilidad"], PALETA["plan"], tono_claro(PALETA["alerta"], 0.4), PALETA["alerta"]])
+    etiquetas(s, fmt="#,##0", pos="outEnd", tam=1100)
+    bar.series.append(s)
+    bar.set_categories(cats)
+    ejes(bar, x_titulo="Antigüedad del pedido", y_titulo="$ miles", y_fmt="#,##0", y_min=0)
+    sin_leyenda(bar)
+    ws.add_chart(bar, f"B{r}")
+
+
+def construir_hojas_graficos(wb, ctx):
+    """Crea las hojas de gráficos nuevas (después de Outputs) y devuelve la lista
+    de hojas, en el orden en que deben quedar. Datos_Graficos va al final (lo pone main)."""
+    hojas = []
+    for nombre, fn in HOJAS_GRAFICOS:
+        hojas.append(fn(wb, ctx).ws)
+    return hojas
+
+
+HOJAS_GRAFICOS = [
+    ("A_Resultado", hoja_a_resultado),
+    ("B_Ingresos", hoja_b_ingresos),
+    ("C_Egresos", hoja_c_egresos),
+    ("E_Proyeccion", hoja_e_proyeccion),
+    ("F_Familia", hoja_f_familia),
+    ("G_Extras", hoja_g_extras),
+]
+
+
 def resolver_mes_foco(mes_arg, hist_df):
     """Mes en foco de los gráficos mensuales (--mes AAAA-MM). Por defecto, el
     último mes con datos reales. Debe ser un mes real (de `hist_df`)."""
@@ -1839,10 +3686,14 @@ def main():
     ctx = dict(hist=hist_df, fcst=meses_fcst_labels, mr=model_refs, dr=driver_rows, diario=diario,
                mes_foco=mes_foco, es_demo=es_demo, extra=extra)
     dg = DatosGraficos(wb)
+    ctx["dg"] = dg
     tabla_plan(dg, ctx)
+    preparar_foco(ctx)
+    hojas_nuevas = construir_hojas_graficos(wb, ctx)
+    config_impresion(dg.ws, horizontal=True)
 
-    # Orden final de hojas: Cover, Outputs, Inputs, Model, Datos_Graficos
-    wb._sheets = [wb["Cover"], wb["Outputs"], wb["Inputs"], wb["Model"], dg.ws]
+    # Orden final de hojas: Cover, Outputs, hojas de gráficos nuevas, Inputs, Model, Datos_Graficos
+    wb._sheets = [wb["Cover"], wb["Outputs"]] + hojas_nuevas + [wb["Inputs"], wb["Model"], dg.ws]
     wb.active = 0
 
     wb.save(salida_path)
