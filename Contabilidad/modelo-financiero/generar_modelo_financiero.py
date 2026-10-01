@@ -39,6 +39,7 @@ Qué queda como ESTRUCTURA para completar más adelante (tal como se pidió):
 Requiere: pip install openpyxl pandas
 """
 
+import re
 import sys
 import argparse
 from datetime import date
@@ -61,6 +62,7 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
+import numpy as np
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
@@ -147,12 +149,323 @@ def config_impresion(ws, horizontal=True, ajustar_ancho=True):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# CAPA DE DATOS DIARIOS — funciones de módulo reutilizables (mensual y diario)
+# ══════════════════════════════════════════════════════════════════════
+# Rubros de egreso del modelo. MISMA regla que el Estado de Resultados
+# mensual (ver suma_cat() más abajo): Egresos.cat y Gastos_Cierre.categoria →
+# 4 rubros. "prestamo" (plata propia que se saca de la caja) se EXCLUYE: no es
+# un gasto del negocio. Cualquier otra categoría es "huérfana": no se suma en
+# ningún lado y se reporta por consola (nunca se reasigna en silencio).
+MAPA_RUBRO = {
+    "proveedor": "insumos",
+    "nomina": "nomina",
+    "arriendo": "arriendo_servicios",
+    "servicios": "arriendo_servicios",
+    "otro": "otros",
+}
+CATEGORIAS_EXCLUIDAS = {"prestamo"}
+RUBROS = ["insumos", "nomina", "arriendo_servicios", "otros"]
+RUBRO_LABEL = {
+    "insumos": "Insumos", "nomina": "Nómina",
+    "arriendo_servicios": "Arriendo + Servicios", "otros": "Otros",
+}
+
+# Catálogo de comida rápida: código de producto → categoría. ES UNA COPIA de
+# PL.comidaRapida en "ElLobo-Sistema Contable.html" (campo "cat"): si allá se
+# agregan o cambian productos, hay que mantener esta lista sincronizada a mano.
+# Cada tupla es (prefijo del código, cuántos códigos hay, categoría) — p. ej.
+# ("PE", 6, "PERROS") = PE01…PE06.
+_CATALOGO_CR = [
+    ("PE", 6, "PERROS"), ("HB", 2, "HAMBURGUESAS"), ("CRA", 3, "ASADOS"),
+    ("PI", 5, "PICADAS"), ("SL", 4, "SALCHIPAPAS"), ("CU", 4, "SANDWICH CUBANO"),
+    ("ARP", 11, "AREPAS"), ("SZ", 5, "SUIZOS"), ("ADI", 3, "ADICIONALES"),
+    ("BEB", 6, "BEBIDAS"),
+]
+MAPA_CR_CATEGORIA = {f"{pre}{i:02d}": cat for pre, n, cat in _CATALOGO_CR for i in range(1, n + 1)}
+CATEGORIAS_CR = [cat for _pre, _n, cat in _CATALOGO_CR]
+# Los pedidos "extra" (productos sueltos: bebidas, botella de agua…) no traen
+# código de catálogo, así que en comida rápida se agrupan aparte.
+CATEGORIA_CR_EXTRAS = "EXTRAS"
+
+LABEL_ALMUERZO = {
+    "completo": "Completo", "seco": "Seco", "asado130": "Asado 130g", "asado200": "Asado 200g",
+    "porcion-sopa": "Porción sopa", "porcion-arroz": "Porción arroz",
+    "porcion-proteina": "Porción proteína", "sopa-y-arroz": "Sopa y arroz",
+    "extra": "Productos extra",
+}
+
+DIAS_SEMANA = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+MESES_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+
+
+def _num(df, col):
+    """Columna numérica (NaN si no es número) — o ceros si la columna no existe."""
+    if col in df.columns:
+        return pd.to_numeric(df[col], errors="coerce")
+    return pd.Series(0.0, index=df.index, dtype="float64")
+
+
+def _bool(df, col):
+    """Columna booleana robusta: True solo si el valor es literalmente True."""
+    if col in df.columns:
+        return df[col] == True  # noqa: E712 — NaN/None cuentan como False
+    return pd.Series(False, index=df.index)
+
+
+def ingresos_por_cierre(cierres):
+    """Ingreso total de CADA cierre (una Serie alineada con cierres.index):
+    efectivo + transferencia + ajuste manual (de efectivo y de transferencia) —
+    MISMA fórmula que ajustesDeCierre() del sistema, para que cuadre con el
+    KPI de Ingresos del Tablero. Los cierres viejos (anteriores a la
+    separación del ajuste) solo traen "ajuste_manual", que siempre se trató
+    como parte del efectivo."""
+    if cierres is None or cierres.empty:
+        return pd.Series(dtype="float64")
+    if {"efectivo", "transferencia"}.issubset(cierres.columns):
+        base = _num(cierres, "efectivo").fillna(0) + _num(cierres, "transferencia").fillna(0)
+    else:
+        base = pd.Series(0.0, index=cierres.index)
+    if "ajuste_efectivo" in cierres.columns:
+        ajuste_ef = _num(cierres, "ajuste_efectivo")
+        if "ajuste_manual" in cierres.columns:
+            ajuste_ef = ajuste_ef.fillna(_num(cierres, "ajuste_manual"))
+    elif "ajuste_manual" in cierres.columns:
+        ajuste_ef = _num(cierres, "ajuste_manual")
+    else:
+        ajuste_ef = pd.Series(0.0, index=cierres.index)
+    ajuste_tr = _num(cierres, "ajuste_transferencia") if "ajuste_transferencia" in cierres.columns else pd.Series(0.0, index=cierres.index)
+    return base + ajuste_ef.fillna(0) + ajuste_tr.fillna(0)
+
+
+def ingreso_turno_cierres(cierres, turno):
+    """Total real de un turno en el conjunto de cierres recibido (un mes, un
+    día, lo que sea): efectivo + transferencia + ajustes. No se reconstruye
+    sumando Pedidos_Pagados porque el desayuno (sumado al cierre de almuerzo
+    al abrir el turno) y los ajustes manuales no generan filas de pedido.
+    Antes vivía anidada dentro de cargar_datos_reales()."""
+    if cierres is None or cierres.empty or "turno" not in cierres.columns:
+        return 0.0
+    del_turno = cierres[cierres["turno"] == turno]
+    if del_turno.empty:
+        return 0.0
+    return float(ingresos_por_cierre(del_turno).sum())
+
+
+def desayuno_por_dia(aperturas):
+    """Venta de desayuno por fecha (Aperturas_Turno, turno almuerzo):
+    venta_desayuno (efectivo) + venta_desayuno_transferencia."""
+    if aperturas is None or aperturas.empty or not {"fecha", "turno"}.issubset(aperturas.columns):
+        return pd.Series(dtype="float64")
+    a = aperturas[aperturas["turno"] == "almuerzo"]
+    total = _num(a, "venta_desayuno").fillna(0)
+    if "venta_desayuno_transferencia" in a.columns:
+        total = total + _num(a, "venta_desayuno_transferencia").fillna(0)
+    return total.groupby(a["fecha"]).sum()
+
+
+def ingresos_diarios(cierres, aperturas):
+    """Ingreso por día en los 3 turnos del modelo (DataFrame indexado por fecha):
+      desayuno · almuerzo_neto · comida_rapida · total · almuerzo_bruto.
+    El cierre de ALMUERZO ya incluye el desayuno (se suma al abrir el turno),
+    igual que "Ingresos Almuerzo" del Model; por eso Almuerzo neto = Almuerzo
+    del cierre − desayuno. El desayuno solo se descuenta en días que tienen
+    cierre de almuerzo (si no, nunca entró a los ingresos). Así, por
+    construcción, desayuno + almuerzo_neto + comida_rapida = total."""
+    cols = ["desayuno", "almuerzo_neto", "comida_rapida", "total", "almuerzo_bruto"]
+    vacio = pd.DataFrame(columns=cols, index=pd.DatetimeIndex([], name="fecha"), dtype="float64")
+    if cierres is None or cierres.empty or not {"fecha", "turno"}.issubset(cierres.columns):
+        return vacio
+    c = cierres.assign(_ing=ingresos_por_cierre(cierres))
+    alm = c[c["turno"] == "almuerzo"].groupby("fecha")["_ing"].sum()
+    cena = c[c["turno"] == "cena"].groupby("fecha")["_ing"].sum()
+    idx = alm.index.union(cena.index)
+    out = pd.DataFrame(index=idx)
+    out.index.name = "fecha"
+    tiene_alm = alm.reindex(idx).notna()
+    out["almuerzo_bruto"] = alm.reindex(idx).fillna(0.0)
+    out["comida_rapida"] = cena.reindex(idx).fillna(0.0)
+    out["desayuno"] = desayuno_por_dia(aperturas).reindex(idx).fillna(0.0).where(tiene_alm, 0.0)
+    out["almuerzo_neto"] = out["almuerzo_bruto"] - out["desayuno"]
+    out["total"] = out["almuerzo_bruto"] + out["comida_rapida"]
+    return out.sort_index()[cols]
+
+
+def dias_operados(ingresos_dia):
+    """Un "día operado" es una fecha con ingresos > 0 (igual que el KPI
+    "Promedio por día" del Tablero). TODO promedio diario se divide por días
+    operados, nunca por días calendario."""
+    if ingresos_dia.empty:
+        return pd.DatetimeIndex([], name="fecha")
+    return ingresos_dia.index[ingresos_dia["total"] > 0]
+
+
+def egresos_diarios(egresos, gastos_cierre):
+    """Egresos por día y rubro, en formato largo (fecha, rubro, monto):
+    Egresos (columna "cat") + Gastos_Cierre (columna "categoria"), mapeados a
+    los 4 rubros del modelo con la misma regla EXACTA que suma_cat() mensual
+    (coincidencia exacta de texto). Devuelve (egresos_largo, huerfanos):
+    "prestamo" se descarta; una categoría fuera de MAPA_RUBRO (o vacía) es
+    huérfana → no se suma y se lista en `huerfanos` (origen, categoria, n,
+    monto) para reportarla — nunca se reasigna en silencio."""
+    partes, huerfanas = [], []
+    for origen, df, col in (("Egresos", egresos, "cat"), ("Gastos_Cierre", gastos_cierre, "categoria")):
+        if df is None or df.empty or col not in df.columns or "fecha" not in df.columns:
+            continue
+        t = pd.DataFrame({"fecha": df["fecha"], "categoria": df[col], "monto": _num(df, "monto").fillna(0)})
+        excluida = t["categoria"].isin(CATEGORIAS_EXCLUIDAS)
+        rubro = t["categoria"].map(MAPA_RUBRO)
+        huerf = rubro.isna() & ~excluida
+        if huerf.any():
+            h = t[huerf].assign(categoria=lambda d: d["categoria"].astype("object").where(d["categoria"].notna(), "<sin categoría>"))
+            g = h.groupby("categoria")["monto"].agg(["count", "sum"]).reset_index()
+            for _, fila in g.iterrows():
+                huerfanas.append(dict(origen=origen, categoria=fila["categoria"], n=int(fila["count"]), monto=float(fila["sum"])))
+        ok = t[rubro.notna()].assign(rubro=rubro[rubro.notna()])
+        partes.append(ok[["fecha", "rubro", "monto"]])
+    largo = pd.concat(partes, ignore_index=True) if partes else pd.DataFrame(columns=["fecha", "rubro", "monto"])
+    return largo, pd.DataFrame(huerfanas, columns=["origen", "categoria", "n", "monto"])
+
+
+def es_gratis(df):
+    """Pedidos de ubicación "Gratis" (regalo de la casa / consumo de la
+    familia en comida rápida). El sistema los guarda con es_gratis = TRUE y
+    metodo = 'gratis' — se aceptan ambas marcas por si falta la columna."""
+    return _bool(df, "es_gratis") | (df["metodo"] == "gratis" if "metodo" in df.columns else pd.Series(False, index=df.index))
+
+
+def preparar_pedidos(pagados, pendientes):
+    """Separa los pedidos en (pedidos, gratis):
+      · pedidos = Pedidos_Pagados SIN los Gratis, normalizado, con las
+        columnas derivadas que usan los gráficos (periodo, grupo de producto,
+        canal). Los Gratis NUNCA entran a volúmenes, tickets, Pareto ni a
+        ningún conteo de pedidos (los ingresos salen de los cierres).
+      · gratis = pedidos Gratis, pagados (ya entregados) y pendientes, a
+        precio de venta (monto_total)."""
+    cols_num = ["cantidad", "monto_total", "monto_efectivo", "monto_transferencia"]
+    def norm(df):
+        if df is None or df.empty or "fecha" not in df.columns:
+            return pd.DataFrame()
+        d = df.copy()
+        for c in cols_num:
+            d[c] = _num(d, c).fillna(0)
+        return d
+    pag, pen = norm(pagados), norm(pendientes)
+    gratis_partes = [d[es_gratis(d)] for d in (pag, pen) if not d.empty]
+    gratis = pd.concat(gratis_partes, ignore_index=True) if gratis_partes else pd.DataFrame(columns=["fecha", "turno", "cantidad", "monto_total"])
+    if not gratis.empty:
+        gratis = gratis[["fecha", "turno", "cantidad", "monto_total"] + [c for c in ("grupo_pedido", "id", "pedido", "estado") if c in gratis.columns]]
+    if pag.empty:
+        return pd.DataFrame(columns=["fecha", "turno", "pedido", "cantidad", "monto_total"]), gratis
+    ped = pag[~es_gratis(pag)].copy()
+    ped["periodo"] = ped["fecha"].dt.to_period("M").astype(str)
+    tipo = ped["pedido"].astype("object") if "pedido" in ped.columns else pd.Series("", index=ped.index)
+    ped["grupo_producto"] = np.where(
+        ped["turno"] == "almuerzo",
+        tipo.map(lambda t: LABEL_ALMUERZO.get(t, str(t))),
+        tipo.map(lambda t: MAPA_CR_CATEGORIA.get(t, CATEGORIA_CR_EXTRAS if t == "extra" else "OTROS")),
+    )
+    # Canal de venta: domicilio / para llevar (o sin mesa) / mesa.
+    dom, llevar = _bool(ped, "es_domicilio"), _bool(ped, "para_llevar") | _bool(ped, "es_sin_mesa")
+    con_mesa = ped["mesa"].notna() if "mesa" in ped.columns else pd.Series(False, index=ped.index)
+    ped["canal"] = np.select([dom, llevar, con_mesa], ["Domicilio", "Para llevar / sin mesa", "Mesa"], default="Otro")
+    # Cuánto de cada pedido entró en efectivo / transferencia — mismas reglas
+    # que efectivoDe()/transferenciaDe() del sistema (el pago dividido guarda
+    # su reparto exacto en monto_efectivo / monto_transferencia).
+    met = ped["metodo"] if "metodo" in ped.columns else pd.Series("", index=ped.index)
+    ped["pago_efectivo"] = np.where(met == "dividido", ped["monto_efectivo"], np.where(met == "efectivo", ped["monto_total"], 0.0))
+    ped["pago_transferencia"] = np.where(met == "dividido", ped["monto_transferencia"], np.where(met == "transferencia", ped["monto_total"], 0.0))
+    return ped, gratis
+
+
+def construir_diario(cierres, aperturas, egresos, gastos_cierre, pagados, pendientes, hoy=None):
+    """Arma el paquete de datos DIARIOS que comparten el modelo mensual y los
+    gráficos (dict de DataFrames). Todo sale de las mismas hojas del export."""
+    ing_dia = ingresos_diarios(cierres, aperturas)
+    egr, huerf = egresos_diarios(egresos, gastos_cierre)
+    ped, gratis = preparar_pedidos(pagados, pendientes)
+    if cierres is not None and not cierres.empty and {"fecha", "turno"}.issubset(cierres.columns):
+        cie = pd.DataFrame({
+            "fecha": cierres["fecha"], "turno": cierres["turno"],
+            "platos_familia": _num(cierres, "platos_familia"),  # NaN = "sin registro" (columna ausente = todo sin registro)
+            "manual": _bool(cierres, "manual"),
+        })
+    else:
+        cie = pd.DataFrame(columns=["fecha", "turno", "platos_familia", "manual"])
+    fiados = pd.DataFrame(columns=["fecha", "monto_total"])
+    if pendientes is not None and not pendientes.empty and "es_fiar" in pendientes.columns:
+        f = pendientes[_bool(pendientes, "es_fiar")]
+        fiados = pd.DataFrame({"fecha": f["fecha"], "monto_total": _num(f, "monto_total").fillna(0)})
+    return dict(ingresos=ing_dia, egresos=egr, egresos_huerfanos=huerf, pedidos=ped, gratis=gratis,
+                cierres=cie, fiados=fiados, hoy=hoy or date.today())
+
+
+def enriquecer_hist(hist, diario):
+    """Agrega a `hist` (una fila por mes real) lo que el modelo necesita de los
+    datos DIARIOS — todo calculado por el script al generar el modelo:
+      dias_operados · dias_alm_operados · dias_con_registro · platos_registrados ·
+      valor_alm_registrado · suma_tickets_sin_registro · valor_cr_registrado ·
+      gratis_alm_valor · gratis_cr_valor (consumo familiar y Gratis).
+    ticket_d = (ingreso de almuerzo del día − desayuno del día) ÷ pedidos de
+    almuerzo del día (Σ cantidad, SIN Gratis); si el día no tiene pedidos o no
+    se puede calcular (p. ej. un cierre manual) se usa el ticket promedio real
+    del mes (el del Revenue Schedule)."""
+    ing, ped, cie, gr = diario["ingresos"], diario["pedidos"], diario["cierres"], diario["gratis"]
+    h = hist.copy()
+    h["_ticket_mes"] = (h["ingresos_almuerzo"] - h["ingresos_desayuno"]) / h["volumen_almuerzo"].clip(lower=1)
+    ticket_mes = h.set_index("periodo")["_ticket_mes"]
+
+    # días operados (cualquier turno) por mes
+    op = dias_operados(ing)
+    dias_op = pd.Series(1, index=op).groupby(op.to_period("M").astype(str)).sum() if len(op) else pd.Series(dtype=int)
+
+    # almuerzo, día por día
+    alm = ing[ing["almuerzo_bruto"] > 0].copy()
+    alm["periodo"] = alm.index.to_period("M").astype(str)
+    ped_alm = ped[ped["turno"] == "almuerzo"].groupby("fecha")["cantidad"].sum() if not ped.empty else pd.Series(dtype=float)
+    alm["pedidos"] = ped_alm.reindex(alm.index).fillna(0)
+    cie_alm = cie[cie["turno"] == "almuerzo"]
+    pf = cie_alm.groupby("fecha")["platos_familia"].max() if not cie_alm.empty else pd.Series(dtype=float)
+    alm["platos_familia"] = pf.reindex(alm.index)
+    alm["ticket"] = (alm["almuerzo_neto"] / alm["pedidos"]).where((alm["pedidos"] > 0) & (alm["almuerzo_neto"] > 0))
+    alm["ticket"] = alm["ticket"].fillna(alm["periodo"].map(ticket_mes))
+    con = alm["platos_familia"].notna()
+    por_mes = pd.DataFrame({
+        "dias_alm_operados": alm.groupby("periodo").size(),
+        "dias_con_registro": con.groupby(alm["periodo"]).sum(),
+        "platos_registrados": alm["platos_familia"].where(con, 0).groupby(alm["periodo"]).sum(),
+        "valor_alm_registrado": (alm["platos_familia"] * alm["ticket"]).where(con, 0).groupby(alm["periodo"]).sum(),
+        "suma_tickets_sin_registro": alm["ticket"].where(~con, 0).groupby(alm["periodo"]).sum(),
+    })
+    # Gratis (a precio de venta): comida rápida = consumo de la familia REGISTRADO;
+    # almuerzo = pedidos Gratis legados (anteriores a la regla "Gratis solo en comida rápida").
+    if not gr.empty:
+        g = gr.assign(periodo=gr["fecha"].dt.to_period("M").astype(str))
+        gr_cr = g[g["turno"] == "cena"].groupby("periodo")["monto_total"].sum()
+        gr_al = g[g["turno"] == "almuerzo"].groupby("periodo")["monto_total"].sum()
+    else:
+        gr_cr = gr_al = pd.Series(dtype=float)
+    h = h.drop(columns="_ticket_mes").set_index("periodo")
+    h["dias_operados"] = dias_op.reindex(h.index).fillna(0).astype(int)
+    for c in por_mes.columns:
+        h[c] = por_mes[c].reindex(h.index).fillna(0)
+    for c in ("dias_alm_operados", "dias_con_registro"):
+        h[c] = h[c].astype(int)
+    h["valor_cr_registrado"] = gr_cr.reindex(h.index).fillna(0.0)
+    h["gratis_alm_valor"] = gr_al.reindex(h.index).fillna(0.0)
+    h["gratis_cr_valor"] = h["valor_cr_registrado"]
+    return h.reset_index()
+
+
+# ══════════════════════════════════════════════════════════════════════
 # CARGA DE DATOS — desde el export real, o datos de EJEMPLO
 # ══════════════════════════════════════════════════════════════════════
 def cargar_datos_reales(path_excel):
     """Lee el archivo del botón 'Exportar a Excel' de la pestaña Datos (una
-    hoja por tabla de Supabase) y arma un DataFrame mensual. Ajusta los
-    nombres de hoja/columna aquí si cambian en el sistema."""
+    hoja por tabla de Supabase) y arma (hist, extra, diario):
+      hist   — DataFrame mensual (una fila por mes real)
+      extra  — saldos puntuales para el Balance (caja, inventario, fiados)
+      diario — datos por día para los gráficos (ver construir_diario())
+    Ajusta los nombres de hoja/columna aquí si cambian en el sistema."""
     xls = pd.ExcelFile(path_excel)
 
     def hoja(nombre):
@@ -168,43 +481,30 @@ def cargar_datos_reales(path_excel):
     abonos = hoja("Abonos_Fiado")
     aperturas = hoja("Aperturas_Turno")
 
-    for df in (cierres, pedidos, egresos, gastos_cierre, movs_caja, aperturas):
+    for df in (cierres, pedidos, pendientes, egresos, gastos_cierre, movs_caja, aperturas):
         if not df.empty and "fecha" in df.columns:
             df["fecha"] = pd.to_datetime(df["fecha"])
             df["periodo"] = df["fecha"].dt.to_period("M")
 
+    # OJO (sin cambiar a propósito, pendiente de decidir): por precedencia de
+    # operadores esto se lee "A if hay_cierres else (set() | B)", así que
+    # cuando existe Cierres_Dia NO se incorporan los meses que solo tienen
+    # egresos. Con los datos actuales no se nota (no hay meses solo-egresos).
     meses = sorted(
         set(cierres["periodo"]) if "periodo" in cierres.columns else set()
         | (set(egresos["periodo"]) if "periodo" in egresos.columns else set())
     )
 
-    def ingreso_turno_cierres(cierres_mes, turno):
-        """Total real de un turno en un mes: efectivo + transferencia +
-        ajuste manual — MISMA fórmula que ajustesDeCierre() en el sistema,
-        para que cuadre con el KPI de Ingresos del Tablero. No se
-        reconstruye sumando Pedidos_Pagados porque el desayuno (sumado al
-        cierre de almuerzo al abrir el turno) y los ajustes manuales no
-        generan filas de pedido."""
-        del_turno = cierres_mes[cierres_mes.get("turno") == turno] if not cierres_mes.empty else pd.DataFrame()
-        if del_turno.empty:
-            return 0.0
-        base = float(del_turno[["efectivo", "transferencia"]].sum().sum()) if {"efectivo", "transferencia"}.issubset(del_turno.columns) else 0.0
-        if "ajuste_efectivo" in del_turno.columns:
-            ajuste_ef = del_turno["ajuste_efectivo"]
-            if "ajuste_manual" in del_turno.columns:
-                ajuste_ef = ajuste_ef.fillna(del_turno["ajuste_manual"])
-        elif "ajuste_manual" in del_turno.columns:
-            ajuste_ef = del_turno["ajuste_manual"]
-        else:
-            ajuste_ef = pd.Series(dtype=float)
-        ajuste_ef_total = float(ajuste_ef.fillna(0).sum()) if not ajuste_ef.empty else 0.0
-        ajuste_tr_total = float(del_turno["ajuste_transferencia"].fillna(0).sum()) if "ajuste_transferencia" in del_turno.columns else 0.0
-        return base + ajuste_ef_total + ajuste_tr_total
+    # Los pedidos "Gratis" (regalos de la casa / consumo de la familia en
+    # comida rápida) no son ventas: se excluyen de los VOLÚMENES (y, por tanto,
+    # de los tickets) del Revenue Schedule. Los ingresos mensuales no cambian
+    # porque salen de los cierres.
+    pedidos_vendidos = pedidos[~es_gratis(pedidos)] if not pedidos.empty else pedidos
 
     filas = []
     for periodo in meses:
-        ing_alm = pedidos[(pedidos.get("periodo") == periodo) & (pedidos.get("turno") == "almuerzo")] if not pedidos.empty else pd.DataFrame()
-        ing_cena = pedidos[(pedidos.get("periodo") == periodo) & (pedidos.get("turno") == "cena")] if not pedidos.empty else pd.DataFrame()
+        ing_alm = pedidos_vendidos[(pedidos_vendidos.get("periodo") == periodo) & (pedidos_vendidos.get("turno") == "almuerzo")] if not pedidos_vendidos.empty else pd.DataFrame()
+        ing_cena = pedidos_vendidos[(pedidos_vendidos.get("periodo") == periodo) & (pedidos_vendidos.get("turno") == "cena")] if not pedidos_vendidos.empty else pd.DataFrame()
         cierres_mes = cierres[cierres["periodo"] == periodo] if not cierres.empty else pd.DataFrame()
         egresos_mes = egresos[egresos["periodo"] == periodo] if not egresos.empty else pd.DataFrame()
         gastos_mes = gastos_cierre[gastos_cierre["periodo"] == periodo] if not gastos_cierre.empty else pd.DataFrame()
@@ -255,6 +555,16 @@ def cargar_datos_reales(path_excel):
 
     hist = pd.DataFrame(filas).sort_values("periodo").reset_index(drop=True)
 
+    # Datos DIARIOS (gráficos + consumo familiar) y lo que de ellos necesita
+    # el modelo mensual. `periodo` es solo auxiliar de arriba: se descarta.
+    diario = construir_diario(
+        cierres.drop(columns="periodo", errors="ignore"), aperturas.drop(columns="periodo", errors="ignore"),
+        egresos.drop(columns="periodo", errors="ignore"), gastos_cierre.drop(columns="periodo", errors="ignore"),
+        pedidos.drop(columns="periodo", errors="ignore"), pendientes.drop(columns="periodo", errors="ignore"),
+    )
+    if not hist.empty:
+        hist = enriquecer_hist(hist, diario)
+
     # "monto" en movimientos_caja SIEMPRE se guarda positivo (ver
     # agregarMovimientoCaja() en el HTML) — el signo lo da "tipo": 'aporte'
     # suma, 'gasto' resta, 'traspaso' es neto $0 (solo mueve plata entre las
@@ -276,7 +586,7 @@ def cargar_datos_reales(path_excel):
         "caja_acumulada": caja_acumulada,
         "valor_inventario": valor_inventario,
         "cuentas_por_cobrar_fiados": cuentas_por_cobrar_fiados,
-    }
+    }, diario
 
 
 def calcular_cuentas_por_cobrar_fiados(pendientes, abonos, pagados):
@@ -321,7 +631,10 @@ def calcular_cuentas_por_cobrar_fiados(pendientes, abonos, pagados):
 
 def datos_de_ejemplo(n_meses=12):
     """Meses de datos ILUSTRATIVOS (no son datos reales de El Lobo), solo
-    para poder ver y probar la estructura del modelo."""
+    para poder ver y probar la estructura del modelo. Devuelve (hist, extra,
+    diario) — igual que cargar_datos_reales(). Los datos DIARIOS se generan
+    coherentes con los mensuales (mismos totales, sin domingos) y pasan por
+    exactamente el mismo código que los datos reales (construir_diario)."""
     import random
     random.seed(7)
     hoy = date.today()
@@ -353,7 +666,145 @@ def datos_de_ejemplo(n_meses=12):
         "valor_inventario": 1_650_000,
         "cuentas_por_cobrar_fiados": 950_000,
     }
-    return hist, extra
+    diario = _diario_de_ejemplo(hist, hoy)
+    hist = enriquecer_hist(hist, diario)
+    return hist, extra, diario
+
+
+def _repartir(total, pesos, paso=100):
+    """Reparte `total` en partes proporcionales a `pesos`, redondeadas al
+    `paso` más cercano; la última absorbe el resto, así la suma es EXACTA."""
+    pesos = [float(p) for p in pesos]
+    s = sum(pesos)
+    if not pesos or s <= 0:
+        return []
+    partes = [int(round(total * p / s / paso)) * paso for p in pesos[:-1]]
+    partes.append(int(total) - sum(partes))
+    if partes[-1] < 0:  # rarísimo (total diminuto): se le quita a la parte más grande
+        k = max(range(len(partes) - 1), key=lambda j: partes[j]) if len(partes) > 1 else 0
+        partes[k] += partes[-1]
+        partes[-1] = 0
+    return partes
+
+
+def _diario_de_ejemplo(hist, hoy):
+    """Datos diarios SINTÉTICOS coherentes con `hist` (mismos totales
+    mensuales, exactos): cierres, aperturas (desayuno), egresos, pedidos
+    (incluye algunos Gratis de comida rápida), consumo familiar registrado en
+    los últimos meses y fiados pendientes. Sin domingos."""
+    import random
+    rng = random.Random(11)
+    peso_alm = {0: 0.95, 1: 0.97, 2: 1.00, 3: 1.02, 4: 1.25, 5: 1.10}
+    peso_cr = {0: 0.60, 1: 0.70, 2: 0.80, 3: 0.90, 4: 1.30, 5: 1.50}
+    # (tipo de pedido, precio unitario, peso en la mezcla) — solo para repartir montos en el demo
+    mezcla_alm = [("completo", 14000, .55), ("seco", 12000, .17), ("asado130", 17000, .10), ("porcion-sopa", 6000, .06),
+                  ("sopa-y-arroz", 11000, .04), ("asado200", 20000, .02), ("porcion-arroz", 4000, .03),
+                  ("porcion-proteina", 8000, .02), ("extra", 3000, .01)]
+    mezcla_cr = [("PE01", 5000, .12), ("PE02", 7000, .08), ("ARP01", 7000, .14), ("ARP02", 8000, .08), ("SL02", 16000, .09),
+                 ("SL01", 12000, .06), ("HB01", 14000, .05), ("HB02", 20000, .03), ("CU01", 6000, .09), ("PI04", 20000, .03),
+                 ("CRA02", 16000, .05), ("SZ03", 16000, .03), ("BEB01", 4000, .06), ("extra", 3000, .06), ("ADI01", 5000, .03)]
+    proteinas = ["Pollo Guisado", "Carne Desmechada", "Cerdo Encebollado", "Pollo Frito", "Chuleta Frita/BBQ", "Carne Molida"]
+    cierres, aperturas, egresos, gastos, pagados, pendientes = [], [], [], [], [], []
+    n = len(hist)
+
+    def eleg(mezcla):
+        return rng.choices(mezcla, weights=[m[2] for m in mezcla])[0]
+
+    for k, r in hist.iterrows():
+        a, m = int(r["anio"]), int(r["mes"])
+        dias = [d for d in pd.date_range(f"{a}-{m:02d}-01", periods=pd.Period(f"{a}-{m:02d}").days_in_month) if d.dayofweek != 6]
+        for _ in range(rng.randint(0, 2)):  # festivos: se cae algún día
+            if len(dias) > 22:
+                dias.pop(rng.randrange(len(dias)))
+        w_a = [peso_alm[d.dayofweek] * rng.uniform(.85, 1.15) for d in dias]
+        w_c = [peso_cr[d.dayofweek] * rng.uniform(.85, 1.15) for d in dias]
+        des_m = int(r["ingresos_desayuno"])
+        alm_neto = _repartir(int(r["ingresos_almuerzo"]) - des_m, w_a)
+        desay = _repartir(des_m, [rng.uniform(.5, 1.5) for _ in dias])
+        cena = _repartir(int(r["ingresos_cena"]), w_c)
+        vol_a = _repartir(int(r["volumen_almuerzo"]), w_a, paso=1)
+        vol_c = _repartir(int(r["volumen_cena"]), w_c, paso=1)
+        reciente = k >= n - 3          # los últimos 3 meses ya registran el consumo familiar
+        manual_dia = dias[len(dias) // 2] if k >= n - 2 else None   # un cierre manual (sin pedidos) por mes reciente
+        for j, d in enumerate(dias):
+            f = d.date().isoformat()
+            bruto = alm_neto[j] + desay[j]
+            ef = int(round(bruto * rng.uniform(.55, .70), -2))
+            aj = rng.choice([0] * 14 + [-2000, 3000]) if bruto else 0
+            pf = (float(rng.choice([8, 9, 9, 10])) if rng.random() > .15 else None) if reciente else None
+            cierres.append(dict(fecha=f, turno="almuerzo", efectivo=ef, transferencia=bruto - ef, ajuste_efectivo=aj,
+                                ajuste_transferencia=0, manual=(manual_dia is not None and d == manual_dia), platos_familia=pf))
+            efc = int(round(cena[j] * rng.uniform(.50, .65), -2))
+            cierres.append(dict(fecha=f, turno="cena", efectivo=efc, transferencia=cena[j] - efc, ajuste_efectivo=0,
+                                ajuste_transferencia=0, manual=False, platos_familia=None))
+            dd_ef = int(round(desay[j] * .7, -2))
+            aperturas.append(dict(fecha=f, turno="almuerzo", caja_inicial=50000, venta_desayuno=dd_ef, venta_desayuno_transferencia=desay[j] - dd_ef))
+            aperturas.append(dict(fecha=f, turno="cena", caja_inicial=30000, venta_desayuno=0, venta_desayuno_transferencia=0))
+            # pedidos del día (el día del cierre manual no tiene pedidos registrados)
+            for turno, vol, ingreso, mezcla in (("almuerzo", vol_a[j], alm_neto[j], mezcla_alm), ("cena", vol_c[j], cena[j], mezcla_cr)):
+                if manual_dia is not None and d == manual_dia and turno == "almuerzo":
+                    continue
+                filas_d, resto = [], vol
+                while resto > 0:
+                    cant = 2 if (resto >= 2 and rng.random() < .05) else 1
+                    cod, precio, _w = eleg(mezcla)
+                    filas_d.append((cod, precio, cant))
+                    resto -= cant
+                montos = _repartir(ingreso, [p * c for _cod, p, c in filas_d]) if filas_d else []
+                for (cod, precio, cant), monto in zip(filas_d, montos):
+                    met = rng.choices(["efectivo", "transferencia", "dividido"], weights=[.65, .28, .07])[0]
+                    mef = int(round(monto / 2, -2)) if met == "dividido" else 0
+                    dom, sin_mesa = rng.random() < .20, rng.random() < .08
+                    pagados.append(dict(
+                        fecha=f, hora=f"{(rng.randint(11, 14) if turno == 'almuerzo' else rng.randint(17, 21)):02d}:{rng.randint(0, 59):02d}",
+                        turno=turno, pedido=cod, cantidad=cant, monto_total=monto, metodo=met,
+                        monto_efectivo=mef, monto_transferencia=(monto - mef) if met == "dividido" else 0,
+                        es_domicilio=dom, es_sin_mesa=(not dom) and sin_mesa, para_llevar=(not dom) and rng.random() < .15,
+                        mesa=None if (dom or sin_mesa) else rng.randint(1, 8),
+                        proteina=rng.choice(proteinas) if (turno == "almuerzo" and cod in ("completo", "seco", "asado130", "asado200")) else None,
+                        es_gratis=False, estado="pagado"))
+        # Pedidos Gratis de comida rápida (consumo de la familia a precio de venta) — no suman a ingresos
+        for d in rng.sample(dias, 3):
+            cod, precio, _w = eleg(mezcla_cr)
+            pagados.append(dict(fecha=d.date().isoformat(), hora="20:15", turno="cena", pedido=cod, cantidad=1, monto_total=precio,
+                                metodo="gratis", monto_efectivo=0, monto_transferencia=0, es_domicilio=False, es_sin_mesa=False,
+                                para_llevar=False, mesa=3, proteina=None, es_gratis=True, estado="pagado"))
+        # Egresos del mes, repartidos en sus fechas reales (suma EXACTA por rubro). "prestamo" va aparte y se excluye.
+        d_ops = [d.date().isoformat() for d in dias]
+        compras = sorted(rng.sample(d_ops, 9))
+        for f, v in zip(compras, _repartir(int(r["costo_insumos"]), [rng.uniform(.5, 1.5) for _ in compras], paso=100)):
+            if rng.random() < .3:   # parte de las compras se anotó como gasto de cierre, parte como egreso
+                gastos.append(dict(fecha=f, turno="almuerzo", nombre="Compra de insumos", monto=v, categoria="proveedor"))
+            else:
+                egresos.append(dict(fecha=f, cat="proveedor", monto=v))
+        for f, v in zip(d_ops, _repartir(int(r["nomina"]), [1] * len(d_ops))):
+            gastos.append(dict(fecha=f, turno="almuerzo", nombre="Nómina del día", monto=v, categoria="nomina"))
+        arriendo = int(r["arriendo_servicios"] * .8)
+        egresos.append(dict(fecha=f"{a}-{m:02d}-03", cat="arriendo", monto=arriendo))
+        egresos.append(dict(fecha=f"{a}-{m:02d}-10", cat="servicios", monto=int(r["arriendo_servicios"]) - arriendo))
+        for f, v in zip(sorted(rng.sample(d_ops, 4)), _repartir(int(r["otros_gastos"]), [1, 1, 1, 1])):
+            egresos.append(dict(fecha=f, cat="otro", monto=v))
+        for f in rng.sample(d_ops, 2):
+            gastos.append(dict(fecha=f, turno="cena", nombre="Cambio para vueltos", monto=50000, categoria="prestamo"))
+    # Fiados pendientes (para el gráfico de antigüedad): fechas relativas a hoy
+    for _ in range(7):
+        pendientes.append(dict(fecha=(hoy - pd.Timedelta(days=rng.randint(1, 60))).isoformat(), es_fiar=True,
+                               monto_total=rng.choice([20000, 35000, 60000, 90000, 150000]), estado="pendiente"))
+
+    def df(filas, cols):
+        d = pd.DataFrame(filas, columns=cols)
+        d["fecha"] = pd.to_datetime(d["fecha"])
+        return d
+    return construir_diario(
+        df(cierres, ["fecha", "turno", "efectivo", "transferencia", "ajuste_efectivo", "ajuste_transferencia", "manual", "platos_familia"]),
+        df(aperturas, ["fecha", "turno", "caja_inicial", "venta_desayuno", "venta_desayuno_transferencia"]),
+        df(egresos, ["fecha", "cat", "monto"]),
+        df(gastos, ["fecha", "turno", "nombre", "monto", "categoria"]),
+        df(pagados, ["fecha", "hora", "turno", "pedido", "cantidad", "monto_total", "metodo", "monto_efectivo", "monto_transferencia",
+                     "es_domicilio", "es_sin_mesa", "para_llevar", "mesa", "proteina", "es_gratis", "estado"]),
+        df(pendientes, ["fecha", "es_fiar", "monto_total", "estado"]),
+        hoy=hoy,
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -986,6 +1437,32 @@ def hoja_outputs(wb, model_refs):
     return ws
 
 
+def resolver_mes_foco(mes_arg, hist_df):
+    """Mes en foco de los gráficos mensuales (--mes AAAA-MM). Por defecto, el
+    último mes con datos reales. Debe ser un mes real (de `hist_df`)."""
+    disponibles = list(hist_df["periodo"])
+    if mes_arg is None:
+        return disponibles[-1]
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", mes_arg or ""):
+        print(f"--mes debe tener formato AAAA-MM (recibido: {mes_arg!r}).")
+        sys.exit(1)
+    if mes_arg not in disponibles:
+        print(f"--mes {mes_arg} no tiene datos reales. Meses disponibles: {', '.join(disponibles)}")
+        sys.exit(1)
+    return mes_arg
+
+
+def reportar_huerfanas(diario):
+    """Avisa (sin cambiar nada) si hay egresos con una categoría fuera de los
+    4 rubros del modelo: esas filas NO se suman en ningún lado."""
+    h = diario["egresos_huerfanos"]
+    if h is None or h.empty:
+        return
+    print("⚠ Categorías de egreso fuera de los 4 rubros del modelo (NO se suman; revisa si deben reasignarse):")
+    for _, f in h.iterrows():
+        print(f"    {f['origen']}: categoría {f['categoria']!r} — {int(f['n'])} fila(s), ${f['monto']:,.0f}")
+
+
 # ══════════════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════════════
@@ -994,6 +1471,9 @@ def main():
     ap.add_argument("archivo", nargs="?", help="Excel exportado desde la pestaña Datos")
     ap.add_argument("--demo", action="store_true", help="Usar datos de ejemplo")
     ap.add_argument("--meses-proyeccion", type=int, default=6)
+    ap.add_argument("--mes", default=None, metavar="AAAA-MM", help=(
+        "Mes en foco de los gráficos mensuales (por defecto, el último mes con datos reales)."
+    ))
     ap.add_argument("--salida", default=None, help=(
         "Nombre del archivo generado. Por defecto se arma solo — "
         "ElLobo_Modelo_Financiero_DEMO.xlsx o _REAL.xlsx según el modo — y "
@@ -1004,10 +1484,10 @@ def main():
     args = ap.parse_args()
 
     if args.demo or not args.archivo:
-        hist_df, extra = datos_de_ejemplo()
+        hist_df, extra, diario = datos_de_ejemplo()
         es_demo = True
     else:
-        hist_df, extra = cargar_datos_reales(args.archivo)
+        hist_df, extra, diario = cargar_datos_reales(args.archivo)
         es_demo = False
 
     # Nombre + carpeta de salida: siempre deja claro si es DEMO o REAL (para
@@ -1025,6 +1505,9 @@ def main():
     if hist_df.empty:
         print("No se encontraron meses con datos en el archivo. Usa --demo para probar con datos de ejemplo.")
         sys.exit(1)
+
+    mes_foco = resolver_mes_foco(args.mes, hist_df)
+    reportar_huerfanas(diario)
 
     ultimo = hist_df.iloc[-1]
     a, m = int(ultimo["anio"]), int(ultimo["mes"])
