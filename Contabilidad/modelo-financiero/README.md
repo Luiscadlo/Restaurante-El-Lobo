@@ -66,24 +66,35 @@ mediados de mes), el Plan del mes siguiente queda muy bajo.
 ### Consumo familiar (la familia come sin pagar)
 
 La hoja `Inputs` tiene la sección **Consumo familiar (estimado)** (celdas azules editables):
-personas que comen almuerzo (9), almuerzos por persona por día operado (1), días
-operados por mes en meses proyectados (26), override del ticket de almuerzo (vacío =
-ticket real; en meses proyectados, el del último mes real) y consumo familiar de
-comida rápida proyectado por mes (0). En `Model`, el bloque **Consumo Familiar
-(ESTIMADO)** lo calcula así:
+**comidas de la familia por día** (12), **% de comidas que son porciones** (sopa, arroz o proteína
+sueltas; 20 %), **valor de una comida en porciones** ($10.000 = porción de sopa 6.000 + porción de
+arroz 4.000), días operados por mes en meses proyectados (26), override del ticket de platos fuertes
+(vacío = ticket real; en meses proyectados, el del último mes real) y consumo familiar de comida
+rápida proyectado por mes (0). En `Model`, el bloque **Consumo Familiar (ESTIMADO)** lo calcula así:
 
-- **Almuerzo:** el cierre registra la *cantidad* de platos (`cierres_dia.platos_familia`).
-  Día con registro → valor = platos × ticket del día (ticket del día = Σ monto_total ÷
-  Σ cantidad de los pedidos de almuerzo del día, sin Gratis y de turnos cerrados; si el
-  día no tiene pedidos, p. ej. un cierre manual, se usa el ticket promedio real del mes
-  — ver *Ticket y pedidos* abajo). Día sin registro
-  (`NULL`) → se estima en Excel: personas × almuerzos por persona × suma de los
-  tickets diarios de esos días. Si la columna `platos_familia` no existe en el
-  export, todo queda estimado.
+- **Almuerzo:** el cierre registra la *cantidad de comidas* de la familia
+  (`cierres_dia.platos_familia`: una por persona, aunque haya sido en porciones). Comidas del mes =
+  las registradas + (días sin registro × comidas por día de `Inputs`). Se valora con **un solo valor
+  por comida por mes** (ya no se suma un ticket por día: un día con pocos pedidos o un cierre manual
+  distorsionaba el resultado):
+
+  ```
+  valor por comida = (1 − % porciones) × ticket de platos fuertes del mes + % porciones × valor de una comida en porciones
+  valor del almuerzo del mes = comidas del mes × valor por comida
+  ```
+
+  El **ticket de platos fuertes** = Σ `monto_almuerzo` ÷ Σ `cantidad` de los pedidos pagados de almuerzo,
+  sin Gratis, de turnos con cierre guardado y con `pedido` ∈ {completo, seco, asado130, asado200}
+  (`monto_almuerzo` deja fuera domicilio y empaque; quedan fuera porciones, sopa-y-arroz, extras y
+  desayuno; cantidad nula o 0 cuenta 1). Es distinto del *ticket por unidad vendida* de abajo (que sigue
+  igual en la tarjeta de ticket, #9, #17 y el Revenue Schedule): cada uno sirve para lo suyo. Si un mes
+  no tiene pedidos de platos fuertes se usa el ticket del último mes con dato (el script lo avisa en
+  consola). Si la columna `platos_familia` no existe en el export, todo queda estimado.
 - **Comida rápida:** se registra *valor* real con los pedidos de ubicación **Gratis**
   (llevan su precio de venta). No se estima nada en meses reales.
-- **Meses proyectados:** todo sale de `Inputs` (días operados × personas × almuerzos
-  por persona × ticket; comida rápida = el input proyectado).
+- **Meses proyectados:** todo sale de `Inputs` (días operados × comidas por día × valor por comida,
+  con el ticket de platos fuertes del último mes real —igual que el ticket de almuerzo, el escenario
+  no tiene un driver de ticket—; comida rápida = el input proyectado).
 - Los pedidos Gratis **nunca** suman a los ingresos reales (ni a volúmenes, tickets o
   conteos de pedidos). El costo de insumos del consumo familiar es solo informativo:
   ya está dentro de los egresos, no se resta de nuevo.
@@ -175,6 +186,9 @@ Un `.xlsx` con estas hojas, en este orden:
      (ticket × fila 6 − ingresos del turno, debe dar 0 cuando la fila 2 no es negativa; si es
      negativa, en comida rápida la diferencia son ajustes negativos del turno —faltantes de
      caja— y no es un error).
+  Al final del bloque de almuerzo hay dos filas informativas: *Ticket platos fuertes — Almuerzo* y
+  *Unidades platos fuertes — Almuerzo* (completo, seco, asado130 y asado200; ticket = Σ `monto_almuerzo` ÷
+  Σ `cantidad`), que alimentan la valoración del consumo familiar.
   Los gráficos de comportamiento de clientes (#8, #9, #19 y los que cuentan pedidos) y el consumo
   familiar usan solo los pedidos registrados y el ticket; nunca los pedidos equivalentes. Al terminar,
   el script imprime *"Ticket almuerzo del mes en foco: $X (debe coincidir con el Tablero)"*.
