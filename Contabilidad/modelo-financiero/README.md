@@ -45,6 +45,33 @@ los Plan mensuales (en meses sin real, la proyección del modelo). Ojo: el Plan 
 meses comparables — si el mes anterior real es parcial (p. ej. el sistema empezó a
 mediados de mes), el Plan del mes siguiente queda muy bajo.
 
+### Consumo familiar (la familia come sin pagar)
+
+La hoja `Inputs` tiene la sección **Consumo familiar (estimado)** (celdas azules editables):
+personas que comen almuerzo (9), almuerzos por persona por día operado (1), días
+operados por mes en meses proyectados (26), override del ticket de almuerzo (vacío =
+ticket real; en meses proyectados, el del último mes real) y consumo familiar de
+comida rápida proyectado por mes (0). En `Model`, el bloque **Consumo Familiar
+(ESTIMADO)** lo calcula así:
+
+- **Almuerzo:** el cierre registra la *cantidad* de platos (`cierres_dia.platos_familia`).
+  Día con registro → valor = platos × ticket del día (ticket del día = (ingreso de
+  almuerzo − desayuno) ÷ pedidos de almuerzo sin Gratis; si el día no tiene pedidos,
+  p. ej. un cierre manual, se usa el ticket promedio real del mes). Día sin registro
+  (`NULL`) → se estima en Excel: personas × almuerzos por persona × suma de los
+  tickets diarios de esos días. Si la columna `platos_familia` no existe en el
+  export, todo queda estimado.
+- **Comida rápida:** se registra *valor* real con los pedidos de ubicación **Gratis**
+  (llevan su precio de venta). No se estima nada en meses reales.
+- **Meses proyectados:** todo sale de `Inputs` (días operados × personas × almuerzos
+  por persona × ticket; comida rápida = el input proyectado).
+- Los pedidos Gratis **nunca** suman a los ingresos reales (ni a volúmenes, tickets o
+  conteos de pedidos). El costo de insumos del consumo familiar es solo informativo:
+  ya está dentro de los egresos, no se resta de nuevo.
+- Salen los indicadores *reales* vs. *ajustados* (como si la familia hubiera pagado):
+  ingresos y utilidad ajustados, margen neto, costo de insumos %, costo primo %,
+  utilidad diaria promedio y punto de equilibrio diario.
+
 ## 3. Uso de prueba con datos ficticios
 
 Para ver cómo queda el modelo sin depender de datos reales (genera 12 meses de

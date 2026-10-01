@@ -960,6 +960,33 @@ def hoja_inputs(wb, meses_fcst_labels):
     label(ws, r, "Primer mes de proyección")
     ws.cell(row=r, column=5, value=meses_fcst_labels[0] if meses_fcst_labels else "").font = Font(bold=True, color=AZUL_TEXTO)
 
+    # ── Consumo familiar (estimado): la familia come sin pagar ────────────
+    # Almuerzo: el cierre registra la CANTIDAD de platos (platos_familia); los
+    # días sin registro (y los meses proyectados) se estiman con estas celdas.
+    # Comida rápida: se registra VALOR real con los pedidos "Gratis"; solo se
+    # proyecta un valor mensual. Nada de esto suma a los ingresos reales.
+    r += 3
+    banner(ws, r, "Consumo familiar (estimado)", col_fin=col_fin)
+    r += 1
+    nota(ws, r, "La familia come sin pagar. Estos supuestos solo se usan para días SIN registro de platos y para meses proyectados (ver Model → Consumo Familiar).")
+    r += 2
+    entradas = [
+        ("fam_personas", "Personas que comen almuerzo", 9, "0"),
+        ("fam_alm_dia", "Almuerzos por persona por día operado", 1, "0.0#"),
+        ("fam_dias_proy", "Días operados por mes en meses proyectados", 26, "0"),
+        ("fam_ticket_override", "Ticket almuerzo — override ($)", None, FMT_CONTABLE),
+        ("fam_cr_proy", "Consumo familiar de comida rápida proyectado por mes ($)", 0, FMT_CONTABLE),
+    ]
+    for clave, texto, valor, fmt_celda in entradas:
+        label(ws, r, texto)
+        c = numero(ws, r, 5, valor, bold=True)
+        c.number_format = fmt_celda
+        if valor is None:
+            c.fill = PatternFill("solid", fgColor="FFF3CD")   # vacío a propósito: se nota que es editable
+            nota(ws, r, "← vacío = ticket promedio real (en meses proyectados, el del último mes real)", col=6)
+        driver_rows[clave] = r
+        r += 1
+
     config_impresion(ws, horizontal=True)
     return ws, driver_rows
 
@@ -1124,6 +1151,7 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
     # ══ COST SCHEDULE ═══════════════════════════════════════════════
     banner(ws, r, "Cost Schedule", col_fin=col_fin)
     r += 2
+    fila_cost_pct = r
     label(ws, r, "Costo de insumos (% de ingresos)")
     for c in range(col_ini, col_fin + 1):
         cl = get_column_letter(c)
@@ -1266,6 +1294,13 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
         numero(ws, r, c, f"={cl}{fila_fc_op}+{cl}{fila_fc_inv}", bold=True)
     subtotal_borde(ws, r, col_ini, col_fin)
 
+    # ══ CONSUMO FAMILIAR (ESTIMADO) ═══════════════════════════════════
+    r += 3
+    fam = bloque_consumo_familiar(
+        ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst, col_fin,
+        dict(ingresos=fila_ingresos, utilidad_neta=fila_utilidad_neta, costo_insumos=fila_costo_insumos,
+             nomina=fila_nomina, arriendo=fila_arriendo, otros=fila_otros, tkt_alm=fila_tkt_alm, cost_pct=fila_cost_pct))
+
     model_refs = dict(
         fila_ingresos=fila_ingresos, fila_utilidad_bruta=fila_utilidad_bruta,
         fila_utilidad_op=fila_utilidad_op, fila_margen_op=fila_margen_op,
@@ -1274,9 +1309,148 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
         fila_ing_alm=fila_ing_alm, fila_ing_cena=fila_ing_cena,
         fila_costo_insumos=fila_costo_insumos, fila_nomina=fila_nomina,
         fila_arriendo=fila_arriendo, fila_otros=fila_otros,
+        fila_desayuno=fila_desayuno, fila_vol_alm=fila_vol_alm, fila_tkt_alm=fila_tkt_alm,
+        fila_vol_cena=fila_vol_cena, fila_tkt_cena=fila_tkt_cena, fila_cost_pct=fila_cost_pct, fam=fam,
     )
     config_impresion(ws, horizontal=True)
     return ws, model_refs
+
+
+# ══════════════════════════════════════════════════════════════════════
+# MODEL: bloque "Consumo Familiar (ESTIMADO)" — la familia come sin pagar
+# ══════════════════════════════════════════════════════════════════════
+def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst, col_fin, f):
+    """Escribe en Model, a partir de la fila r, el consumo de la familia a
+    PRECIO DE VENTA y los indicadores "reales" vs. "ajustados" (como si la
+    familia hubiera pagado). Devuelve {clave: fila}.
+
+    ALMUERZO: el cierre registra la CANTIDAD de platos (cierres_dia.platos_familia);
+      · día CON registro → valor = platos × ticket del día (REGISTRADO, script ◆)
+      · día SIN registro → se estima aquí, con fórmulas que leen Inputs:
+        personas × almuerzos por persona × (Σ tickets diarios de esos días).
+    COMIDA RÁPIDA: se registra VALOR real, con los pedidos de ubicación "Gratis"
+      (llevan su precio de venta); no se estima nada en meses reales.
+    Meses PROYECTADOS: todo sale de Inputs (días operados × personas × almuerzos
+      por persona × ticket; comida rápida = el input proyectado).
+    El costo de insumos de este consumo es solo informativo: ese costo YA está
+    en los egresos (no se resta de nuevo). Los pedidos Gratis NUNCA suman a los
+    ingresos reales.
+    `f` = filas del Model que se necesitan: ingresos, utilidad_neta,
+    costo_insumos, nomina, arriendo, otros, tkt_alm, cost_pct."""
+    I = lambda k: f"Inputs!$E${driver_rows[k]}"
+    ultimo_real = get_column_letter(col_ini + n_hist - 1)
+    banner(ws, r, "Consumo Familiar (ESTIMADO) — la familia come sin pagar", col_fin=col_fin)
+    nota(ws, r + 1, "◆ = calculado por el script al generar el modelo (datos diarios del export). Las demás filas son fórmulas que leen la sección "
+                    "'Consumo familiar (estimado)' de Inputs. Nada de esto suma a los ingresos reales.")
+    r += 3
+
+    orden = [
+        # (clave, etiqueta, negrita, es_porcentaje)
+        ("sec_op", "OPERACIÓN", None, False),
+        ("dias_op", "◆ Días operados (con ingresos)", False, False),
+        ("dias_alm", "◆ Días de almuerzo operados", False, False),
+        ("sec_alm", "ALMUERZO — platos registrados en el cierre", None, False),
+        ("dias_reg", "◆ Días con registro de platos", False, False),
+        ("dias_sin", "Días sin registro", False, False),
+        ("pct_reg", "% de días con registro real", False, True),
+        ("platos_reg", "◆ Platos registrados (Σ platos_familia)", False, False),
+        ("val_alm_reg", "◆ Valor registrado a precio de venta (platos × ticket del día)", False, False),
+        ("sum_tickets", "◆ Suma de tickets diarios de los días sin registro", False, False),
+        ("sec_est", "ALMUERZO — estimado (días sin registro) y total", None, False),
+        ("platos_est", "Platos estimados (días sin registro × personas × almuerzos/persona)", False, False),
+        ("platos_tot", "Platos totales (registrados + estimados)", True, False),
+        ("ticket_ref", "Ticket de referencia (override de Inputs o ticket real)", False, False),
+        ("val_alm_est", "Valor estimado a precio de venta", False, False),
+        ("val_alm_tot", "Valor almuerzo a precio de venta (registrado + estimado)", True, False),
+        ("sec_cr", "COMIDA RÁPIDA — pedidos Gratis (valor real)", None, False),
+        ("val_cr", "◆ Valor a precio de venta (real; en meses proyectados = input)", True, False),
+        ("sec_tot", "TOTAL DEL CONSUMO FAMILIAR", None, False),
+        ("val_tot", "Valor total a precio de venta", True, False),
+        ("costo_fam", "· Costo de insumos del consumo (informativo; YA está en los egresos, no restar)", False, False),
+        ("sec_aj", "REAL vs. AJUSTADO (como si la familia hubiera pagado)", None, False),
+        ("ing_aj", "Ingresos ajustados", True, False),
+        ("ut_aj", "Utilidad ajustada", True, False),
+        ("mg_real", "Margen neto real", False, True),
+        ("mg_aj", "Margen neto ajustado", False, True),
+        ("ins_real", "Costo de insumos % — real", False, True),
+        ("ins_aj", "Costo de insumos % — ajustado (insumos ÷ ingresos ajustados)", False, True),
+        ("primo_real", "Costo primo % (insumos + nómina) — real", False, True),
+        ("primo_aj", "Costo primo % (insumos + nómina) — ajustado", False, True),
+        ("util_dia_real", "Utilidad diaria promedio — real", False, False),
+        ("util_dia_aj", "Utilidad diaria promedio — ajustada", False, False),
+        ("pe_real", "Punto de equilibrio diario — real", False, False),
+        ("pe_aj", "Punto de equilibrio diario — ajustado", False, False),
+        ("sec_gr", "INFORMATIVO — pedidos Gratis registrados (no son ingresos)", None, False),
+        ("gratis_tot", "◆ Pedidos Gratis registrados (valor a precio de venta)", False, False),
+        ("gratis_cr", "◆ · de comida rápida (ya incluidos en el consumo familiar de arriba)", False, False),
+        ("gratis_alm", "◆ · de almuerzo (legado, NO incluidos arriba: hoy se anota la cantidad en el cierre)", False, False),
+    ]
+    filas = {}
+    for clave, texto, negrita, _pct in orden:
+        if negrita is None:   # subtítulo de sección
+            if clave != "sec_op":
+                r += 1
+            label(ws, r, texto, bold=True)
+            ws.cell(row=r, column=2).font = Font(name="Calibri", size=10, bold=True, color=AZUL_TEXTO)
+        else:
+            label(ws, r, texto, bold=negrita, indent=1)
+        filas[clave] = r
+        r += 1
+    pct_de = {c: p for c, _t, _n, p in orden}
+
+    h = lambda i, col: float(hist_df.iloc[i][col])
+    def put(clave, fn, bold=False):
+        for i, c in enumerate(range(col_ini, col_fin + 1)):
+            v = fn(i, get_column_letter(c), i >= n_hist)
+            if v is not None:
+                numero(ws, filas[clave], c, v, bold=bold, pct=pct_de[clave])
+    F = lambda k, cl: f"{cl}{filas[k]}"     # celda de una fila de este bloque
+    M = lambda k, cl: f"{cl}{f[k]}"         # celda de una fila del resto del Model
+    # ── OPERACIÓN
+    put("dias_op", lambda i, cl, proy: f"={I('fam_dias_proy')}" if proy else int(h(i, "dias_operados")))
+    put("dias_alm", lambda i, cl, proy: f"={I('fam_dias_proy')}" if proy else int(h(i, "dias_alm_operados")))
+    # ── ALMUERZO registrado
+    put("dias_reg", lambda i, cl, proy: 0 if proy else int(h(i, "dias_con_registro")))
+    put("dias_sin", lambda i, cl, proy: f"={F('dias_alm', cl)}-{F('dias_reg', cl)}")
+    put("pct_reg", lambda i, cl, proy: f"=IF({F('dias_alm', cl)}=0,0,{F('dias_reg', cl)}/{F('dias_alm', cl)})")
+    put("platos_reg", lambda i, cl, proy: 0 if proy else h(i, "platos_registrados"))
+    put("val_alm_reg", lambda i, cl, proy: 0 if proy else h(i, "valor_alm_registrado"))
+    put("sum_tickets", lambda i, cl, proy: None if proy else h(i, "suma_tickets_sin_registro"))
+    # ── ALMUERZO estimado y total
+    put("platos_est", lambda i, cl, proy: f"={F('dias_sin', cl)}*{I('fam_personas')}*{I('fam_alm_dia')}")
+    put("platos_tot", lambda i, cl, proy: f"={F('platos_reg', cl)}+{F('platos_est', cl)}", bold=True)
+    ov = I("fam_ticket_override")
+    put("ticket_ref", lambda i, cl, proy: f'=IF({ov}="",{"$" + ultimo_real + "$" + str(f["tkt_alm"]) if proy else M("tkt_alm", cl)},{ov})')
+    put("val_alm_est", lambda i, cl, proy: (
+        f"={F('platos_est', cl)}*{F('ticket_ref', cl)}" if proy else
+        f'=IF({ov}="",{I("fam_personas")}*{I("fam_alm_dia")}*{F("sum_tickets", cl)},{I("fam_personas")}*{I("fam_alm_dia")}*{F("dias_sin", cl)}*{ov})'))
+    put("val_alm_tot", lambda i, cl, proy: f"={F('val_alm_reg', cl)}+{F('val_alm_est', cl)}", bold=True)
+    # ── COMIDA RÁPIDA y total
+    put("val_cr", lambda i, cl, proy: f"={I('fam_cr_proy')}" if proy else h(i, "valor_cr_registrado"), bold=True)
+    put("val_tot", lambda i, cl, proy: f"={F('val_alm_tot', cl)}+{F('val_cr', cl)}", bold=True)
+    put("costo_fam", lambda i, cl, proy: f"={F('val_tot', cl)}*{M('cost_pct', cl)}")
+    # ── REAL vs. AJUSTADO
+    put("ing_aj", lambda i, cl, proy: f"={M('ingresos', cl)}+{F('val_tot', cl)}", bold=True)
+    put("ut_aj", lambda i, cl, proy: f"={M('utilidad_neta', cl)}+{F('val_tot', cl)}", bold=True)
+    put("mg_real", lambda i, cl, proy: f"=IF({M('ingresos', cl)}=0,0,{M('utilidad_neta', cl)}/{M('ingresos', cl)})")
+    put("mg_aj", lambda i, cl, proy: f"=IF({F('ing_aj', cl)}=0,0,{F('ut_aj', cl)}/{F('ing_aj', cl)})")
+    put("ins_real", lambda i, cl, proy: f"=IF({M('ingresos', cl)}=0,0,-{M('costo_insumos', cl)}/{M('ingresos', cl)})")
+    put("ins_aj", lambda i, cl, proy: f"=IF({F('ing_aj', cl)}=0,0,-{M('costo_insumos', cl)}/{F('ing_aj', cl)})")
+    put("primo_real", lambda i, cl, proy: f"=IF({M('ingresos', cl)}=0,0,-({M('costo_insumos', cl)}+{M('nomina', cl)})/{M('ingresos', cl)})")
+    put("primo_aj", lambda i, cl, proy: f"=IF({F('ing_aj', cl)}=0,0,-({M('costo_insumos', cl)}+{M('nomina', cl)})/{F('ing_aj', cl)})")
+    put("util_dia_real", lambda i, cl, proy: f"=IF({F('dias_op', cl)}=0,0,{M('utilidad_neta', cl)}/{F('dias_op', cl)})")
+    put("util_dia_aj", lambda i, cl, proy: f"=IF({F('dias_op', cl)}=0,0,{F('ut_aj', cl)}/{F('dias_op', cl)})")
+    # punto de equilibrio diario = costos fijos ÷ (1 − insumos %) ÷ días operados
+    fijos = lambda cl: f"-({M('nomina', cl)}+{M('arriendo', cl)}+{M('otros', cl)})"
+    put("pe_real", lambda i, cl, proy: f"=IF(OR({F('dias_op', cl)}=0,{F('ins_real', cl)}>=1),0,({fijos(cl)})/(1-{F('ins_real', cl)})/{F('dias_op', cl)})")
+    put("pe_aj", lambda i, cl, proy: f"=IF(OR({F('dias_op', cl)}=0,{F('ins_aj', cl)}>=1),0,({fijos(cl)})/(1-{F('ins_aj', cl)})/{F('dias_op', cl)})")
+    # ── INFORMATIVO Gratis (solo meses reales)
+    put("gratis_tot", lambda i, cl, proy: None if proy else h(i, "gratis_alm_valor") + h(i, "gratis_cr_valor"))
+    put("gratis_cr", lambda i, cl, proy: None if proy else h(i, "gratis_cr_valor"))
+    put("gratis_alm", lambda i, cl, proy: None if proy else h(i, "gratis_alm_valor"))
+    nota(ws, r + 1, "Punto de equilibrio diario = (nómina + arriendo/servicios + otros) ÷ (1 − costo de insumos %) ÷ días operados. "
+                    "En meses proyectados el consumo sale de Inputs (no hay registro diario).")
+    return filas
 
 
 # ══════════════════════════════════════════════════════════════════════
