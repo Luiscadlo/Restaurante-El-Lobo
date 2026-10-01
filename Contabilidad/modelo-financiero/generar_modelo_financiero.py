@@ -245,8 +245,9 @@ def cantidad_pedidos(df):
     return c.where(c != 0, 1)
 
 
-# Platos fuertes del almuerzo: base del ticket con el que se valora el consumo familiar. Quedan fuera las
-# porciones (sopa, arroz, proteína), sopa-y-arroz y los extras (y el desayuno, que ni es pedido).
+# Platos fuertes del almuerzo: base del ticket informativo (#9/#17, Revenue Schedule) — ya no alimenta el
+# consumo familiar. Quedan fuera las porciones (sopa, arroz, proteína), sopa-y-arroz y los extras (y el
+# desayuno, que ni es pedido).
 PLATOS_FUERTES = ("completo", "seco", "asado130", "asado200")
 
 
@@ -1115,26 +1116,22 @@ def hoja_inputs(wb, meses_fcst_labels):
     r += 3
     banner(ws, r, "Consumo familiar (estimado)", col_fin=col_fin)
     r += 1
-    nota(ws, r, "La familia come sin pagar. Valor por comida = (1 − % porciones) × ticket de platos fuertes del mes + % porciones × valor de una comida en porciones. "
-                "Las comidas por día solo se usan para días SIN registro y para meses proyectados (ver Model → Consumo Familiar).")
+    nota(ws, r, "La familia come sin pagar. Valor por comida = ticket único y fijo (celda de abajo) — ya no distingue plato fuerte de "
+                "porción. Lo único que varía mes a mes es la CANTIDAD de comidas: lo que ya registra el cierre, y para días sin registro "
+                "(y meses proyectados) se usan las comidas por día de aquí abajo (ver Model → Consumo Familiar).")
     r += 2
-    FAM = dict(comidas_dia=12, pct_porciones=0.20, valor_porcion=10000, dias_proy=26)   # valores por defecto (celdas editables de Inputs)
+    FAM = dict(comidas_dia=12, valor_comida=15000, dias_proy=26)   # valores por defecto (celdas editables de Inputs)
     driver_rows["_familia_valores"] = FAM
     entradas = [
         ("fam_comidas_dia", "Comidas de la familia por día", FAM["comidas_dia"], "0"),
-        ("fam_pct_porciones", "% de comidas de la familia que son porciones (sopa, arroz o proteína sueltas)", FAM["pct_porciones"], "0%"),
-        ("fam_valor_porcion", "Valor de una comida en porciones ($)", FAM["valor_porcion"], FMT_CONTABLE),
+        ("fam_valor_comida", "Valor por comida ($) — ticket único", FAM["valor_comida"], FMT_CONTABLE),
         ("fam_dias_proy", "Días operados por mes en meses proyectados", FAM["dias_proy"], "0"),
-        ("fam_ticket_override", "Ticket platos fuertes — override ($)", None, FMT_CONTABLE),
         ("fam_cr_proy", "Consumo familiar de comida rápida proyectado por mes ($)", 0, FMT_CONTABLE),
     ]
     for clave, texto, valor, fmt_celda in entradas:
         label(ws, r, texto)
         c = numero(ws, r, 5, valor, bold=True)
         c.number_format = fmt_celda
-        if valor is None:
-            c.fill = PatternFill("solid", fgColor="FFF3CD")   # vacío a propósito: se nota que es editable
-            nota(ws, r, "← vacío = ticket real de platos fuertes del mes (en meses proyectados, el del último mes real)", col=6)
         driver_rows[clave] = r
         r += 1
 
@@ -1343,7 +1340,7 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
             numero(ws, r, c, f"=ROUND({cl}{fr['tkt']}*{cl}{fr['eqtot']}-{neto},0)")
         filas_rev[turno_t] = fr
         if turno_t == "almuerzo":
-            # Platos fuertes (informativo): base del ticket con el que se valora el consumo familiar.
+            # Platos fuertes: ticket informativo (#9/#17) — ya no alimenta el consumo familiar.
             r += 1
             fr["tkt_pf"] = r
             label(ws, r, "Ticket platos fuertes — Almuerzo")
@@ -1368,7 +1365,7 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
                 "Los pedidos equivalentes son un ESTIMADO de cuántos pedidos 'valen' los ingresos sin pedido (a ticket promedio); si esos ingresos son negativos se dejan en 0 y la verificación muestra esa diferencia. "
                 "No se usan para el comportamiento de clientes (gráficos de pedidos) ni para el consumo familiar. "
                 "Platos fuertes (informativo) = completo, seco, asado130 y asado200: ticket = Σ monto_almuerzo (sin domicilio ni empaque) ÷ Σ cantidad; "
-                "es el ticket con el que se valora el consumo familiar.")
+                "ya no alimenta el consumo familiar (ese usa un valor por comida fijo de Inputs).")
     r += 2
     nota(ws, r, "Solo histórico (el volumen proyectado no es necesario para calcular Ingresos, que se proyectan directo con el driver de crecimiento).")
     r += 2
@@ -1581,21 +1578,19 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
 
     ALMUERZO: el cierre registra la CANTIDAD de comidas (cierres_dia.platos_familia: una por persona,
       aunque haya sido en porciones). Comidas del mes = Σ de las registradas + (días sin registro × comidas
-      por día de Inputs). UN valor por comida por mes:
-        valor por comida = (1 − % porciones) × ticket de platos fuertes del mes + % porciones × valor de una
-        comida en porciones; valor del almuerzo = comidas del mes × valor por comida.
-      (Ya no se suma un ticket por día: un día con pocos pedidos distorsionaba el resultado.)
+      por día de Inputs). UN valor por comida por mes, fijo (ticket único de Inputs, no un blend con
+      platos fuertes/porciones): valor del almuerzo = comidas del mes × valor por comida de Inputs.
+      Lo único que varía mes a mes es la CANTIDAD de comidas, nunca el precio.
     COMIDA RÁPIDA: se registra VALOR real, con los pedidos de ubicación "Gratis"
       (llevan su precio de venta); no se estima nada en meses reales.
-    Meses PROYECTADOS: todo sale de Inputs (días operados × comidas por día × valor por comida,
-      con el ticket de platos fuertes del último mes real; comida rápida = el input proyectado).
+    Meses PROYECTADOS: todo sale de Inputs (días operados × comidas por día × valor por comida;
+      comida rápida = el input proyectado).
     El costo de insumos de este consumo es solo informativo: ese costo YA está
     en los egresos (no se resta de nuevo). Los pedidos Gratis NUNCA suman a los
     ingresos reales.
     `f` = filas del Model que se necesitan: ingresos, utilidad_neta,
     costo_insumos, nomina, arriendo, otros, tkt_alm, cost_pct, desech, tkt_pf, unid_pf."""
     I = lambda k: f"Inputs!$E${driver_rows[k]}"
-    ultimo_real = get_column_letter(col_ini + n_hist - 1)
     banner(ws, r, "Consumo Familiar (ESTIMADO) — la familia come sin pagar", col_fin=col_fin)
     nota(ws, r + 1, "◆ = calculado por el script al generar el modelo (datos diarios del export). Las demás filas son fórmulas que leen la sección "
                     "'Consumo familiar (estimado)' de Inputs. Nada de esto suma a los ingresos reales.")
@@ -1614,10 +1609,8 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
         ("sec_est", "ALMUERZO — comidas estimadas (días sin registro) y total", None, False),
         ("platos_est", "Comidas estimadas (días sin registro × comidas por día)", False, False),
         ("platos_tot", "Comidas totales (registradas + estimadas)", True, False),
-        ("sec_val", "ALMUERZO — valor por comida (un solo valor por mes)", None, False),
-        ("tkt_pf_base", "Ticket platos fuertes del mes (respaldo: último mes con dato)", False, False),
-        ("ticket_ref", "Ticket platos fuertes usado (override de Inputs o real)", False, False),
-        ("val_comida", "Valor por comida = (1 − % porciones) × ticket + % porciones × valor en porciones", True, False),
+        ("sec_val", "ALMUERZO — valor por comida (ticket único y fijo)", None, False),
+        ("val_comida", "Valor por comida ($) — de Inputs", True, False),
         ("val_alm_reg", "Valor registrado a precio de venta (comidas registradas × valor por comida)", False, False),
         ("val_alm_est", "Valor estimado a precio de venta (comidas estimadas × valor por comida)", False, False),
         ("val_alm_tot", "Valor almuerzo a precio de venta (registrado + estimado)", True, False),
@@ -1678,18 +1671,12 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
     # ── ALMUERZO estimado y total (comidas)
     put("platos_est", lambda i, cl, proy: f"={F('dias_sin', cl)}*{I('fam_comidas_dia')}")
     put("platos_tot", lambda i, cl, proy: f"={F('platos_reg', cl)}+{F('platos_est', cl)}", bold=True)
-    # ── ALMUERZO: UN valor por comida por mes
-    #    ticket de platos fuertes del mes; si el mes no tuvo platos fuertes se usa el último mes con dato
-    #    (la celda de la izquierda); en meses proyectados, el del último mes real (igual que el ticket de almuerzo).
-    def _tkt_pf_base(i, cl, proy):
-        if proy:
-            return f"=${ultimo_real}${filas['tkt_pf_base']}"
-        previo = f"{get_column_letter(col_ini + i - 1)}{filas['tkt_pf_base']}" if i > 0 else "0"
-        return f"=IF({M('unid_pf', cl)}>0,{M('tkt_pf', cl)},{previo})"
-    put("tkt_pf_base", _tkt_pf_base)
-    ov = I("fam_ticket_override")
-    put("ticket_ref", lambda i, cl, proy: f'=IF({ov}="",{F("tkt_pf_base", cl)},{ov})')
-    put("val_comida", lambda i, cl, proy: f"=(1-{I('fam_pct_porciones')})*{F('ticket_ref', cl)}+{I('fam_pct_porciones')}*{I('fam_valor_porcion')}", bold=True)
+    # ── ALMUERZO: UN valor por comida por mes — ticket único y fijo de
+    #    Inputs (fam_valor_comida). Ya no distingue plato fuerte de porción ni
+    #    mira el ticket real de platos fuertes del mes: lo único que varía la
+    #    valoración mes a mes es la CANTIDAD de comidas (platos_reg/platos_est
+    #    de arriba), no el precio.
+    put("val_comida", lambda i, cl, proy: f"={I('fam_valor_comida')}", bold=True)
     put("val_alm_reg", lambda i, cl, proy: f"={F('platos_reg', cl)}*{F('val_comida', cl)}")
     put("val_alm_est", lambda i, cl, proy: f"={F('platos_est', cl)}*{F('val_comida', cl)}")
     put("val_alm_tot", lambda i, cl, proy: f"={F('val_alm_reg', cl)}+{F('val_alm_est', cl)}", bold=True)
@@ -3529,12 +3516,11 @@ def _lit(texto):
 
 def _nota_familia(ctx, i, previo=""):
     """Nota (fórmula) de los gráficos de consumo familiar: la fórmula de valoración con los números del mes
-    en foco (ticket, % porciones, valor por comida) y los supuestos de Inputs. `previo` = texto propio del gráfico."""
+    en foco (valor por comida fijo, cantidad de comidas) y los supuestos de Inputs. `previo` = texto propio del gráfico."""
     dr = ctx["dr"]
     I = lambda k: f"Inputs!$E${dr[k]}"
-    cuerpo = ('"Almuerzo: valor por comida = (1 − "&FIXED(' + I("fam_pct_porciones") + '*100,0)&"% porciones) × ticket de platos fuertes del mes ($"&FIXED(' + cm(ctx, "ticket_ref", i)
-              + ',0)&") + "&FIXED(' + I("fam_pct_porciones") + '*100,0)&"% × valor de una comida en porciones ($"&FIXED(' + I("fam_valor_porcion") + ',0)&") = $"&FIXED(' + cm(ctx, "val_comida", i)
-              + ',0)&"; valor del almuerzo = comidas del mes ("&FIXED(' + cm(ctx, "platos_tot", i) + ',0)&": "&FIXED(' + cm(ctx, "pct_reg", i)
+    cuerpo = ('"Almuerzo: valor por comida = $"&FIXED(' + cm(ctx, "val_comida", i)
+              + ',0)&" (ticket único y fijo, editable en Inputs); valor del almuerzo = comidas del mes ("&FIXED(' + cm(ctx, "platos_tot", i) + ',0)&": "&FIXED(' + cm(ctx, "pct_reg", i)
               + '*100,0)&"% de los días con registro real; el resto, "&' + I("fam_comidas_dia") + '&" comidas por día, editable en Inputs) × valor por comida. "'
               + '&' + _lit("Comida rápida: pedidos Gratis a precio de venta (valor real). Nada de esto suma a los ingresos reales. Fuente: hoja Model — Consumo Familiar (fórmulas)."))
     return "=" + (_lit(previo) + "&" if previo else "") + cuerpo
@@ -3666,7 +3652,7 @@ def grafico_18(h, ctx):
         sub,
         "Escala: $ millones por mes a precio de venta (barras apiladas: almuerzo y comida rápida) y % de las ventas (línea, eje derecho 0–30 %; se amplía solo si algún mes lo supera). Tipo de dato de cada mes según el % de días de almuerzo con registro real de platos: "
         "est. = todo estimado, mixto = parte registrado, reg. = todo registrado, proy. = proyectado con Inputs. Comida rápida siempre es valor real (pedidos Gratis). "
-        "Almuerzo = comidas del mes × valor por comida del mes ((1 − % porciones) × ticket de platos fuertes + % porciones × valor en porciones). Fuente: hoja Model (fórmulas).")
+        "Almuerzo = comidas del mes × valor por comida (ticket único y fijo de Inputs). Fuente: hoja Model (fórmulas).")
     c1, c2 = dg.col(0), dg.col(len(labels) - 1)
     cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=r0)
     bar = nuevo_bar(apilado=True, ancho_gap=45)
@@ -3684,7 +3670,7 @@ def grafico_18(h, ctx):
     hh = ctx["hist"]
     def _valor_alm_defecto(r):   # con los supuestos por defecto de Inputs (solo para elegir el rango del eje)
         comidas = float(r["platos_registrados"]) + (float(r["dias_alm_operados"]) - float(r["dias_con_registro"])) * F["comidas_dia"]
-        return comidas * ((1 - F["pct_porciones"]) * float(r["ticket_pf_usado"]) + F["pct_porciones"] * F["valor_porcion"])
+        return comidas * F["valor_comida"]
     pct_real = [(_valor_alm_defecto(r) + float(r["valor_cr_registrado"]))
                 / max(float(r["ingresos_almuerzo"] + r["ingresos_cena"]), 1) for _k, r in hh.iterrows()]
     combo_secundario(bar, linea, y_titulo="% de las ventas", y_fmt="0%", y_min=0, y_max=0.30 if max(pct_real + [0.0]) <= 0.30 else None)
@@ -3904,8 +3890,9 @@ def reportar_ingresos_sin_pedido(hist):
 
 
 def reportar_ticket_platos_fuertes(hist):
-    """Avisa por consola los meses sin pedidos de platos fuertes de almuerzo: el consumo familiar usa
-    el ticket de platos fuertes del último mes con dato (o queda solo con el valor en porciones si no hay ninguno)."""
+    """Avisa por consola los meses sin pedidos de platos fuertes de almuerzo: el ticket informativo de
+    platos fuertes (#9/#17, Revenue Schedule) queda arrastrado del último mes con dato. Ya NO afecta el
+    consumo familiar (ese usa un valor por comida fijo de Inputs, no este ticket)."""
     if hist.empty or "unidades_platos_fuertes_almuerzo" not in hist.columns:
         return
     ultimo = None
@@ -3913,9 +3900,9 @@ def reportar_ticket_platos_fuertes(hist):
         if r["unidades_platos_fuertes_almuerzo"] > 0:
             ultimo = (r["periodo"], r["ticket_platos_fuertes"])
         elif ultimo is not None:
-            print(f"  ⚠ {r['periodo']}: no hubo pedidos de platos fuertes de almuerzo; el consumo familiar usa el ticket de platos fuertes de {ultimo[0]} ({fmt_pesos(ultimo[1])}).")
+            print(f"  ⚠ {r['periodo']}: no hubo pedidos de platos fuertes de almuerzo; el ticket informativo arrastra el de {ultimo[0]} ({fmt_pesos(ultimo[1])}).")
         else:
-            print(f"  ⚠ {r['periodo']}: no hubo pedidos de platos fuertes de almuerzo y no hay un mes anterior con dato: el valor por comida usa solo el valor en porciones.")
+            print(f"  ⚠ {r['periodo']}: no hubo pedidos de platos fuertes de almuerzo y no hay un mes anterior con dato: el ticket informativo queda en $0.")
 
 
 def reportar_huerfanas(diario):
@@ -4053,7 +4040,7 @@ def main():
     tkt_foco = float(fila_foco["ventas_pedidos_almuerzo"]) / max(float(fila_foco["volumen_almuerzo"]), 1)
     print(f"Ticket almuerzo del mes en foco ({mes_foco}): {fmt_pesos(tkt_foco)} (debe coincidir con el Tablero)")
     print(f"Ticket de platos fuertes del mes en foco ({mes_foco}): {fmt_pesos(float(fila_foco['ticket_pf_usado']))} "
-          f"({fmt_n(float(fila_foco['unidades_platos_fuertes_almuerzo']))} unidades; base del consumo familiar)")
+          f"({fmt_n(float(fila_foco['unidades_platos_fuertes_almuerzo']))} unidades; informativo — ya no alimenta el consumo familiar)")
 
 
 if __name__ == "__main__":

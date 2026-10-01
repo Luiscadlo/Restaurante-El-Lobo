@@ -36,12 +36,11 @@ nuevos viven en hojas propias, después de `Outputs`, y sus tablas de apoyo en `
   proyección del modelo; un mes real sin Plan cuenta con su valor real). Aplica a #14 y #15.
 - **Consumo familiar** (la familia come sin pagar): *almuerzo* se registra por CANTIDAD de comidas
   en el cierre (`cierres_dia.platos_familia`, una por persona aunque haya sido en porciones) y los
-  días sin registro se estiman con `Inputs` (comidas por día). Se valora con **un valor por comida
-  por mes** = (1 − % porciones) × ticket de platos fuertes del mes + % porciones × valor de una comida
-  en porciones; valor del almuerzo = comidas del mes × ese valor. Ticket de platos fuertes = Σ monto_almuerzo ÷
-  Σ cantidad de completo, seco, asado130 y asado200 (sin Gratis, turnos cerrados; sin domicilio ni empaque);
-  sin pedidos de platos fuertes se usa el último mes con dato. #16, #17 y #18 llevan una nota con esta
-  fórmula y los números del mes en foco. *Comida rápida* se
+  días sin registro se estiman con `Inputs` (comidas por día). Se valora con **el valor por comida
+  de Inputs**, un ticket único y fijo ($15.000 por defecto); valor del almuerzo = comidas del mes ×
+  ese valor. Lo único que varía la valoración mes a mes es la CANTIDAD de comidas, no el precio
+  (el ticket real de platos fuertes del mes ya no alimenta esta cuenta — sigue informativo en #9/#17).
+  #16, #17 y #18 llevan una nota con esta fórmula y los números del mes en foco. *Comida rápida* se
   registra por VALOR real con los pedidos de ubicación **Gratis** (no se estima). Los pedidos
   Gratis **nunca** suman a los ingresos reales ni entran a volúmenes, tickets, Pareto ni conteos
   de pedidos. El costo de insumos del consumo familiar es informativo (ya está en los egresos).
