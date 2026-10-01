@@ -41,6 +41,17 @@ nuevos viven en hojas propias, después de `Outputs`, y sus tablas de apoyo en `
   Gratis **nunca** suman a los ingresos reales ni entran a volúmenes, tickets, Pareto ni conteos
   de pedidos. El costo de insumos del consumo familiar es informativo (ya está en los egresos).
 
+## Ticket y pedidos (regla)
+
+Misma definición del Tablero del sistema: **ticket = Σ monto_total ÷ Σ cantidad** de pedidos pagados
+del turno, **sin Gratis y solo de turnos cerrados** (cantidad nula o 0 cuenta como 1). No incluye ajustes
+manuales ni cierres manuales, y el desayuno queda fuera del ticket de almuerzo. Los ingresos del modelo
+salen de los cierres, así que `Model → Revenue Schedule` concilia: *Ventas por pedidos*, *Ingresos de cierre
+sin pedido asociado (ajustes y cierres manuales)*, *Pedidos registrados*, *Ticket promedio*, *Pedidos
+equivalentes por ingresos sin pedido (ESTIMADO)* y *Pedidos equivalentes totales* (+ verificación). Los
+gráficos de pedidos (#8, #9, #19) y el consumo familiar usan **solo los pedidos registrados** y el ticket,
+nunca los equivalentes. La misma estructura aplica a comida rápida.
+
 ## Insumos y desechables (regla)
 
 El costo de **insumos** = compras a proveedores + **desechables** (categoría `desechables`: vasos, platos,
@@ -79,6 +90,7 @@ Color de desechables: `PALETA["desechables"]` (malva oscuro, dentro de la famili
 
 Notas por gráfico:
 
+- **#9** Pedidos = pedidos registrados (cantidad real, sin Gratis, turnos cerrados); ticket = Σ monto_total ÷ Σ cantidad. **No incluye pedidos equivalentes por ingresos sin pedido** (ajustes y cierres manuales).
 - **#2 / #11** Insumos va partido en *Insumos (proveedores)* y *Desechables* (juntos = costo de insumos); el valor de los desechables va en el rótulo de #2 y la serie #11 se ve en el tono oscuro.
 - **#4 / #10** El rótulo del rubro Insumos incluye "incl. desechables $X M" (el Plan de insumos de #4 no los separa).
 - **#17** Fila extra "· Desechables (% de ventas)", real vs. ajustado (no tiene Plan: el Plan de insumos no los separa).

@@ -59,9 +59,10 @@ comida rápida proyectado por mes (0). En `Model`, el bloque **Consumo Familiar
 (ESTIMADO)** lo calcula así:
 
 - **Almuerzo:** el cierre registra la *cantidad* de platos (`cierres_dia.platos_familia`).
-  Día con registro → valor = platos × ticket del día (ticket del día = (ingreso de
-  almuerzo − desayuno) ÷ pedidos de almuerzo sin Gratis; si el día no tiene pedidos,
-  p. ej. un cierre manual, se usa el ticket promedio real del mes). Día sin registro
+  Día con registro → valor = platos × ticket del día (ticket del día = Σ monto_total ÷
+  Σ cantidad de los pedidos de almuerzo del día, sin Gratis y de turnos cerrados; si el
+  día no tiene pedidos, p. ej. un cierre manual, se usa el ticket promedio real del mes
+  — ver *Ticket y pedidos* abajo). Día sin registro
   (`NULL`) → se estima en Excel: personas × almuerzos por persona × suma de los
   tickets diarios de esos días. Si la columna `platos_familia` no existe en el
   export, todo queda estimado.
@@ -140,6 +141,26 @@ Un `.xlsx` con estas hojas, en este orden:
   la proyección de insumos no los separa.
 - **Pedidos Gratis**: nunca entran a volúmenes, tickets, Pareto ni conteos de pedidos
   (los ingresos mensuales no cambian: salen de los cierres).
+- **Ticket y pedidos** (misma definición del Tablero del sistema, para que los números
+  coincidan): **ticket = Σ `monto_total` ÷ Σ `cantidad`** de los pedidos pagados del turno,
+  **sin Gratis y solo de turnos con cierre guardado**; una `cantidad` nula o 0 cuenta como 1
+  (como `(cantidad||1)` del sistema). El ticket **no incluye** ajustes manuales ni cierres
+  manuales, ni en el numerador ni en el denominador, y el desayuno queda fuera del ticket de
+  almuerzo. Como los ingresos del modelo salen de los **cierres** (incluyen desayuno, ajustes y
+  cierres manuales), el *Revenue Schedule* de `Model` los concilia por turno, en este orden:
+  1. *Ventas por pedidos* (valor calculado por el script);
+  2. *Ingresos de cierre sin pedido asociado (ajustes y cierres manuales)* = (ingresos del
+     turno − desayuno) − ventas por pedidos (el script imprime cuánto es de ajustes, de cierres
+     manuales y de otros, p. ej. fiados cuya plata no entró al cierre);
+  3. *Pedidos registrados* (cantidad real);
+  4. *Ticket promedio* = fila 1 ÷ fila 3;
+  5. *Pedidos equivalentes por ingresos sin pedido (ESTIMADO)* = fila 2 ÷ ticket (0 si la fila 2
+     es negativa; el script lo reporta);
+  6. *Pedidos equivalentes totales* = fila 3 + fila 5, y una fila de verificación
+     (ticket × fila 6 − ingresos del turno, debe dar 0 cuando la fila 2 no es negativa).
+  Los gráficos de comportamiento de clientes (#8, #9, #19 y los que cuentan pedidos) y el consumo
+  familiar usan solo los pedidos registrados y el ticket; nunca los pedidos equivalentes. Al terminar,
+  el script imprime *"Ticket almuerzo del mes en foco: $X (debe coincidir con el Tablero)"*.
 
 ### Cómo verificar el resultado
 

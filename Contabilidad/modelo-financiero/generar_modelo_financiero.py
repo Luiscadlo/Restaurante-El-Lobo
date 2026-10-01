@@ -237,6 +237,30 @@ def _bool(df, col):
     return pd.Series(False, index=df.index)
 
 
+def cantidad_pedidos(df):
+    """Unidades de cada fila de pedidos con la MISMA regla del Tablero del sistema
+    ((b.cantidad || 1) en JS): una cantidad nula o 0 cuenta como 1. Todo volumen
+    de pedidos del modelo (mensual, diario, gráficos) se cuenta con esta regla."""
+    c = _num(df, "cantidad").fillna(0)
+    return c.where(c != 0, 1)
+
+
+def marcar_turnos_cerrados(pedidos, cierres):
+    """Agrega la columna `cerrado` a los pedidos: True si su fecha + turno tiene un
+    cierre guardado — igual que turnosCerrados() del sistema, que usa el Tablero
+    para decidir qué pedidos cuentan (ventas, ticket)."""
+    p = pedidos.copy()
+    if p.empty:
+        p["cerrado"] = pd.Series(dtype=bool)
+        return p
+    if cierres is None or cierres.empty or not {"fecha", "turno"}.issubset(cierres.columns):
+        p["cerrado"] = False
+        return p
+    claves = set(zip(pd.to_datetime(cierres["fecha"]).dt.normalize(), cierres["turno"]))
+    p["cerrado"] = [(f, t) in claves for f, t in zip(pd.to_datetime(p["fecha"]).dt.normalize(), p["turno"])]
+    return p
+
+
 def ingresos_por_cierre(cierres):
     """Ingreso total de CADA cierre (una Serie alineada con cierres.index):
     efectivo + transferencia + ajuste manual (de efectivo y de transferencia) —
@@ -260,6 +284,27 @@ def ingresos_por_cierre(cierres):
         ajuste_ef = pd.Series(0.0, index=cierres.index)
     ajuste_tr = _num(cierres, "ajuste_transferencia") if "ajuste_transferencia" in cierres.columns else pd.Series(0.0, index=cierres.index)
     return base + ajuste_ef.fillna(0) + ajuste_tr.fillna(0)
+
+
+def desglose_sin_pedido(cierres_mes, ventas_dia, desayuno_dia, turno):
+    """De dónde viene lo que el cierre de un turno trae SIN pedido que lo respalde:
+    (ingresos del cierre − desayuno) − ventas por pedidos, separado en
+      · ajustes   — ajuste_efectivo / ajuste_transferencia / ajuste_manual (misma
+                    lógica de ajustesDeCierre() del sistema),
+      · manuales  — cierres manuales: efectivo + transferencia − desayuno − pedidos de ese día,
+      · otros     — el resto (p. ej. pedidos fiados que figuran con su monto pero cuya plata
+                    no entró al cierre del día).
+    `ventas_dia` / `desayuno_dia`: Series por fecha (Σ monto_total de los pedidos del turno; desayuno)."""
+    c = cierres_mes[cierres_mes["turno"] == turno] if (cierres_mes is not None and not cierres_mes.empty and "turno" in cierres_mes.columns) else pd.DataFrame()
+    if c.empty:
+        return dict(ajustes=0.0, manuales=0.0)
+    total_cierre = ingresos_por_cierre(c)
+    base = _num(c, "efectivo").fillna(0) + _num(c, "transferencia").fillna(0)
+    ajustes = float((total_cierre - base).sum())
+    des = c["fecha"].map(desayuno_dia).fillna(0) if turno == "almuerzo" else 0.0
+    resto = base - des - c["fecha"].map(ventas_dia).fillna(0)
+    manuales = float(resto[_bool(c, "manual")].sum())
+    return dict(ajustes=ajustes, manuales=manuales)
 
 
 def ingreso_turno_cierres(cierres, turno):
@@ -358,12 +403,14 @@ def es_gratis(df):
     return _bool(df, "es_gratis") | (df["metodo"] == "gratis" if "metodo" in df.columns else pd.Series(False, index=df.index))
 
 
-def preparar_pedidos(pagados, pendientes):
+def preparar_pedidos(pagados, pendientes, cierres=None):
     """Separa los pedidos en (pedidos, gratis):
-      · pedidos = Pedidos_Pagados SIN los Gratis, normalizado, con las
-        columnas derivadas que usan los gráficos (periodo, grupo de producto,
-        canal). Los Gratis NUNCA entran a volúmenes, tickets, Pareto ni a
-        ningún conteo de pedidos (los ingresos salen de los cierres).
+      · pedidos = Pedidos_Pagados SIN los Gratis y solo de turnos con cierre
+        guardado (como el Tablero; si `cierres` es None no se filtra),
+        normalizado, con las columnas derivadas que usan los gráficos (periodo,
+        grupo de producto, canal). `cantidad` nula o 0 cuenta como 1. Los Gratis
+        NUNCA entran a volúmenes, tickets, Pareto ni a ningún conteo de pedidos
+        (los ingresos salen de los cierres).
       · gratis = pedidos Gratis, pagados (ya entregados) y pendientes, a
         precio de venta (monto_total)."""
     cols_num = ["cantidad", "monto_total", "monto_efectivo", "monto_transferencia"]
@@ -373,6 +420,7 @@ def preparar_pedidos(pagados, pendientes):
         d = df.copy()
         for c in cols_num:
             d[c] = _num(d, c).fillna(0)
+        d["cantidad"] = cantidad_pedidos(d)        # regla del Tablero: nula o 0 → 1
         return d
     pag, pen = norm(pagados), norm(pendientes)
     gratis_partes = [d[es_gratis(d)] for d in (pag, pen) if not d.empty]
@@ -382,6 +430,9 @@ def preparar_pedidos(pagados, pendientes):
     if pag.empty:
         return pd.DataFrame(columns=["fecha", "turno", "pedido", "cantidad", "monto_total"]), gratis
     ped = pag[~es_gratis(pag)].copy()
+    if cierres is not None:                          # solo turnos con cierre guardado (como el Tablero)
+        ped = marcar_turnos_cerrados(ped, cierres)
+        ped = ped[ped["cerrado"]].copy()
     ped["periodo"] = ped["fecha"].dt.to_period("M").astype(str)
     tipo = ped["pedido"].astype("object") if "pedido" in ped.columns else pd.Series("", index=ped.index)
     ped["grupo_producto"] = np.where(
@@ -407,7 +458,7 @@ def construir_diario(cierres, aperturas, egresos, gastos_cierre, pagados, pendie
     gráficos (dict de DataFrames). Todo sale de las mismas hojas del export."""
     ing_dia = ingresos_diarios(cierres, aperturas)
     egr, huerf = egresos_diarios(egresos, gastos_cierre)
-    ped, gratis = preparar_pedidos(pagados, pendientes)
+    ped, gratis = preparar_pedidos(pagados, pendientes, cierres)
     if cierres is not None and not cierres.empty and {"fecha", "turno"}.issubset(cierres.columns):
         cie = pd.DataFrame({
             "fecha": cierres["fecha"], "turno": cierres["turno"],
@@ -430,13 +481,13 @@ def enriquecer_hist(hist, diario):
       dias_operados · dias_alm_operados · dias_con_registro · platos_registrados ·
       valor_alm_registrado · suma_tickets_sin_registro · valor_cr_registrado ·
       gratis_alm_valor · gratis_cr_valor (consumo familiar y Gratis).
-    ticket_d = (ingreso de almuerzo del día − desayuno del día) ÷ pedidos de
-    almuerzo del día (Σ cantidad, SIN Gratis); si el día no tiene pedidos o no
-    se puede calcular (p. ej. un cierre manual) se usa el ticket promedio real
-    del mes (el del Revenue Schedule)."""
+    ticket_d = Σ monto_total ÷ Σ cantidad de los pedidos de almuerzo del día
+    (sin Gratis, turno cerrado; cantidad nula o 0 = 1) — la misma definición del
+    Tablero; si el día no tiene pedidos (p. ej. un cierre manual) se usa el ticket
+    promedio real del mes (el del Revenue Schedule)."""
     ing, ped, cie, gr = diario["ingresos"], diario["pedidos"], diario["cierres"], diario["gratis"]
     h = hist.copy()
-    h["_ticket_mes"] = (h["ingresos_almuerzo"] - h["ingresos_desayuno"]) / h["volumen_almuerzo"].clip(lower=1)
+    h["_ticket_mes"] = h["ventas_pedidos_almuerzo"] / h["volumen_almuerzo"].clip(lower=1)
     ticket_mes = h.set_index("periodo")["_ticket_mes"]
 
     # días operados (cualquier turno) por mes
@@ -448,10 +499,12 @@ def enriquecer_hist(hist, diario):
     alm["periodo"] = alm.index.to_period("M").astype(str)
     ped_alm = ped[ped["turno"] == "almuerzo"].groupby("fecha")["cantidad"].sum() if not ped.empty else pd.Series(dtype=float)
     alm["pedidos"] = ped_alm.reindex(alm.index).fillna(0)
+    ped_alm_monto = ped[ped["turno"] == "almuerzo"].groupby("fecha")["monto_total"].sum() if not ped.empty else pd.Series(dtype=float)
+    alm["ventas_pedidos"] = ped_alm_monto.reindex(alm.index).fillna(0)
     cie_alm = cie[cie["turno"] == "almuerzo"]
     pf = cie_alm.groupby("fecha")["platos_familia"].max() if not cie_alm.empty else pd.Series(dtype=float)
     alm["platos_familia"] = pf.reindex(alm.index)
-    alm["ticket"] = (alm["almuerzo_neto"] / alm["pedidos"]).where((alm["pedidos"] > 0) & (alm["almuerzo_neto"] > 0))
+    alm["ticket"] = (alm["ventas_pedidos"] / alm["pedidos"]).where((alm["pedidos"] > 0) & (alm["ventas_pedidos"] > 0))
     alm["ticket"] = alm["ticket"].fillna(alm["periodo"].map(ticket_mes))
     con = alm["platos_familia"].notna()
     por_mes = pd.DataFrame({
@@ -524,7 +577,10 @@ def cargar_datos_reales(path_excel):
     # comida rápida) no son ventas: se excluyen de los VOLÚMENES (y, por tanto,
     # de los tickets) del Revenue Schedule. Los ingresos mensuales no cambian
     # porque salen de los cierres.
-    pedidos_vendidos = pedidos[~es_gratis(pedidos)] if not pedidos.empty else pedidos
+    # Ventas y volumen de pedidos SOLO de turnos con cierre guardado (como el Tablero),
+    # y cantidad nula o 0 = 1 unidad (como el Tablero).
+    pedidos = marcar_turnos_cerrados(pedidos, cierres) if not pedidos.empty else pedidos
+    pedidos_vendidos = pedidos[~es_gratis(pedidos) & pedidos["cerrado"]] if not pedidos.empty else pedidos
 
     filas = []
     for periodo in meses:
@@ -535,8 +591,10 @@ def cargar_datos_reales(path_excel):
         gastos_mes = gastos_cierre[gastos_cierre["periodo"] == periodo] if not gastos_cierre.empty else pd.DataFrame()
         aperturas_mes = aperturas[aperturas["periodo"] == periodo] if not aperturas.empty and "periodo" in aperturas.columns else pd.DataFrame()
 
-        vol_alm = int(ing_alm["cantidad"].sum()) if not ing_alm.empty and "cantidad" in ing_alm else len(ing_alm)
-        vol_cena = int(ing_cena["cantidad"].sum()) if not ing_cena.empty and "cantidad" in ing_cena else len(ing_cena)
+        vol_alm = int(round(float(cantidad_pedidos(ing_alm).sum()))) if not ing_alm.empty else 0
+        vol_cena = int(round(float(cantidad_pedidos(ing_cena).sum()))) if not ing_cena.empty else 0
+        ventas_alm = float(_num(ing_alm, "monto_total").fillna(0).sum()) if not ing_alm.empty else 0.0
+        ventas_cena = float(_num(ing_cena, "monto_total").fillna(0).sum()) if not ing_cena.empty else 0.0
         # Ingresos: SIEMPRE desde Cierres_Dia (igual que renderTablero() del
         # sistema) y no sumando Pedidos_Pagados — el desayuno se suma directo
         # al cierre de almuerzo al abrir el turno (calcularVentasFijas()) y
@@ -551,6 +609,11 @@ def cargar_datos_reales(path_excel):
                 ingresos_desayuno += float(desayuno_mes["venta_desayuno_transferencia"].fillna(0).sum())
         else:
             ingresos_desayuno = 0.0
+
+        # De dónde vienen los ingresos de cierre que no tienen pedido detrás (ajustes, cierres manuales)
+        desayuno_dia = desayuno_por_dia(aperturas_mes)
+        sp_alm = desglose_sin_pedido(cierres_mes, ing_alm.groupby("fecha")["monto_total"].sum() if not ing_alm.empty else pd.Series(dtype=float), desayuno_dia, "almuerzo")
+        sp_cena = desglose_sin_pedido(cierres_mes, ing_cena.groupby("fecha")["monto_total"].sum() if not ing_cena.empty else pd.Series(dtype=float), desayuno_dia, "cena")
 
         def suma_cat(df, cat):
             # "egresos" guarda la categoría en la columna "cat"; "gastos_dia"
@@ -577,6 +640,9 @@ def cargar_datos_reales(path_excel):
             ingresos_almuerzo=ingresos_alm,
             ingresos_cena=ingresos_cena,
             volumen_almuerzo=max(vol_alm, 1), volumen_cena=max(vol_cena, 1),
+            ventas_pedidos_almuerzo=ventas_alm, ventas_pedidos_cena=ventas_cena,
+            sinped_ajustes_almuerzo=sp_alm["ajustes"], sinped_manual_almuerzo=sp_alm["manuales"],
+            sinped_ajustes_cena=sp_cena["ajustes"], sinped_manual_cena=sp_cena["manuales"],
             costo_insumos=costo_insumos, costo_desechables=costo_desechables, nomina=nomina,
             arriendo_servicios=arriendo_serv, otros_gastos=otros,
             ingresos_desayuno=ingresos_desayuno,
@@ -698,6 +764,10 @@ def datos_de_ejemplo(n_meses=12):
         "cuentas_por_cobrar_fiados": 950_000,
     }
     diario = _diario_de_ejemplo(hist, hoy)
+    ped_d = diario["pedidos"]
+    for turno_, col_ in (("almuerzo", "ventas_pedidos_almuerzo"), ("cena", "ventas_pedidos_cena")):
+        ventas_mes = ped_d[ped_d["turno"] == turno_].groupby("periodo")["monto_total"].sum() if not ped_d.empty else pd.Series(dtype=float)
+        hist[col_] = hist["periodo"].map(ventas_mes).fillna(0.0)
     hist = enriquecer_hist(hist, diario)
     return hist, extra, diario
 
@@ -1178,27 +1248,67 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
     for i in range(n_hist):
         numero(ws, r, col_ini + i, float(hist_df.iloc[i]["ingresos_desayuno"]))
     r += 1
-    fila_vol_alm = r
-    label(ws, r, "Volumen pedidos — Almuerzo")
-    for i in range(n_hist):
-        numero(ws, r, col_ini + i, int(hist_df.iloc[i]["volumen_almuerzo"]))
-    r += 1
-    fila_tkt_alm = r
-    label(ws, r, "Ticket promedio — Almuerzo")
-    for c in range(col_ini, col_ini + n_hist):
-        cl = get_column_letter(c)
-        numero(ws, r, c, f"=({cl}{fila_ing_alm}-{cl}{fila_desayuno})/{cl}{fila_vol_alm}")
-    r += 1
-    fila_vol_cena = r
-    label(ws, r, "Volumen pedidos — Comidas Rápidas")
-    for i in range(n_hist):
-        numero(ws, r, col_ini + i, int(hist_df.iloc[i]["volumen_cena"]))
-    r += 1
-    fila_tkt_cena = r
-    label(ws, r, "Ticket promedio — Comidas Rápidas")
-    for c in range(col_ini, col_ini + n_hist):
-        cl = get_column_letter(c)
-        numero(ws, r, c, f"={cl}{fila_ing_cena}/{cl}{fila_vol_cena}")
+    # Por turno: ventas por pedidos → ingresos de cierre sin pedido → pedidos registrados → ticket →
+    # pedidos equivalentes (estimado) → equivalentes totales → verificación.
+    #   ticket = Σ monto_total ÷ Σ cantidad de pedidos pagados del turno (sin Gratis, turnos cerrados;
+    #   cantidad nula o 0 = 1) — la MISMA definición del Tablero; NO incluye ajustes ni cierres manuales.
+    filas_rev = {}
+    for nombre_t, turno_t, f_ing, f_des, col_ventas, col_vol in (
+            ("Almuerzo", "almuerzo", fila_ing_alm, fila_desayuno, "ventas_pedidos_almuerzo", "volumen_almuerzo"),
+            ("Comidas Rápidas", "cena", fila_ing_cena, None, "ventas_pedidos_cena", "volumen_cena")):
+        fr = {}
+        fr["ventas"] = r
+        label(ws, r, f"Ventas por pedidos — {nombre_t}")
+        for i in range(n_hist):
+            numero(ws, r, col_ini + i, float(hist_df.iloc[i][col_ventas]))
+        r += 1
+        fr["sin"] = r
+        label(ws, r, "Ingresos de cierre sin pedido asociado (ajustes y cierres manuales)")
+        for c in range(col_ini, col_ini + n_hist):
+            cl = get_column_letter(c)
+            neto = f"({cl}{f_ing}-{cl}{f_des})" if f_des else f"{cl}{f_ing}"
+            numero(ws, r, c, f"={neto}-{cl}{fr['ventas']}")
+        r += 1
+        fr["vol"] = r
+        label(ws, r, f"Pedidos registrados — {nombre_t}")
+        for i in range(n_hist):
+            numero(ws, r, col_ini + i, int(hist_df.iloc[i][col_vol]))
+        r += 1
+        fr["tkt"] = r
+        label(ws, r, f"Ticket promedio — {nombre_t}")
+        for c in range(col_ini, col_ini + n_hist):
+            cl = get_column_letter(c)
+            numero(ws, r, c, f"=IF({cl}{fr['vol']}=0,0,{cl}{fr['ventas']}/{cl}{fr['vol']})")
+        r += 1
+        fr["eq"] = r
+        label(ws, r, "Pedidos equivalentes por ingresos sin pedido (ESTIMADO)")
+        for c in range(col_ini, col_ini + n_hist):
+            cl = get_column_letter(c)
+            numero(ws, r, c, f"=IF(AND({cl}{fr['tkt']}>0,{cl}{fr['sin']}>0),{cl}{fr['sin']}/{cl}{fr['tkt']},0)")
+        r += 1
+        fr["eqtot"] = r
+        label(ws, r, "Pedidos equivalentes totales", bold=True)
+        for c in range(col_ini, col_ini + n_hist):
+            cl = get_column_letter(c)
+            numero(ws, r, c, f"={cl}{fr['vol']}+{cl}{fr['eq']}", bold=True)
+        r += 1
+        fr["chk"] = r
+        label(ws, r, "Verificación: ticket × equivalentes totales − (ingresos del turno" + (" − desayuno)" if f_des else ")"))
+        for c in range(col_ini, col_ini + n_hist):
+            cl = get_column_letter(c)
+            neto = f"({cl}{f_ing}-{cl}{f_des})" if f_des else f"{cl}{f_ing}"
+            numero(ws, r, c, f"=ROUND({cl}{fr['tkt']}*{cl}{fr['eqtot']}-{neto},0)")
+        filas_rev[turno_t] = fr
+        r += 2
+    fila_ventas_ped_alm, fila_sin_pedido_alm = filas_rev["almuerzo"]["ventas"], filas_rev["almuerzo"]["sin"]
+    fila_vol_alm, fila_tkt_alm = filas_rev["almuerzo"]["vol"], filas_rev["almuerzo"]["tkt"]
+    fila_eq_alm, fila_eqtot_alm = filas_rev["almuerzo"]["eq"], filas_rev["almuerzo"]["eqtot"]
+    fila_ventas_ped_cena, fila_sin_pedido_cena = filas_rev["cena"]["ventas"], filas_rev["cena"]["sin"]
+    fila_vol_cena, fila_tkt_cena = filas_rev["cena"]["vol"], filas_rev["cena"]["tkt"]
+    fila_eq_cena, fila_eqtot_cena = filas_rev["cena"]["eq"], filas_rev["cena"]["eqtot"]
+    nota(ws, r, "Ticket = ventas por pedidos ÷ pedidos registrados (misma definición del Tablero; sin ajustes manuales ni cierres manuales, sin Gratis, solo turnos cerrados). "
+                "Los pedidos equivalentes son un ESTIMADO de cuántos pedidos 'valen' los ingresos sin pedido (a ticket promedio); si esos ingresos son negativos se dejan en 0 y la verificación muestra esa diferencia. "
+                "No se usan para el comportamiento de clientes (gráficos de pedidos) ni para el consumo familiar.")
     r += 2
     nota(ws, r, "Solo histórico (el volumen proyectado no es necesario para calcular Ingresos, que se proyectan directo con el driver de crecimiento).")
     r += 2
@@ -1388,6 +1498,10 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
         fila_arriendo=fila_arriendo, fila_otros=fila_otros,
         fila_desayuno=fila_desayuno, fila_vol_alm=fila_vol_alm, fila_tkt_alm=fila_tkt_alm,
         fila_vol_cena=fila_vol_cena, fila_tkt_cena=fila_tkt_cena, fila_cost_pct=fila_cost_pct, fam=fam,
+        fila_ventas_ped_alm=fila_ventas_ped_alm, fila_sin_pedido_alm=fila_sin_pedido_alm,
+        fila_eq_alm=fila_eq_alm, fila_eqtot_alm=fila_eqtot_alm,
+        fila_ventas_ped_cena=fila_ventas_ped_cena, fila_sin_pedido_cena=fila_sin_pedido_cena,
+        fila_eq_cena=fila_eq_cena, fila_eqtot_cena=fila_eqtot_cena,
         fila_desechables=fila_desech, fila_desech_pct=fila_desech_pct, fila_ins_prov=fila_ins_prov,
     )
     config_impresion(ws, horizontal=True)
@@ -2900,13 +3014,14 @@ def grafico_9(h, ctx):
     op = ctx["op_m"]
     pm = pm.assign(semana=[semana_del_mes(d) for d in pm["fecha"]]) if not pm.empty else pm
     vol = pm.groupby("semana")["cantidad"].sum() if not pm.empty else pd.Series(dtype=float)
+    ventas = pm.groupby("semana")["monto_total"].sum() if not pm.empty else pd.Series(dtype=float)
     neto = op.assign(semana=[semana_del_mes(d) for d in op.index]).groupby("semana")["almuerzo_neto"].sum()
     semanas = sorted(set(vol.index) | set(neto.index))
-    ticket = {s: (float(neto.get(s, 0.0)) / float(vol.get(s, 0)) if vol.get(s, 0) else None) for s in semanas}
+    ticket = {s: (float(ventas.get(s, 0.0)) / float(vol.get(s, 0)) if vol.get(s, 0) else None) for s in semanas}
     hist = ctx["hist"].set_index("periodo")
     prev = anterior_real(ctx)
     def tk(p):
-        return (float(hist.loc[p, "ingresos_almuerzo"] - hist.loc[p, "ingresos_desayuno"]) / max(float(hist.loc[p, "volumen_almuerzo"]), 1))
+        return float(hist.loc[p, "ventas_pedidos_almuerzo"]) / max(float(hist.loc[p, "volumen_almuerzo"]), 1)
     if prev:
         tk_a, tk_p = tk(mf), tk(prev)
         v_a, v_p = float(hist.loc[mf, "volumen_almuerzo"]), float(hist.loc[prev, "volumen_almuerzo"])
@@ -2917,9 +3032,10 @@ def grafico_9(h, ctx):
     r = h.lamina(
         f"¿Crezco por más clientes o por cobrar más? — {ctx['nombre_mes'].capitalize()}",
         hallazgo,
-        "Escala: número de pedidos de almuerzo por semana del mes (barras, sin Gratis) y ticket promedio de almuerzo en $ miles (línea, eje derecho). Ticket = ingreso de almuerzo sin desayuno ÷ pedidos. "
-        "Fuente: Pedidos_Pagados y Cierres_Dia (calculado por el script). Segunda lámina: últimos 6 meses.")
-    r0 = dg.seccion("#9A — Pedidos y ticket de almuerzo por semana ($ miles)", "Calculado por el script al generar el modelo (Pedidos_Pagados sin Gratis + Cierres_Dia).")
+        "Escala: número de pedidos de almuerzo por semana del mes (barras, sin Gratis) y ticket promedio de almuerzo en $ miles (línea, eje derecho). Ticket = ventas por pedidos ÷ pedidos registrados (misma definición del Tablero). "
+        "No incluye pedidos equivalentes por ingresos sin pedido (ajustes y cierres manuales). "
+        "Fuente: Pedidos_Pagados de turnos cerrados (calculado por el script). Segunda lámina: últimos 6 meses.")
+    r0 = dg.seccion("#9A — Pedidos y ticket de almuerzo por semana ($ miles)", "Calculado por el script al generar el modelo (Pedidos_Pagados sin Gratis, turnos cerrados). Ticket = Σ monto_total ÷ Σ cantidad; no incluye pedidos equivalentes por ingresos sin pedido.")
     filas = [[ETIQ_SEMANA[int(s)], float(vol.get(s, 0)), (ticket[s] / 1000 if ticket[s] else None)] for s in semanas]
     a, b = escribir_tabla(dg, r0, ["Semana", "Pedidos de almuerzo", "Ticket promedio ($ miles)"], filas, formatos=[None, "#,##0", "#,##0.0"])
     dg.cerrar(b)
@@ -2944,7 +3060,7 @@ def grafico_9(h, ctx):
         f"¿Crezco por más clientes o por cobrar más? — últimos {len(idxs)} meses",
         f"En {len(idxs)} mes(es) real(es): el volumen de almuerzo va de {fmt_n(float(hist.iloc[desde]['volumen_almuerzo']))} a {fmt_n(float(hist.iloc[i]['volumen_almuerzo']))} pedidos y "
         f"el ticket de {fmt_pesos(tk(ctx['periodos_reales'][desde]))} a {fmt_pesos(tk(mf))}.",
-        "Escala: pedidos de almuerzo por mes (barras, sin Gratis) y ticket promedio de almuerzo en $ miles (línea, eje derecho). Mismas definiciones del Revenue Schedule. Fuente: hoja Model (fórmulas).")
+        "Escala: pedidos de almuerzo por mes (barras, sin Gratis) y ticket promedio de almuerzo en $ miles (línea, eje derecho). Mismas definiciones del Revenue Schedule (pedidos registrados, sin los pedidos equivalentes por ingresos sin pedido). Fuente: hoja Model (fórmulas).")
     r0 = dg.seccion("#9B — Pedidos y ticket de almuerzo, últimos meses", "FÓRMULAS hacia Model (Revenue Schedule).")
     ws_d = dg.ws
     label(ws_d, r0, "Mes"); label(ws_d, r0 + 1, "Pedidos de almuerzo"); label(ws_d, r0 + 2, "Ticket promedio ($ miles)")
@@ -3674,6 +3790,29 @@ def resolver_mes_foco(mes_arg, hist_df):
     return mes_arg
 
 
+def reportar_ingresos_sin_pedido(hist):
+    """Imprime, por mes real, cuánto del ingreso de cierre NO tiene pedido detrás (ajustes manuales y
+    cierres manuales) y reporta los meses donde ese monto es negativo (pedidos equivalentes = 0)."""
+    if hist.empty or "ventas_pedidos_almuerzo" not in hist.columns:
+        return
+    print("\nIngresos de cierre sin pedido asociado (ajustes y cierres manuales):")
+    negativos = []
+    for _i, r in hist.iterrows():
+        for turno, nombre, ing, des in (("almuerzo", "Almuerzo", r["ingresos_almuerzo"], r["ingresos_desayuno"]), ("cena", "Comidas rápidas", r["ingresos_cena"], 0.0)):
+            total = float(ing - des) - float(r[f"ventas_pedidos_{turno}"])
+            if total < 0:
+                negativos.append((r["periodo"], nombre, total))
+            aj, ma = r.get(f"sinped_ajustes_{turno}"), r.get(f"sinped_manual_{turno}")
+            detalle = ""
+            if aj is not None and pd.notna(aj) and ma is not None and pd.notna(ma):
+                detalle = f" = ajustes {fmt_pesos(aj)} + cierres manuales {fmt_pesos(ma)} + otros {fmt_pesos(total - aj - ma)} (p. ej. fiados cuya plata no entró al cierre)"
+            if abs(total) >= 1 or detalle:
+                print(f"  · {r['periodo']} {nombre}: {fmt_pesos(total)}{detalle}")
+    if negativos:
+        print("  ⚠ Ingresos sin pedido NEGATIVOS (pedidos equivalentes = 0 en esos meses): "
+              + "; ".join(f"{p} {n} {fmt_pesos(v)}" for p, n, v in negativos))
+
+
 def reportar_huerfanas(diario):
     """Avisa (sin cambiar nada) si hay egresos con una categoría fuera de los
     4 rubros del modelo: esas filas NO se suman en ningún lado."""
@@ -3762,6 +3901,7 @@ def main():
 
     mes_foco = resolver_mes_foco(args.mes, hist_df)
     reportar_huerfanas(diario)
+    reportar_ingresos_sin_pedido(hist_df)
 
     meses_fcst_labels = etiquetas_proyeccion(hist_df, args.hasta, args.meses_proyeccion)
 
@@ -3794,6 +3934,9 @@ def main():
               "Ciérralo y vuelve a correr el script, o usa --salida con otro nombre.")
         sys.exit(1)
     print(f"✅ Modelo generado: {salida_path}  ({len(hist_df)} meses reales + {len(meses_fcst_labels)} proyectados)")
+    fila_foco = hist_df[hist_df["periodo"] == mes_foco].iloc[0]
+    tkt_foco = float(fila_foco["ventas_pedidos_almuerzo"]) / max(float(fila_foco["volumen_almuerzo"]), 1)
+    print(f"Ticket almuerzo del mes en foco ({mes_foco}): {fmt_pesos(tkt_foco)} (debe coincidir con el Tablero)")
 
 
 if __name__ == "__main__":
