@@ -1,0 +1,16 @@
+# Excel exportados del sistema y modelos generados (ElLobo_datos_*.xlsx,
+# ElLobo_Modelo_Financiero_*.xlsx): contienen los datos reales del negocio y
+# este repo es PÚBLICO — nunca deben subirse. La regla cubre cualquier .xlsx.
+*.xlsx
+*.xls
+*.xlsm
+~$*
+
+# Excepción: catálogo público de productos del Menú (ya estaba en el repo;
+# código/nombre/categoría, sin datos del negocio). Ver Menu/.
+!Menu/platos.xlsx
+!Menu/Menu/platos.xlsx
+
+# Python
+__pycache__/
+*.pyc
