@@ -18,6 +18,17 @@ Uso:
     --demo                    Ignora el archivo y genera 12 meses de datos de
                                EJEMPLO (para probar el modelo sin depender de
                                datos reales).
+    --hasta AAAA-MM           Último mes de la proyección (por defecto 2027-12).
+    --meses-proyeccion N      Alternativa a --hasta; si se pasa, manda.
+    --mes AAAA-MM             Mes en foco de los gráficos mensuales (por defecto,
+                               el último mes con datos reales).
+
+Además de Cover / Outputs / Inputs / Model, el libro trae el tablero mensual
+"tipo presentación": hojas A_Resultado, B_Ingresos, C_Egresos, E_Proyeccion,
+F_Familia y G_Extras (gráficos #1–#21, ver CATALOGO_GRAFICOS.md) y la hoja de
+apoyo Datos_Graficos (con el Plan = proyección Base a un mes). El consumo
+familiar (la familia come sin pagar) tiene su propia sección en Inputs y su
+bloque "Consumo Familiar (ESTIMADO)" en Model.
 
 Qué SÍ queda con fórmulas reales de Excel (cambias un input y recalcula):
   - Estado de Resultados: histórico real + proyectado con los drivers de la
@@ -3696,7 +3707,12 @@ def main():
     wb._sheets = [wb["Cover"], wb["Outputs"]] + hojas_nuevas + [wb["Inputs"], wb["Model"], dg.ws]
     wb.active = 0
 
-    wb.save(salida_path)
+    try:
+        wb.save(salida_path)
+    except PermissionError:
+        print(f"No se pudo guardar {salida_path}: el archivo está abierto en Excel (u otro programa). "
+              "Ciérralo y vuelve a correr el script, o usa --salida con otro nombre.")
+        sys.exit(1)
     print(f"✅ Modelo generado: {salida_path}  ({len(hist_df)} meses reales + {len(meses_fcst_labels)} proyectados)")
 
 

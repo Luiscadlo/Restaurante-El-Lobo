@@ -83,7 +83,21 @@ python generar_modelo_financiero.py --demo
 
 ## 4. Qué genera
 
-Un `.xlsx` de 4 hojas: **Cover / Outputs / Inputs / Model**.
+Un `.xlsx` con estas hojas, en este orden:
+
+| Hoja | Contenido |
+|---|---|
+| `Cover` | Portada y resumen del período cargado |
+| `Outputs` | KPIs y 5 gráficos del dashboard original (no se modificó) |
+| `A_Resultado` | **¿Cómo me fue este mes?** — tarjetas KPI (▲▼ vs mes anterior y vs Plan) y gráficos #1–#4 y #12 |
+| `B_Ingresos` | **¿De dónde viene la plata?** — gráficos #5–#9 |
+| `C_Egresos` | **¿En qué se va la plata?** — gráficos #10–#11 |
+| `E_Proyeccion` | **¿Hacia dónde voy?** — gráficos #13–#15 (proyección hasta `--hasta`) |
+| `F_Familia` | **Si la familia pagara** — gráficos #16–#18 |
+| `G_Extras` | Complementarios — gráficos #19–#21 |
+| `Inputs` | Supuestos y escenarios (Mejor / Base / Peor) + sección *Consumo familiar (estimado)* |
+| `Model` | Estado de Resultados, Balance General, Flujo de Caja y *Consumo Familiar (ESTIMADO)* |
+| `Datos_Graficos` | Tablas de apoyo de los gráficos y la tabla del **Plan** |
 
 - **Estado de Resultados**: con fórmulas reales de Excel — histórico real y
   proyección según los drivers de la hoja *Inputs* (switch Mejor / Base / Peor).
@@ -93,8 +107,40 @@ Un `.xlsx` de 4 hojas: **Cover / Outputs / Inputs / Model**.
   utilidades retenidas) viene lleno; lo que falta (cuentas por cobrar de
   fiados, aportes de capital, préstamos, activos fijos) aparece en celdas
   marcadas `[PENDIENTE]`.
+- **Gráficos nuevos** (A–G): cada uno es una *lámina* del tamaño de una página
+  horizontal (título, hallazgo con número, gráfico y nota de fuente/escala) con
+  salto de página entre láminas: *Archivo → Exportar → PDF* sirve como
+  presentación. Catálogo numerado, reglas y qué gráficos de `Outputs` quedan
+  superados: **[CATALOGO_GRAFICOS.md](CATALOGO_GRAFICOS.md)**. La estética se
+  ajusta cambiando solo el diccionario `PALETA` del script.
+- Lo que `Model` ya tiene va como **fórmulas** hacia `Model`/`Inputs`/Plan; solo
+  lo que `Model` no tiene (datos diarios, día de la semana, pedidos) se calcula
+  con pandas y queda rotulado *"calculado por el script al generar el modelo"*.
+
+### Cómo se calculan los datos diarios
+
+- **Día operado** = fecha con ingresos > 0 (igual que "Promedio por día" del
+  Tablero). Todo promedio diario se divide por días operados, no por días calendario.
+- **Ingresos por turno**: Desayuno (de `Aperturas_Turno`) / Almuerzo neto / Comida
+  rápida (de `Cierres_Dia`, efectivo + transferencia + ajustes). El modelo ya incluye el
+  desayuno dentro de "Ingresos Almuerzo", por eso *Almuerzo neto = Almuerzo − desayuno*;
+  los tres turnos suman exactamente "Ingresos Totales".
+- **Egresos por día y rubro**: `Egresos` + `Gastos_Cierre`, mapeados a 4 rubros
+  (insumos = proveedor, nómina, arriendo + servicios, otros). `prestamo` se excluye.
+  Una categoría fuera de esos rubros es "huérfana": no se suma y el script la avisa.
+- **Pedidos Gratis**: nunca entran a volúmenes, tickets, Pareto ni conteos de pedidos
+  (los ingresos mensuales no cambian: salen de los cierres).
+
+### Cómo verificar el resultado
+
+Con `--demo` salen todos los gráficos con datos de ejemplo. Con datos reales conviene
+revisar que `Σ ingresos diarios del mes = Ingresos del mes en Model`, que `Desayuno +
+Almuerzo neto + Comida rápida = Ingresos Totales` y que `Σ egresos por categoría =
+egresos del mes` (se pueden leer en las tablas de `Datos_Graficos`).
 
 ## Notas
 
 - **No subas el Excel exportado ni el modelo generado al repositorio:**
   contienen los datos reales del negocio y el repo es público en GitHub Pages.
+  El `.gitignore` de la raíz ya excluye cualquier `.xlsx` (salvo el catálogo
+  público del Menú).
