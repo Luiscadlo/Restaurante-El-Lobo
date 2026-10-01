@@ -1375,6 +1375,17 @@
           <div class="monto-val" id="dd-caja-esperada" style="color:var(--blue);">$0</div>
           <div class="monto-label">Caja esperada en efectivo al cierre <span style="color:var(--text3);">(Después de préstamos)</span></div>
         </div>
+
+        <!-- Solo turno ALMUERZO: la familia come sin pagar y se anota CUÁNTOS fueron (en comida
+             rápida existe el pedido "Gratis", que ya guarda su valor, así que ahí no se pide). -->
+        <div class="form-group" id="dd-platos-familia-wrap" style="margin-top:14px;">
+          <label>🍽 Almuerzos de la familia hoy (cantidad) <span class="req" id="dd-platos-familia-req">*</span></label>
+          <input type="number" id="dd-platos-familia" min="0" step="1" inputmode="numeric" placeholder="Cantidad">
+          <div style="font-size:11px;color:var(--text3);margin-top:4px;">Cantidad de almuerzos que comió la familia sin pagar. Si no comieron, escribe 0.</div>
+        </div>
+        <!-- Solo turno COMIDA RÁPIDA: informativo, de solo lectura (calculado de los pedidos Gratis del turno). -->
+        <div id="dd-gratis-info" style="display:none;margin-top:14px;padding:10px 14px;border-radius:var(--radius-sm);background:rgba(240,180,40,0.08);border:1px solid rgba(240,180,40,0.3);font-size:12px;color:var(--orange);"></div>
+
         <button class="btn btn-primary" onclick="guardarCierre()" style="width:100%;margin-top:14px;">💾 Guardar cierre del día</button>
       </div>
     </div>
@@ -1398,7 +1409,7 @@
         </div>
         <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th>Gastos</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th>Gastos</th><th title="Almuerzos que comió la familia sin pagar (solo cierres de almuerzo)">Familia</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
     </div>
   </div>
 </section>
@@ -1639,6 +1650,12 @@
       <div class="form-group mb">
         <label>Transferencia ($)</label>
         <input type="text" inputmode="numeric" id="cm-transferencia" placeholder="0" oninput="formatMilesInput(this)">
+      </div>
+      <!-- Solo turno ALMUERZO (ver seleccionarTurnoCierreManual). Opcional: vacío = "no registrado" (NULL). -->
+      <div class="form-group mb" id="cm-platos-familia-wrap">
+        <label>🍽 Almuerzos de la familia (cantidad) <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
+        <input type="number" id="cm-platos-familia" min="0" step="1" inputmode="numeric" placeholder="Cantidad">
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Almuerzos que comió la familia sin pagar. Déjalo vacío si no lo sabes (queda como "no registrado"); si no comieron, escribe 0.</div>
       </div>
       <div class="divider"></div>
 
@@ -2348,11 +2365,18 @@ function exportarExcelCompleto() {
     const ws = XLSX.utils.json_to_sheet(filas || []);
     XLSX.utils.book_append_sheet(wb, ws, nombre.slice(0, 31));
   };
+  // Los pedidos "Gratis" viajan en estas dos hojas, junto con los demás: se
+  // identifican por la columna es_gratis (TRUE) — y también por metodo =
+  // 'gratis' — con su monto en monto_total (no suma a ingresos). Pendientes
+  // mientras no se marquen como entregados; Pagados una vez entregados.
   addSheet('Pedidos_Pagados', ST.ingresos);
   addSheet('Pedidos_Pendientes', ST.pendientes);
   addSheet('Egresos', ST.egresos);
   addSheet('Gastos_Cierre', ST.gastosDia);
-  addSheet('Cierres_Dia', ST.cierresDia);
+  // platos_familia (almuerzos de la familia) se fuerza como columna aunque
+  // ningún cierre la traiga todavía (migración sin correr), para que el
+  // esquema del Excel sea estable. Vacío = NULL = "no registrado".
+  addSheet('Cierres_Dia', ST.cierresDia.map(c => ({ ...c, platos_familia: c.platos_familia ?? null })));
   addSheet('Aperturas_Turno', ST.aperturasTurno);
   addSheet('Movimientos_Caja', ST.movimientosCaja);
   addSheet('Ingresos_Extra', ST.ingresosExtra);
@@ -2960,6 +2984,38 @@ function pintarTurnoManual() {
     badge.className = 'turno-badge turno-cena'; badge.textContent = '🌙 Comidas rápidas';
   }
   actualizarVisibilidadParaLlevar();
+  aplicarReglaGratisPorTurno();
+}
+
+// Regla de negocio: la opción "🎁 Gratis" SOLO existe en Comidas Rápidas
+// ('cena'), donde cada producto vale distinto y el consumo de la familia se
+// lleva en pesos con el pedido Gratis. En Almuerzo la familia come sin pagar y
+// se anota por CANTIDAD al cerrar el turno (cierres_dia.platos_familia), así
+// que ahí "Gratis" no se ofrece. Se llama desde pintarTurnoManual() — o sea al
+// cargar, al cambiar de turno y — por seguridad — tras registrar un pedido.
+// Los pedidos Gratis de almuerzo que ya existían NO se tocan: siguen visibles.
+function aplicarReglaGratisPorTurno() {
+  const permitido = turnoManual === 'cena';
+  const btnGratis = document.getElementById('btn-gratis');
+  if (btnGratis) btnGratis.style.display = permitido ? '' : 'none';
+  if (permitido) return;
+
+  const gratisInfo = document.getElementById('gratis-info-section');
+  if (gratisInfo) gratisInfo.style.display = 'none';
+  if (selectedUbicacion === 'gratis') {
+    // Quitar la ubicación equivale a cambiar de ubicación: se descarta lo que
+    // hubiera en cola para ese pedido (igual que seleccionarUbicacion()).
+    almuerzosEnCola = [];
+    extrasIngresoPendientes = [];
+    renderAlmuerzosEnColaLista();
+    renderExtrasIngresoLista();
+    selectedUbicacion = null;
+    actualizarVisibilidadMetodoPago(); // "Gratis" ocultaba el método de pago: se vuelve a mostrar
+    renderMesasForm();
+    validarRegistro();
+    actualizarMontoDisplay();
+    showToast('🎁 "Gratis" solo existe en Comidas Rápidas — se quitó esa ubicación', 'info');
+  }
 }
 
 // La hora ya no cambia el turno: solo recalcula montos (para llevar, etc.)
@@ -3259,6 +3315,14 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   const hora   = document.getElementById('ing-hora').value;
   const turno  = turnoManual;
 
+  // Defensivo: "Gratis" solo existe en Comidas Rápidas (la UI ya lo oculta en
+  // almuerzo — ver aplicarReglaGratisPorTurno()). En almuerzo la familia se
+  // anota por cantidad al cerrar el turno, no como pedido.
+  if (selectedUbicacion === 'gratis' && turno === 'almuerzo') {
+    showToast('⚠ "Gratis" no existe en almuerzo — anota los almuerzos de la familia en el cierre del turno', 'warning');
+    return;
+  }
+
   if (!fecha||!hora) { showToast('⚠ Completa fecha y hora', 'warning'); return; }
   if (!turnoAbierto(fecha, turno)) {
     showToast('⚠ Debes abrir el turno antes de registrar pedidos', 'warning');
@@ -3456,6 +3520,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     quitarClienteFiadoSeleccionado();
     document.getElementById('ing-cliente-fiado').value = '';
     actualizarVisibilidadMetodoPago();
+    aplicarReglaGratisPorTurno();
     onHoraChange();
     renderAll();
   } catch (err) {
@@ -4875,6 +4940,8 @@ function prepararFormCierreManual(cierreExistente = null) {
   document.getElementById('cm-fecha').disabled = !!cierreExistente;
   document.getElementById('cm-efectivo').value = cierreExistente ? Number(cierreExistente.efectivo || 0).toLocaleString('es-CO') : '';
   document.getElementById('cm-transferencia').value = cierreExistente ? Number(cierreExistente.transferencia || 0).toLocaleString('es-CO') : '';
+  // Vacío si es un cierre nuevo o si el cierre guardado tiene NULL ("no registrado").
+  document.getElementById('cm-platos-familia').value = (cierreExistente && cierreExistente.platos_familia != null) ? cierreExistente.platos_familia : '';
   document.getElementById('cm-gasto-monto').value = '';
   document.getElementById('cm-gasto-nombre').value = '';
   document.getElementById('cm-gasto-cat').value = 'nomina';
@@ -4911,6 +4978,10 @@ function seleccionarTurnoCierreManual(t) {
 function pintarTurnoCierreManual() {
   document.getElementById('cm-btn-almuerzo').classList.toggle('active', cierreManualTurno === 'almuerzo');
   document.getElementById('cm-btn-cena').classList.toggle('active', cierreManualTurno === 'cena');
+  // El campo de almuerzos de la familia solo existe en el turno de almuerzo
+  // (en comida rápida el consumo gratis va en pesos, con el pedido "Gratis").
+  const platosWrap = document.getElementById('cm-platos-familia-wrap');
+  if (platosWrap) platosWrap.style.display = cierreManualTurno === 'almuerzo' ? '' : 'none';
 }
 
 // Igual que agregarGastoDia(), pero se queda en cola local (cierreManualGastos)
@@ -4973,7 +5044,25 @@ async function guardarCierreManual() {
   const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
   if (existing && !editando && !confirm('Ya existe un cierre guardado para esa fecha/turno. ¿Sobrescribirlo con estos datos manuales?')) return;
 
-  const datosGuardar = { efectivo, transferencia, gastos, resultado, manual: true };
+  // Almuerzos de la familia (solo turno almuerzo, OPCIONAL en el cierre manual):
+  // vacío = NULL = "no registrado" — distinto de 0, que significa "no comieron".
+  // En comida rápida no aplica y siempre se guarda NULL.
+  let platosFamilia = null;
+  if (turno === 'almuerzo') {
+    const platosEl  = document.getElementById('cm-platos-familia');
+    const platosRaw = platosEl.value.trim();
+    if (platosRaw !== '') {
+      const n = Number(platosRaw);
+      if (!Number.isInteger(n) || n < 0) {
+        showToast('⚠ Los almuerzos de la familia deben ser un número entero, 0 o más', 'warning');
+        platosEl.focus();
+        return;
+      }
+      platosFamilia = n;
+    }
+  }
+
+  const datosGuardar = { efectivo, transferencia, gastos, resultado, manual: true, platos_familia: platosFamilia };
   const btnGuardar = document.getElementById('cm-btn-guardar');
 
   try {
@@ -5011,29 +5100,34 @@ async function guardarCierreManual() {
       }
     }
 
-    // 2) Upsert del cierre en sí (mismo patrón que guardarCierre()).
-    try {
-      if (existing) {
-        await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`, datosGuardar);
-        Object.assign(existing, datosGuardar);
-      } else {
-        const [row] = await sbInsert('cierres_dia', { fecha, turno, ...datosGuardar });
-        ST.cierresDia.unshift(row);
-      }
-    } catch (e) {
-      const msg = e.message || '';
-      if (msg.includes('manual')) {
-        // La columna "manual" aún no existe en Supabase — reintenta sin ella.
-        const { manual, ...datosBase } = datosGuardar;
+    // 2) Upsert del cierre en sí (mismo patrón que guardarCierre()). Si las
+    //    columnas opcionales "manual" o "platos_familia" aún no existen en
+    //    Supabase (migración sin correr), reintenta sin la que falte — el
+    //    cierre nunca debe quedar bloqueado por eso.
+    let payload = { ...datosGuardar };
+    for (;;) {
+      try {
         if (existing) {
-          await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`, datosBase);
-          Object.assign(existing, datosBase);
+          await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`, payload);
+          Object.assign(existing, payload);
         } else {
-          const [row] = await sbInsert('cierres_dia', { fecha, turno, ...datosBase });
+          const [row] = await sbInsert('cierres_dia', { fecha, turno, ...payload });
           ST.cierresDia.unshift(row);
         }
-        showToast('⚠ El cierre se guardó, pero falta agregar la columna "manual" en Supabase (ver migracion_supabase_6.sql)', 'warning');
-      } else { throw e; }
+        break;
+      } catch (e) {
+        const msg = e.message || '';
+        const columnaFaltante = ['manual', 'platos_familia'].find(c => c in payload && msg.includes(c));
+        if (!columnaFaltante) throw e;
+        const valorOmitido = payload[columnaFaltante];
+        const { [columnaFaltante]: _omit, ...resto } = payload;
+        payload = resto;
+        if (columnaFaltante === 'manual') {
+          showToast('⚠ El cierre se guardó, pero falta agregar la columna "manual" en Supabase (ver migracion_supabase_6.sql)', 'warning');
+        } else if (valorOmitido != null) {
+          showToast('⚠ Los almuerzos de la familia no se guardaron — falta agregar la columna platos_familia en Supabase (ver script SQL)', 'warning');
+        }
+      }
     }
 
     setSyncBadge('ok');
@@ -5615,6 +5709,16 @@ function etiquetaUbicacionPedido(p) {
   return p.es_gratis ? 'Gratis' : p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
 }
 
+// "Gratis" solo existe en Comidas Rápidas. Un pedido Gratis de ALMUERZO solo
+// puede ser anterior a esa regla: se conserva tal cual (visible en Pendientes
+// y entregable), pero no se le agregan más platos ni productos — "Agregar" crea
+// filas nuevas que heredan es_gratis del pedido, o sea pedidos Gratis nuevos
+// de almuerzo, justo lo que la regla ya no permite.
+function esGratisDeAlmuerzo(p) {
+  return !!(p && p.es_gratis && p.turno === 'almuerzo');
+}
+const MSG_NO_AGREGAR_A_GRATIS_ALMUERZO = '⚠ "Gratis" ya no existe en almuerzo — no se pueden agregar más platos o productos a este pedido gratis';
+
 // Si el grupo al que se agrega algo todavía no tiene grupo_pedido (pedido
 // viejo, de antes de que existiera esa columna), le asigna uno nuevo a TODOS
 // sus ítems actuales para que lo que se agregue ahora quede agrupado con
@@ -5632,8 +5736,13 @@ async function asegurarGrupoPedido(ids, grupoPedidoActual) {
 }
 
 function abrirModalAgregarProducto(idsGrupo, grupoPedido) {
+  const idsAbrir = Array.isArray(idsGrupo) ? idsGrupo : [idsGrupo];
+  if (esGratisDeAlmuerzo(ST.pendientes.find(p => idsAbrir.includes(p.id)))) {
+    showToast(MSG_NO_AGREGAR_A_GRATIS_ALMUERZO, 'warning');
+    return;
+  }
   extraProductoContexto = 'pendientes';
-  idsAgregarProductoActual = Array.isArray(idsGrupo) ? idsGrupo : [idsGrupo];
+  idsAgregarProductoActual = idsAbrir;
   grupoAgregarProductoActual = grupoPedido || null;
   document.getElementById('extra-producto-catalogo').value = '';
   document.getElementById('extra-producto-desc').value = '';
@@ -5691,6 +5800,7 @@ async function guardarProductoExtra() {
   if (!ids || !ids.length) return;
   const ref = ST.pendientes.find(p => ids.includes(p.id));
   if (!ref) return;
+  if (esGratisDeAlmuerzo(ref)) { showToast(MSG_NO_AGREGAR_A_GRATIS_ALMUERZO, 'warning'); return; } // defensivo (ver abrirModalAgregarProducto)
   const valorTotal = valorUnitario * cantidad;
   const grupoPedido = await asegurarGrupoPedido(ids, grupoAgregarProductoActual || ref.grupo_pedido);
 
@@ -5767,6 +5877,7 @@ function abrirModalAgregarComida(idsGrupo, grupoPedido) {
   const idArr = Array.isArray(idsGrupo) ? idsGrupo : [idsGrupo];
   const ref = ST.pendientes.find(p => idArr.includes(p.id));
   if (!ref) { showToast('⚠ No se encontró el pedido', 'warning'); return; }
+  if (esGratisDeAlmuerzo(ref)) { showToast(MSG_NO_AGREGAR_A_GRATIS_ALMUERZO, 'warning'); return; }
   agregarComidaContexto = {
     idsGrupo: idArr, grupoPedido: grupoPedido || ref.grupo_pedido || null,
     fecha: ref.fecha, turno: ref.turno, mesa: ref.mesa,
@@ -5857,6 +5968,7 @@ function recalcularAgregarComidaMonto() {
 async function guardarAgregarComida() {
   const ctx = agregarComidaContexto;
   if (!ctx) return;
+  if (esGratisDeAlmuerzo(ctx)) { showToast(MSG_NO_AGREGAR_A_GRATIS_ALMUERZO, 'warning'); return; } // defensivo (ver abrirModalAgregarComida)
   const val = document.getElementById('agregar-comida-tipo').value;
   if (!val) { showToast('⚠ Selecciona el tipo de pedido', 'warning'); return; }
   const cantidad = parseInt(document.getElementById('agregar-comida-cantidad').value) || 1;
@@ -7017,6 +7129,7 @@ function setDDTurno(t, btn) {
   ddTurno = t;
   viendoHistorialCierre = false;
   resetearCamposAjusteCierre();
+  limpiarPlatosFamiliaCierre();
   document.getElementById('dd-btn-almuerzo').classList.remove('active');
   document.getElementById('dd-btn-cena').classList.remove('active');
   btn.classList.add('active');
@@ -7026,6 +7139,7 @@ function setDDTurno(t, btn) {
 function onFechaCierreChange() {
   viendoHistorialCierre = false;
   resetearCamposAjusteCierre();
+  limpiarPlatosFamiliaCierre();
   renderDiaADia();
 }
 
@@ -7055,6 +7169,74 @@ function resetearCamposAjusteCierre() {
   const btn = document.getElementById('btn-toggle-ajuste');
   if (sec) sec.style.display = 'none';
   if (btn) btn.textContent = '➕ Ajuste';
+}
+
+// ── Familia / consumo gratis en el Cierre ─────────────────────────────
+// La familia come sin pagar, y se lleva distinto según el turno:
+//  - ALMUERZO: todos los platos valen casi igual, así que basta anotar CUÁNTOS
+//    fueron al cerrar (columna cierres_dia.platos_familia, obligatoria en un
+//    cierre nuevo; 0 es un valor válido — NULL significa "no registrado").
+//  - COMIDA RÁPIDA ('cena'): los productos tienen precios distintos, así que el
+//    consumo se lleva en pesos con el pedido "Gratis" (que ya guarda su monto);
+//    el cierre solo lo muestra como información, no pide nada ni lo guarda.
+function limpiarPlatosFamiliaCierre() {
+  const el = document.getElementById('dd-platos-familia');
+  if (el) el.value = '';
+}
+
+// Precarga dd-platos-familia con lo guardado en el cierre (fecha/turno) que se
+// va a corregir — vacío si es NULL (cierre anterior a este campo) o si el
+// turno es comida rápida (ahí no aplica). Se llama solo al ENTRAR a corregir
+// (irADiaADia), no en cada renderDiaADia, para no pisar lo que se esté escribiendo.
+function cargarPlatosFamiliaDeCierre(fecha, turno) {
+  const el = document.getElementById('dd-platos-familia');
+  if (!el) return;
+  const c = turno === 'almuerzo' ? ST.cierresDia.find(x => x.fecha === fecha && x.turno === turno) : null;
+  el.value = (c && c.platos_familia != null) ? c.platos_familia : '';
+}
+
+// ¿Es obligatorio el campo? Sí en un cierre nuevo de almuerzo. La única
+// excepción: al corregir un cierre ya guardado cuyo platos_familia es NULL
+// (anterior a este cambio) — así no se traban las correcciones antiguas.
+function platosFamiliaObligatorio(cierreExistente) {
+  return !(cierreExistente && cierreExistente.platos_familia == null);
+}
+
+// Consumo "Gratis" de un turno, en pesos y en pedidos (un pedido = un
+// grupo_pedido, aunque traiga varios platos). Cuenta tanto los pendientes
+// como los ya entregados (estado 'pagado'), según cómo estén guardados.
+function calcularConsumoGratisTurno(fecha, turno) {
+  const filas = [...ST.pendientes, ...ST.ingresos].filter(p => p.es_gratis === true && p.fecha === fecha && p.turno === turno);
+  const monto = filas.reduce((a, p) => a + (p.monto_total || 0), 0);
+  const pedidos = new Set(filas.map(p => p.grupo_pedido || `legacy-${p.id}`)).size;
+  return { monto, pedidos };
+}
+
+// Muestra/oculta lo que depende del turno que se está cerrando: el campo de
+// almuerzos de la familia (solo almuerzo) o la línea informativa de consumo
+// gratis (solo comida rápida). Se llama desde renderDiaADia().
+function actualizarCamposFamiliaCierre() {
+  const esAlmuerzo = ddTurno === 'almuerzo';
+  const fecha = document.getElementById('dd-fecha').value || today();
+
+  const wrap = document.getElementById('dd-platos-familia-wrap');
+  if (wrap) wrap.style.display = esAlmuerzo ? '' : 'none';
+  const req = document.getElementById('dd-platos-familia-req');
+  if (req) {
+    const existente = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
+    req.style.display = platosFamiliaObligatorio(existente) ? '' : 'none';
+  }
+
+  const info = document.getElementById('dd-gratis-info');
+  if (info) {
+    if (esAlmuerzo) {
+      info.style.display = 'none';
+    } else {
+      const g = calcularConsumoGratisTurno(fecha, ddTurno);
+      info.innerHTML = `🎁 Consumo gratis del turno: <strong>${fmt(g.monto)}</strong> (${g.pedidos} pedido${g.pedidos === 1 ? '' : 's'})`;
+      info.style.display = 'block';
+    }
+  }
 }
 
 // Un cierre puede traer un ajuste manual de efectivo, de transferencia, o de
@@ -7193,19 +7375,49 @@ async function guardarCierre() {
     showToast('⚠ Escribe la explicación del ajuste', 'warning');
     return;
   }
+
+  // Almuerzos de la familia: obligatorio al cerrar un turno de ALMUERZO nuevo
+  // (0 es válido; vacío no). Excepción: al corregir un cierre ya guardado
+  // cuyo platos_familia es NULL (anterior a este campo) es opcional. En comida
+  // rápida no aplica: se guarda NULL (el consumo gratis ahí va en pesos, con
+  // el pedido "Gratis").
+  const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
+  let platosFamilia = null;
+  if (ddTurno === 'almuerzo') {
+    const platosEl  = document.getElementById('dd-platos-familia');
+    const platosRaw = platosEl.value.trim();
+    if (platosRaw === '') {
+      if (platosFamiliaObligatorio(existing)) {
+        showToast('⚠ Escribe cuántos almuerzos comió la familia hoy (0 si no comieron)', 'warning');
+        platosEl.focus();
+        return;
+      }
+    } else {
+      const n = Number(platosRaw);
+      if (!Number.isInteger(n) || n < 0) {
+        showToast('⚠ Los almuerzos de la familia deben ser un número entero, 0 o más', 'warning');
+        platosEl.focus();
+        return;
+      }
+      platosFamilia = n;
+    }
+  }
+
   const resultado = efectivo + transferencia - gastos + ajusteEfectivo + ajusteTransferencia;
 
   const datosGuardar = {
     efectivo, transferencia, gastos, resultado,
     ajuste_efectivo: ajusteEfectivo, ajuste_transferencia: ajusteTransferencia,
-    ajuste_manual_nota: hayAjuste ? ajusteNota : ''
+    ajuste_manual_nota: hayAjuste ? ajusteNota : '',
+    platos_familia: platosFamilia
   };
 
   try {
-    const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
-    // Si "ajuste_efectivo"/"ajuste_transferencia" (o la nota) aún no existen
-    // como columnas en Supabase, reintenta sin la que falte para no perder
-    // el resto del cierre — igual que sbInsertConCuenta para Caja/Egresos.
+    // Si "ajuste_efectivo"/"ajuste_transferencia" (o la nota, o platos_familia)
+    // aún no existen como columnas en Supabase, reintenta sin la que falte
+    // para no perder el resto del cierre — igual que sbInsertConCuenta para
+    // Caja/Egresos. El cierre nunca debe quedar bloqueado por esto. Aplica
+    // igual al insert (cierre nuevo) y al patch (corrección).
     let payload = { ...datosGuardar };
     for (;;) {
       try {
@@ -7219,11 +7431,16 @@ async function guardarCierre() {
         break;
       } catch (e) {
         const msg = e.message || '';
-        const columnaFaltante = ['ajuste_efectivo', 'ajuste_transferencia', 'ajuste_manual_nota'].find(c => c in payload && msg.includes(c));
+        const columnaFaltante = ['ajuste_efectivo', 'ajuste_transferencia', 'ajuste_manual_nota', 'platos_familia'].find(c => c in payload && msg.includes(c));
         if (!columnaFaltante) throw e;
+        const valorOmitido = payload[columnaFaltante];
         const { [columnaFaltante]: _omit, ...resto } = payload;
         payload = resto;
-        showToast(`⚠ "${columnaFaltante}" no se guardó — falta agregar esa columna en Supabase (ver script SQL)`, 'warning');
+        // platos_familia en NULL (comida rápida, o un dato que no se escribió)
+        // no se pierde nada al omitirlo — no hace falta alarmar con un aviso.
+        if (!(columnaFaltante === 'platos_familia' && valorOmitido == null)) {
+          showToast(`⚠ "${columnaFaltante}" no se guardó — falta agregar esa columna en Supabase (ver script SQL)`, 'warning');
+        }
       }
     }
 
@@ -7232,6 +7449,7 @@ async function guardarCierre() {
 
     viendoHistorialCierre = false;
     resetearCamposAjusteCierre();
+    limpiarPlatosFamiliaCierre();
     renderAll();
   } catch(e) {
     console.error(e);
@@ -7359,13 +7577,14 @@ function renderHistorialCierres() {
         <td class="amount-pos">${fmt(c.efectivo)}</td>
         <td class="amount-pos">${fmt(c.transferencia)}</td>
         <td class="amount-neg">${fmt(c.gastos)}</td>
+        <td>${c.turno === 'almuerzo' && c.platos_familia != null ? c.platos_familia : '—'}</td>
         <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}${ajustesDeCierre(c).total ? ` <span title="${textoAjusteCierre(c)}">*</span>` : ''}</td>
         <td style="display:flex;gap:4px;">
           <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="${c.manual ? `editarCierreManual('${c.fecha}','${c.turno}')` : `irADiaADia('${c.fecha}','${c.turno}')`}">${c.manual ? '✏️ Editar' : 'Ver'}</button>
           <button class="btn btn-danger" style="padding:5px 10px;font-size:11px;" onclick="eliminarCierre('${c.fecha}','${c.turno}')">🗑</button>
         </td>
       </tr>`).join('')
-    : `<tr><td colspan="7" style="color:var(--text3);text-align:center;padding:20px;">Aún no hay cierres guardados</td></tr>`;
+    : `<tr><td colspan="8" style="color:var(--text3);text-align:center;padding:20px;">Aún no hay cierres guardados</td></tr>`;
 }
 
 function renderDiaADia() {
@@ -7453,6 +7672,7 @@ function renderDiaADia() {
       }).join('')
     : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">🧾</div><div class="empty-text">Sin gastos agregados</div></div></td></tr>`;
 
+  actualizarCamposFamiliaCierre();
   recalcularResultadoCierre();
   renderNotasCierre(fecha);
   aplicarGateAdmin('dd-historial', renderHistorialCierres);
@@ -7463,6 +7683,9 @@ function irADiaADia(fecha, turno) {
   ddTurno = turno;
   ddEditId = null;
   viendoHistorialCierre = true;
+  // Al entrar a corregir un cierre guardado se carga su cantidad de almuerzos
+  // de la familia (vacío si es NULL o si es comida rápida).
+  cargarPlatosFamiliaDeCierre(fecha, turno);
   document.querySelectorAll('#tab-diaadia .filter-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(turno==='almuerzo'?'dd-btn-almuerzo':'dd-btn-cena').classList.add('active');
   // Cambia a la pestaña Cierre — sin esto, cuando se llama desde otra
