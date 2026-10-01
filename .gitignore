@@ -11,6 +11,13 @@
 !Menu/platos.xlsx
 !Menu/Menu/platos.xlsx
 
+# Otros archivos con datos del negocio que genera el sistema: el respaldo JSON del
+# botón "Exportar" del encabezado (ElLobo_respaldo_AAAA-MM-DD.json) y cualquier
+# export ElLobo_datos_*. Nunca deben subirse (repo público). Ojo: esto NO des-rastrea
+# un archivo que ya estaba en el repo (ver Contabilidad/ElLobo_respaldo_2026-06-22.json).
+ElLobo_respaldo_*.json
+ElLobo_datos_*
+
 # Python
 __pycache__/
 *.pyc
