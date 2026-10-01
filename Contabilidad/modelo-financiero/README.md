@@ -126,8 +126,14 @@ Un `.xlsx` con estas hojas, en este orden:
   desayuno dentro de "Ingresos Almuerzo", por eso *Almuerzo neto = Almuerzo − desayuno*;
   los tres turnos suman exactamente "Ingresos Totales".
 - **Egresos por día y rubro**: `Egresos` + `Gastos_Cierre`, mapeados a 4 rubros
-  (insumos = proveedor, nómina, arriendo + servicios, otros). `prestamo` se excluye.
+  (insumos = proveedor + desechables, nómina, arriendo + servicios, otros). `prestamo` se excluye.
   Una categoría fuera de esos rubros es "huérfana": no se suma y el script la avisa.
+- **Desechables**: la categoría `desechables` (vasos, platos, bolsas…) cuenta como **costo de
+  insumos**, pero el modelo guarda aparte cuánto de los insumos son desechables
+  (`costo_desechables`, ya incluido en el costo de insumos: no se suma dos veces). **Todo gráfico
+  de insumos deja ese valor a la vista** (ver el catálogo). En `Model` aparece en *Cost Schedule*:
+  desechables ($ y % de los ingresos) e insumos de proveedores sin desechables. Solo meses reales:
+  la proyección de insumos no los separa.
 - **Pedidos Gratis**: nunca entran a volúmenes, tickets, Pareto ni conteos de pedidos
   (los ingresos mensuales no cambian: salen de los cierres).
 

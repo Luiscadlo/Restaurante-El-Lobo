@@ -41,6 +41,15 @@ nuevos viven en hojas propias, después de `Outputs`, y sus tablas de apoyo en `
   Gratis **nunca** suman a los ingresos reales ni entran a volúmenes, tickets, Pareto ni conteos
   de pedidos. El costo de insumos del consumo familiar es informativo (ya está en los egresos).
 
+## Insumos y desechables (regla)
+
+El costo de **insumos** = compras a proveedores + **desechables** (categoría `desechables`: vasos, platos,
+bolsas…). Los desechables van *dentro* de insumos (el total no cambia), pero **todo gráfico donde aparezcan
+insumos deja a la vista cuánto son desechables**: partido en dos barras/segmentos (#2, #11), en el rótulo
+del rubro (#4, #10, Outputs gráf. 3), como fila propia (#17) o como línea propia (#20, Outputs gráf. 5).
+El valor sale de `Model` → *Cost Schedule* (solo meses reales; la proyección de insumos no los separa).
+Color de desechables: `PALETA["desechables"]` (malva oscuro, dentro de la familia de egresos).
+
 ## Catálogo
 
 | # | Hoja | Gráfico | Tipo | Fuente | Comparativo |
@@ -70,6 +79,10 @@ nuevos viven en hojas propias, después de `Outputs`, y sus tablas de apoyo en `
 
 Notas por gráfico:
 
+- **#2 / #11** Insumos va partido en *Insumos (proveedores)* y *Desechables* (juntos = costo de insumos); el valor de los desechables va en el rótulo de #2 y la serie #11 se ve en el tono oscuro.
+- **#4 / #10** El rótulo del rubro Insumos incluye "incl. desechables $X M" (el Plan de insumos de #4 no los separa).
+- **#17** Fila extra "· Desechables (% de ventas)", real vs. ajustado (no tiene Plan: el Plan de insumos no los separa).
+- **#20** "Insumos (incl. desechables)" y, aparte, "Desechables (parte de insumos)" en línea punteada; si el primer mes real no tiene desechables, esa línea se omite (el aviso la lista).
 - **#1** El umbral de las barras rojas es el gasto total del mes ÷ días operados (incluye arriendo y nómina).
 - **#3 / #13** El eje del margen es 0–40 % y se amplía solo si algún mes real lo supera (p. ej. un primer mes parcial).
 - **#4** El eje es de −30 % a +30 %; se amplía a ±60 % o ±100 % si hay variaciones mayores (las barras más largas se recortan en el borde y el valor real va en el nombre del rubro).

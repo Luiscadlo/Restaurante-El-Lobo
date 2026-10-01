@@ -177,8 +177,12 @@ def config_impresion(ws, horizontal=True, ajustar_ancho=True):
 # 4 rubros. "prestamo" (plata propia que se saca de la caja) se EXCLUYE: no es
 # un gasto del negocio. Cualquier otra categoría es "huérfana": no se suma en
 # ningún lado y se reporta por consola (nunca se reasigna en silencio).
+# "desechables" (vasos, platos, bolsas…) cuenta como COSTO DE INSUMOS, pero el
+# modelo guarda aparte cuánto de los insumos son desechables (costo_desechables)
+# para que todo gráfico de insumos lo deje a la vista.
 MAPA_RUBRO = {
     "proveedor": "insumos",
+    "desechables": "insumos",
     "nomina": "nomina",
     "arriendo": "arriendo_servicios",
     "servicios": "arriendo_servicios",
@@ -551,15 +555,19 @@ def cargar_datos_reales(path_excel):
         def suma_cat(df, cat):
             # "egresos" guarda la categoría en la columna "cat"; "gastos_dia"
             # (los gastos registrados al cierre del turno) la guarda en
-            # "categoria" — mismos valores (nomina/proveedor/otro), columna
-            # distinta. gastos_dia tampoco maneja arriendo/servicios (esos
-            # son gastos fijos mensuales, no de cierre diario).
+            # "categoria" — mismos valores (nomina/proveedor/desechables/otro),
+            # columna distinta. gastos_dia tampoco maneja arriendo/servicios
+            # (esos son gastos fijos mensuales, no de cierre diario).
             col = "cat" if "cat" in df.columns else ("categoria" if "categoria" in df.columns else None)
             if df.empty or col is None:
                 return 0.0
             return float(df[df[col] == cat]["monto"].sum())
 
-        costo_insumos = suma_cat(egresos_mes, "proveedor") + suma_cat(gastos_mes, "proveedor")
+        # Costo de insumos = proveedores + desechables; costo_desechables es la
+        # parte de los insumos que corresponde a desechables (ya está dentro de
+        # costo_insumos, NO se suma otra vez).
+        costo_desechables = suma_cat(egresos_mes, "desechables") + suma_cat(gastos_mes, "desechables")
+        costo_insumos = suma_cat(egresos_mes, "proveedor") + suma_cat(gastos_mes, "proveedor") + costo_desechables
         nomina        = suma_cat(egresos_mes, "nomina") + suma_cat(gastos_mes, "nomina")
         arriendo_serv = suma_cat(egresos_mes, "arriendo") + suma_cat(egresos_mes, "servicios")
         otros         = suma_cat(egresos_mes, "otro") + suma_cat(gastos_mes, "otro")
@@ -569,7 +577,7 @@ def cargar_datos_reales(path_excel):
             ingresos_almuerzo=ingresos_alm,
             ingresos_cena=ingresos_cena,
             volumen_almuerzo=max(vol_alm, 1), volumen_cena=max(vol_cena, 1),
-            costo_insumos=costo_insumos, nomina=nomina,
+            costo_insumos=costo_insumos, costo_desechables=costo_desechables, nomina=nomina,
             arriendo_servicios=arriendo_serv, otros_gastos=otros,
             ingresos_desayuno=ingresos_desayuno,
         ))
@@ -669,13 +677,15 @@ def datos_de_ejemplo(n_meses=12):
         ruido = lambda: random.uniform(0.92, 1.08)
         ing_alm = base_alm * crecim * ruido()
         ing_cena = base_cena * crecim * ruido()
+        costo_ins = round((ing_alm + ing_cena) * random.uniform(0.33, 0.38), -3)
         filas.append(dict(
             periodo=f"{a}-{m:02d}", anio=a, mes=m,
             ingresos_almuerzo=round(ing_alm, -3),
             ingresos_cena=round(ing_cena, -3),
             volumen_almuerzo=int(ing_alm / 15000),
             volumen_cena=int(ing_cena / 13000),
-            costo_insumos=round((ing_alm + ing_cena) * random.uniform(0.33, 0.38), -3),
+            costo_insumos=costo_ins,
+            costo_desechables=round(costo_ins * random.uniform(0.05, 0.08), -3),   # parte de los insumos que son desechables
             nomina=2_500_000,
             arriendo_servicios=1_200_000,
             otros_gastos=round(random.uniform(150_000, 400_000), -3),
@@ -792,12 +802,19 @@ def _diario_de_ejemplo(hist, hoy):
                                 para_llevar=False, mesa=3, proteina=None, es_gratis=True, estado="pagado"))
         # Egresos del mes, repartidos en sus fechas reales (suma EXACTA por rubro). "prestamo" va aparte y se excluye.
         d_ops = [d.date().isoformat() for d in dias]
+        # Los insumos del mes = proveedores + desechables (costo_desechables es la parte de desechables).
         compras = sorted(rng.sample(d_ops, 9))
-        for f, v in zip(compras, _repartir(int(r["costo_insumos"]), [rng.uniform(.5, 1.5) for _ in compras], paso=100)):
+        for f, v in zip(compras, _repartir(int(r["costo_insumos"] - r["costo_desechables"]), [rng.uniform(.5, 1.5) for _ in compras], paso=100)):
             if rng.random() < .3:   # parte de las compras se anotó como gasto de cierre, parte como egreso
                 gastos.append(dict(fecha=f, turno="almuerzo", nombre="Compra de insumos", monto=v, categoria="proveedor"))
             else:
                 egresos.append(dict(fecha=f, cat="proveedor", monto=v))
+        compras_des = sorted(rng.sample(d_ops, 3))
+        for f, v in zip(compras_des, _repartir(int(r["costo_desechables"]), [rng.uniform(.5, 1.5) for _ in compras_des], paso=100)):
+            if rng.random() < .5:
+                gastos.append(dict(fecha=f, turno="almuerzo", nombre="Vasos, platos y bolsas", monto=v, categoria="desechables"))
+            else:
+                egresos.append(dict(fecha=f, cat="desechables", monto=v))
         for f, v in zip(d_ops, _repartir(int(r["nomina"]), [1] * len(d_ops))):
             gastos.append(dict(fecha=f, turno="almuerzo", nombre="Nómina del día", monto=v, categoria="nomina"))
         arriendo = int(r["arriendo_servicios"] * .8)
@@ -1194,6 +1211,27 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
     for c in range(col_ini, col_fin + 1):
         cl = get_column_letter(c)
         numero(ws, r, c, f"=-{cl}{fila_costo_insumos}/{cl}{fila_ingresos}", pct=True)
+    r += 1
+    # Desechables: ya están DENTRO del costo de insumos (no se suman otra vez);
+    # estas filas solo dejan a la vista cuánto de los insumos son desechables.
+    fila_desech = r
+    label(ws, r, "· de los cuales, desechables ($, informativo)")
+    for i in range(n_hist):
+        numero(ws, r, col_ini + i, float(hist_df.iloc[i]["costo_desechables"]))
+    r += 1
+    fila_desech_pct = r
+    label(ws, r, "· Desechables (% de los ingresos)")
+    for c in range(col_ini, col_ini + n_hist):
+        cl = get_column_letter(c)
+        numero(ws, r, c, f"=IF({cl}{fila_ingresos}=0,0,{cl}{fila_desech}/{cl}{fila_ingresos})", pct=True)
+    r += 1
+    fila_ins_prov = r
+    label(ws, r, "· Insumos de proveedores, sin desechables ($)")
+    for c in range(col_ini, col_ini + n_hist):
+        cl = get_column_letter(c)
+        numero(ws, r, c, f"=-{cl}{fila_costo_insumos}-{cl}{fila_desech}")
+    r += 1
+    nota(ws, r, "Costo de insumos = proveedores + desechables. Solo meses reales: el driver de proyección de insumos no separa los desechables.")
     r += 2
 
     # ══ BALANCE GENERAL (estructura) ═══════════════════════════════
@@ -1337,7 +1375,8 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
     fam = bloque_consumo_familiar(
         ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst, col_fin,
         dict(ingresos=fila_ingresos, utilidad_neta=fila_utilidad_neta, costo_insumos=fila_costo_insumos,
-             nomina=fila_nomina, arriendo=fila_arriendo, otros=fila_otros, tkt_alm=fila_tkt_alm, cost_pct=fila_cost_pct))
+             nomina=fila_nomina, arriendo=fila_arriendo, otros=fila_otros, tkt_alm=fila_tkt_alm, cost_pct=fila_cost_pct,
+             desech=fila_desech))
 
     model_refs = dict(
         fila_ingresos=fila_ingresos, fila_utilidad_bruta=fila_utilidad_bruta,
@@ -1349,6 +1388,7 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
         fila_arriendo=fila_arriendo, fila_otros=fila_otros,
         fila_desayuno=fila_desayuno, fila_vol_alm=fila_vol_alm, fila_tkt_alm=fila_tkt_alm,
         fila_vol_cena=fila_vol_cena, fila_tkt_cena=fila_tkt_cena, fila_cost_pct=fila_cost_pct, fam=fam,
+        fila_desechables=fila_desech, fila_desech_pct=fila_desech_pct, fila_ins_prov=fila_ins_prov,
     )
     config_impresion(ws, horizontal=True)
     return ws, model_refs
@@ -1412,6 +1452,8 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
         ("mg_aj", "Margen neto ajustado", False, True),
         ("ins_real", "Costo de insumos % — real", False, True),
         ("ins_aj", "Costo de insumos % — ajustado (insumos ÷ ingresos ajustados)", False, True),
+        ("des_real", "· de los cuales, desechables % de los ingresos — real", False, True),
+        ("des_aj", "· de los cuales, desechables % — ajustado (÷ ingresos ajustados)", False, True),
         ("primo_real", "Costo primo % (insumos + nómina) — real", False, True),
         ("primo_aj", "Costo primo % (insumos + nómina) — ajustado", False, True),
         ("util_dia_real", "Utilidad diaria promedio — real", False, False),
@@ -1474,6 +1516,9 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
     put("mg_aj", lambda i, cl, proy: f"=IF({F('ing_aj', cl)}=0,0,{F('ut_aj', cl)}/{F('ing_aj', cl)})")
     put("ins_real", lambda i, cl, proy: f"=IF({M('ingresos', cl)}=0,0,-{M('costo_insumos', cl)}/{M('ingresos', cl)})")
     put("ins_aj", lambda i, cl, proy: f"=IF({F('ing_aj', cl)}=0,0,-{M('costo_insumos', cl)}/{F('ing_aj', cl)})")
+    # desechables (ya incluidos en insumos): solo meses reales, el proyectado no los separa
+    put("des_real", lambda i, cl, proy: None if proy else f"=IF({M('ingresos', cl)}=0,0,{M('desech', cl)}/{M('ingresos', cl)})")
+    put("des_aj", lambda i, cl, proy: None if proy else f"=IF({F('ing_aj', cl)}=0,0,{M('desech', cl)}/{F('ing_aj', cl)})")
     put("primo_real", lambda i, cl, proy: f"=IF({M('ingresos', cl)}=0,0,-({M('costo_insumos', cl)}+{M('nomina', cl)})/{M('ingresos', cl)})")
     put("primo_aj", lambda i, cl, proy: f"=IF({F('ing_aj', cl)}=0,0,-({M('costo_insumos', cl)}+{M('nomina', cl)})/{F('ing_aj', cl)})")
     put("util_dia_real", lambda i, cl, proy: f"=IF({F('dias_op', cl)}=0,0,{M('utilidad_neta', cl)}/{F('dias_op', cl)})")
@@ -1545,6 +1590,13 @@ def hoja_outputs(wb, model_refs):
         numero(ws, r, c, f"=ABS(Model!{cl}{model_refs['fila_costo_insumos']})/Model!{cl}{model_refs['fila_ingresos']}", pct=True)
     fila_ref["Costo Insumos Pct"] = r
     r += 1
+    # Desechables (ya incluidos en el costo de insumos): solo meses reales.
+    label(ws, r, "· de los cuales, desechables (% de Ingresos)")
+    for c in range(col_ini, col_ini + model_refs["n_hist"]):
+        cl = get_column_letter(c)
+        numero(ws, r, c, f"=Model!{cl}{model_refs['fila_desech_pct']}", pct=True)
+    fila_ref["Desechables Pct"] = r
+    r += 1
 
     r += 2
     ws.cell(row=r, column=2, value="📊 Ingresos vs. Utilidad Neta por mes").font = FONT_BANNER
@@ -1596,6 +1648,10 @@ def hoja_outputs(wb, model_refs):
     col_hist_fin = get_column_letter(col_ini + model_refs["n_hist"] - 1)
     for i, (nombre, fila_modelo, _color) in enumerate(categorias_gasto):
         rr = fila_tabla_gastos + i
+        if fila_modelo == model_refs["fila_costo_insumos"]:
+            # el rótulo de Insumos deja a la vista cuánto del total son desechables
+            nombre = (f'="Costo de Insumos (incl. desechables $"&FIXED(SUM(Model!{col_hist_ini}{model_refs["fila_desechables"]}:'
+                      f'{col_hist_fin}{model_refs["fila_desechables"]})/1000000,1)&" M)"')
         label(ws, rr, nombre)
         numero(ws, rr, 4, f"=ABS(SUM(Model!{col_hist_ini}{fila_modelo}:{col_hist_fin}{fila_modelo}))")
     nota(ws, fila_tabla_gastos + len(categorias_gasto), "Suma de los meses históricos reales (no incluye proyección).")
@@ -1647,6 +1703,10 @@ def hoja_outputs(wb, model_refs):
     chart5.add_data(Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_ref["Costo Insumos Pct"]), titles_from_data=False, from_rows=True)
     chart5.series[0].tx = SeriesLabel(v="Costo Insumos % Ingresos")
     chart5.series[0].graphicalProperties.line.solidFill = "C0392B"
+    # Segunda línea: la parte de los insumos que son desechables (dentro del total de arriba)
+    chart5.add_data(Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_ref["Desechables Pct"]), titles_from_data=False, from_rows=True)
+    chart5.series[1].tx = SeriesLabel(v="de los cuales, desechables")
+    chart5.series[1].graphicalProperties.line.solidFill = "F1948A"
     chart5.set_categories(cats)
     ws.add_chart(chart5, f"B{r5 + 1}")
 
@@ -1767,6 +1827,7 @@ def tabla_plan(dg, ctx):
 PALETA = {
     "ingresos":      "2F6690",   # azul oscuro   — ventas / ingresos
     "egresos":       "B07AA1",   # malva         — egresos / costos
+    "desechables":   "6E4565",   # malva oscuro  — desechables (la parte de los insumos que son vasos, platos, bolsas…)
     "utilidad":      "3FA66B",   # verde         — utilidad / lo favorable
     "alerta":        "C0392B",   # rojo          — por debajo de lo esperado / desfavorable
     "desayuno":      "E8C468",   # amarillo      — turno desayuno
@@ -1812,6 +1873,14 @@ def fmt_mill(x, dec=1):
 def fmt_pct(x, dec=0, signo=False):
     s = fmt_n(abs(x) * 100, dec) + "%"
     return (("+" if x > 0 else "−" if x < 0 else "") + s) if signo else (("−" if x < 0 else "") + s)
+
+
+def txt_desechables(fh):
+    """Frase para los gráficos de insumos: cuánto del costo de insumos del mes son
+    desechables (ya están dentro de los insumos, no se suman otra vez). `fh` es la
+    fila de `hist` del mes. Siempre se muestra, aunque sea $0: así se ve que se midió."""
+    des, ins = float(fh["costo_desechables"]), float(fh["costo_insumos"])
+    return f"{fmt_mill(des)} de desechables ({fmt_pct(des / ins if ins else 0, 1)} del rubro)"
 
 
 def techo_bonito(x):
@@ -2309,23 +2378,27 @@ def grafico_2(h, ctx):
     ws, dg, i, fh = h.ws, ctx["dg"], ctx["i"], ctx["fila_hist"]
     ing = float(fh["ingresos_almuerzo"] + fh["ingresos_cena"])
     ins, nom, arr, otr = (float(fh[k]) for k in ("costo_insumos", "nomina", "arriendo_servicios", "otros_gastos"))
+    des = float(fh["costo_desechables"])
     ut = ing - ins - nom - arr - otr
     por100 = lambda x: fmt_n(100 * x / ing, 1) if ing else "0"
     r = h.lamina(
         f"De cada $100 vendidos, ¿cuánto queda? — {ctx['nombre_mes'].capitalize()}",
-        f"De cada $100 vendidos: ${por100(ins)} van a insumos, ${por100(nom)} a nómina, ${por100(arr)} a arriendo y servicios, ${por100(otr)} a otros gastos "
-        f"y quedan ${por100(ut)} de utilidad.",
+        f"De cada $100 vendidos: ${por100(ins)} van a insumos (${por100(des)} de ellos son desechables), ${por100(nom)} a nómina, ${por100(arr)} a arriendo y servicios, "
+        f"${por100(otr)} a otros gastos y quedan ${por100(ut)} de utilidad.",
         "Escala: $ millones del mes. La barra azul es el total vendido; cada paso resta un rubro hasta llegar a la utilidad. "
+        "Los insumos se separan en proveedores y desechables (los dos juntos son el costo de insumos). "
         "Fuente: hoja Model — Estado de Resultados (fórmulas).")
     pasos = [("Ingresos", f"={cm(ctx,'fila_ingresos',i)}", "total"),
-             ("Insumos", f"={cm(ctx,'fila_costo_insumos',i)}", "delta"),
+             ("Insumos (proveedores)", f"=-{cm(ctx,'fila_ins_prov',i)}", "delta"),
+             (f"Desechables ({fmt_mill(des)})", f"=-{cm(ctx,'fila_desechables',i)}", "delta"),   # el valor va en el rótulo: la barra es muy delgada
              ("Nómina", f"={cm(ctx,'fila_nomina',i)}", "delta"),
              ("Arriendo y servicios", f"={cm(ctx,'fila_arriendo',i)}", "delta"),
              ("Otros", f"={cm(ctx,'fila_otros',i)}", "delta"),
              ("Utilidad", f"={cm(ctx,'fila_utilidad_neta',i)}", "total")]
     a, b = tabla_cascada(dg, "#2 — Cascada de resultados del mes en foco ($ M)", "FÓRMULAS hacia Model. Las columnas Base son invisibles: sostienen las barras flotantes.", pasos)
     dg.cerrar(b)
-    colores = [PALETA["ingresos"]] + [PALETA["egresos"]] * 4 + [PALETA["utilidad"] if ut >= 0 else PALETA["alerta"]]
+    colores = ([PALETA["ingresos"], PALETA["egresos"], PALETA["desechables"]] + [PALETA["egresos"]] * 3
+               + [PALETA["utilidad"] if ut >= 0 else PALETA["alerta"]])
     ch = grafico_cascada(h, dg, a, b, colores)
     ejes(ch, x_titulo="Paso del estado de resultados", y_titulo="$ millones", y_fmt="#,##0.0")
     ws.add_chart(ch, f"B{r}")
@@ -2446,7 +2519,7 @@ def grafico_4(h, ctx):
                  "Omitido para este mes; se genera cuando el mes en foco tiene un mes anterior real.")
         return
     rubros = [("Ingresos", f"={cm(ctx,'fila_ingresos',i)}", "ingresos", True),
-              ("Insumos", f"=-{cm(ctx,'fila_costo_insumos',i)}", "insumos", False),
+              (f"Insumos (incl. desechables {fmt_mill(float(fh['costo_desechables']))})", f"=-{cm(ctx,'fila_costo_insumos',i)}", "insumos", False),
               ("Nómina", f"=-{cm(ctx,'fila_nomina',i)}", "nomina", False),
               ("Arriendo y servicios", f"=-{cm(ctx,'fila_arriendo',i)}", "arriendo", False),
               ("Otros", f"=-{cm(ctx,'fila_otros',i)}", "otros", False),
@@ -2478,6 +2551,7 @@ def grafico_4(h, ctx):
         "Escala: variación % del real contra el Plan (= proyección Base a un mes). Verde = favorable (más ingresos/utilidad o menos costo que el Plan), rojo = desfavorable. "
         + (f"El eje se amplió a ±{int(tope * 100)} % porque hay variaciones mayores: las barras más largas se recortan en el borde y su valor real está entre paréntesis en el nombre del rubro. "
            if tope > 0.30 else "Eje de −30 % a +30 %. ")
+        + "Insumos = proveedores + desechables (el valor de los desechables va en el nombre del rubro; el Plan de insumos no los separa). "
         + "Fuente: Model y Plan (fórmulas).")
     cats = Reference(dg.ws, min_col=6, min_row=a, max_row=b)
     bar = nuevo_bar(horizontal=True, ancho_gap=45)
@@ -2940,16 +3014,19 @@ def grafico_10(h, ctx):
     r = h.lamina(
         f"Egresos por categoría — {ctx['nombre_mes'].capitalize()}",
         f"{mayor[0]} es el mayor egreso: {fmt_mill(mayor[2])} ({fmt_pct(mayor[2] / ing if ing else 0)} de los ingresos). En total se gastaron {fmt_mill(total)} "
-        f"({fmt_pct(total / ing if ing else 0)} de los ingresos){var}." + aviso_dias(ctx),
-        "Escala: $ millones del mes, de mayor a menor. Entre paréntesis, el % de los ingresos del mes. Insumos = Egresos 'proveedor' + gastos de cierre 'proveedor'; no incluye préstamos "
+        f"({fmt_pct(total / ing if ing else 0)} de los ingresos){var}. Los insumos incluyen {txt_desechables(fh)}." + aviso_dias(ctx),
+        "Escala: $ millones del mes, de mayor a menor. Entre paréntesis, el % de los ingresos del mes. Insumos = Egresos y gastos de cierre de 'proveedor' + 'desechables' "
+        "(el valor de los desechables se muestra en el rótulo de Insumos); no incluye préstamos "
         "(plata propia, no es gasto del negocio). Fuente: hoja Model (fórmulas).")
     r0 = dg.seccion("#10 — Egresos por categoría del mes en foco ($ M)", "FÓRMULAS hacia Model. El orden (mayor a menor) se fijó al generar el modelo.")
     filas = []
     for k, (nom, clave, _v) in enumerate(orden):
         rr = r0 + 1 + k
         ing_ref = cm(ctx, "fila_ingresos", i)
+        # El rótulo de Insumos deja a la vista cuánto de ese rubro son desechables
+        extra = f'&"; incl. desechables $"&FIXED({cm(ctx, "fila_desechables", i)}/1000000,1)&" M"' if clave == "fila_costo_insumos" else ""
         filas.append([nom, f"=-{cm(ctx, clave, i)}/1000000", f"=IF({ing_ref}=0,0,C{rr}*1000000/{ing_ref})",
-                      f'=B{rr}&"  ("&FIXED(D{rr}*100,0)&"% de los ingresos)"'])
+                      f'=B{rr}&"  ("&FIXED(D{rr}*100,0)&"% de los ingresos"{extra}&")"'])
     a, b = escribir_tabla(dg, r0, ["Rubro", "Egreso ($ M)", "% de los ingresos", "Rubro (con %)"], filas, formatos=[None, "#,##0.0", "0.0%", None])
     dg.cerrar(b)
     cats = Reference(dg.ws, min_col=5, min_row=a, max_row=b)
@@ -3000,14 +3077,14 @@ def grafico_11(h, ctx):
         pp = f" ({'+' if d >= 0 else '−'}{fmt_n(abs(d), 1)} puntos frente a {nombre_mes_largo(prev)})"
     r = h.lamina(
         "Estructura de costos como % de las ventas",
-        f"En {ctx['nombre_mes']} los insumos fueron {fmt_pct(pct(mf, 'costo_insumos'))} de las ventas{pp}; el costo primo (insumos + nómina) fue "
+        f"En {ctx['nombre_mes']} los insumos fueron {fmt_pct(pct(mf, 'costo_insumos'))} de las ventas{pp} (de los cuales {fmt_pct(pct(mf, 'costo_desechables'), 1)} son desechables); el costo primo (insumos + nómina) fue "
         f"{fmt_pct(pct(mf, 'costo_insumos') + pct(mf, 'nomina'))} y quedó {fmt_pct(1 - (pct(mf, 'costo_insumos') + pct(mf, 'nomina') + pct(mf, 'arriendo_servicios') + pct(mf, 'otros_gastos')))} de utilidad." + aviso_dias(ctx),
-        "Escala: % de los ingresos de cada mes (cada barra suma 100 %: cuatro rubros de costo + utilidad). La línea punteada es el costo primo (insumos + nómina). "
+        "Escala: % de los ingresos de cada mes (cada barra suma 100 %: cuatro rubros de costo + utilidad; los insumos van partidos en proveedores y desechables, que juntos son el costo de insumos). La línea punteada es el costo primo (insumos + nómina). "
         f"Últimos {len(idxs)} meses reales. Fuente: hoja Model (fórmulas).")
     r0 = dg.seccion("#11 — Estructura de costos, % de los ingresos", "FÓRMULAS hacia Model: cada rubro ÷ ingresos del mes.")
     ws_d = dg.ws
-    nombres = ["Insumos", "Nómina", "Arriendo y servicios", "Otros", "Utilidad", "Costo primo (insumos + nómina)"]
-    claves = ["fila_costo_insumos", "fila_nomina", "fila_arriendo", "fila_otros", "fila_utilidad_neta", None]
+    nombres = ["Insumos (proveedores)", "Desechables", "Nómina", "Arriendo y servicios", "Otros", "Utilidad", "Costo primo (insumos + nómina)"]
+    claves = ["fila_ins_prov", "fila_desechables", "fila_nomina", "fila_arriendo", "fila_otros", "fila_utilidad_neta", None]
     label(ws_d, r0, "Mes")
     for k, nom in enumerate(nombres):
         label(ws_d, r0 + 1 + k, nom)
@@ -3018,23 +3095,24 @@ def grafico_11(h, ctx):
         for j, clave in enumerate(claves):
             if clave is None:
                 f = f"=IF({ing}=0,0,-({cm(ctx,'fila_costo_insumos',ix)}+{cm(ctx,'fila_nomina',ix)})/{ing})"
-            elif clave == "fila_utilidad_neta":
+            elif clave in ("fila_utilidad_neta", "fila_ins_prov", "fila_desechables"):   # filas con signo positivo en Model
                 f = f"=IF({ing}=0,0,{cm(ctx,clave,ix)}/{ing})"
             else:
                 f = f"=IF({ing}=0,0,-{cm(ctx,clave,ix)}/{ing})"
             cel = numero(ws_d, r0 + 1 + j, c, f, pct=True)
-            if j < 5:
+            if j < 6:
                 cel.number_format = "0.0%;-0.0%;;"   # las etiquetas de las barras heredan este formato: sin ceros
-    dg.cerrar(r0 + 6)
+    dg.cerrar(r0 + 7)
     c1, c2 = dg.col(0), dg.col(len(idxs) - 1)
     cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=r0)
     bar = nuevo_bar(apilado=True, ancho_gap=45)
-    colores = [PALETA["egresos"], tono_claro(PALETA["egresos"], 0.3), tono_claro(PALETA["egresos"], 0.55), PALETA["neutro_claro"], PALETA["utilidad"]]
-    for j in range(5):
+    # Insumos (proveedores) y Desechables son dos tonos de la misma familia (juntos = costo de insumos); el resto igual que antes
+    colores = [PALETA["egresos"], PALETA["desechables"], tono_claro(PALETA["egresos"], 0.3), tono_claro(PALETA["egresos"], 0.55), PALETA["neutro_claro"], PALETA["utilidad"]]
+    for j in range(6):
         s = serie_fila(ws_d, r0 + 1 + j, c1, c2, nombres[j])
         color_serie(s, colores[j])
         if len(idxs) <= 8:
-            etiquetas(s, fmt="0%;-0%;;", pos="ctr", tam=900, color="FFFFFF" if j in (0, 4) else "404040")
+            etiquetas(s, fmt="0%;-0%;;", pos="ctr", tam=900, color="FFFFFF" if j in (0, 1, 5) else "404040")
         bar.series.append(s)
     bar.set_categories(cats)
     # el eje cubre 0–100 %; solo se amplía si algún mes tiene pérdida (costos > 100 %)
@@ -3044,7 +3122,7 @@ def grafico_11(h, ctx):
     ymin = min(0.0, math.floor(min(minimos) * 10) / 10)
     ejes(bar, x_titulo="Mes", y_titulo="% de los ingresos", y_fmt="0%", y_min=ymin, y_max=ymax)
     linea = nuevo_linea()
-    s = serie_fila(ws_d, r0 + 6, c1, c2, nombres[5])
+    s = serie_fila(ws_d, r0 + 7, c1, c2, nombres[6])
     color_serie(s, PALETA["neutro_oscuro"], linea=True, guion="dash", marcador=True, ancho_pt=2.25)
     linea.series.append(s)
     linea.set_categories(cats)
@@ -3299,6 +3377,7 @@ def grafico_17(h, ctx):
         }
     filas = [("Margen neto", "mg_real", "mg_aj", "pct", True, "mg"),
              ("Costo de insumos (% de ventas)", "ins_real", "ins_aj", "pct", False, "ins"),
+             ("· Desechables (% de ventas)", "des_real", "des_aj", "pct", False, None),   # el Plan de insumos no los separa
              ("Costo primo (% de ventas)", "primo_real", "primo_aj", "pct", False, "primo"),
              ("Utilidad diaria promedio", "util_dia_real", "util_dia_aj", "money", True, "util"),
              ("Punto de equilibrio diario", "pe_real", "pe_aj", "money", False, "pe")]
@@ -3327,12 +3406,12 @@ def grafico_17(h, ctx):
             f_dif = f"=({aj}-{real})*100"
             fmt_val, fmt_dif = "0.0%", '+0.0" pp";-0.0" pp";0.0" pp"'
             f_ant = f'=IF({real}>={prev},"▲ ","▼ ")&FIXED(ABS({real}-{prev})*100,1)&" pp"' if prev else '="—"'
-            f_pl = f'=IF({real}>={plan_f[k_plan]},"▲ ","▼ ")&FIXED(ABS({real}-{plan_f[k_plan]})*100,1)&" pp"' if plan_f else '="—"'
+            f_pl = f'=IF({real}>={plan_f[k_plan]},"▲ ","▼ ")&FIXED(ABS({real}-{plan_f[k_plan]})*100,1)&" pp"' if (plan_f and k_plan) else '="—"'
         else:
             f_dif = f"={aj}-{real}"
             fmt_val, fmt_dif = "$ #,##0", '+$ #,##0;-$ #,##0;$ 0'
             f_ant = f'=IF(OR({prev}=0),"—",IF({real}>={prev},"▲ ","▼ ")&FIXED(ABS({real}/{prev}-1)*100,1)&"%")' if prev else '="—"'
-            f_pl = f'=IF({plan_f[k_plan]}=0,"—",IF({real}>={plan_f[k_plan]},"▲ ","▼ ")&FIXED(ABS({real}/{plan_f[k_plan]}-1)*100,1)&"%")' if plan_f else '="—"'
+            f_pl = f'=IF({plan_f[k_plan]}=0,"—",IF({real}>={plan_f[k_plan]},"▲ ","▼ ")&FIXED(ABS({real}/{plan_f[k_plan]}-1)*100,1)&"%")' if (plan_f and k_plan) else '="—"'
         valores = [nombre, f"={real}", f"={aj}", f_dif, f_ant, f_pl]
         for (txt, c1, c2), v in zip(columnas, valores):
             ws.merge_cells(start_row=rr, start_column=c1, end_row=rr, end_column=c2)
@@ -3352,7 +3431,7 @@ def grafico_17(h, ctx):
             ws.conditional_formatting.add(f"{L}{rr}", FormulaRule(formula=[f'LEFT({L}{rr},1)="▲"'], font=Font(color=sube_c, bold=True)))
             ws.conditional_formatting.add(f"{L}{rr}", FormulaRule(formula=[f'LEFT({L}{rr},1)="▼"'], font=Font(color=baja_c, bold=True)))
     if not tiene_plan:
-        nota(ws, cab + 7, "Sin Plan para este mes: la columna 'vs. Plan' queda en —.", col=2)
+        nota(ws, cab + len(filas) + 2, "Sin Plan para este mes: la columna 'vs. Plan' queda en —.", col=2)
 
 
 # ── #18 Peso del consumo familiar en el tiempo ────────────────────────
@@ -3480,7 +3559,8 @@ def grafico_20(h, ctx):
         return
     idxs = list(range(0, i + 1))
     candidatos = [("Ventas", "fila_ingresos", lambda p: ingresos_de(hist, p), PALETA["ingresos"], False),
-                  ("Insumos", "fila_costo_insumos", lambda p: float(hist.loc[p, "costo_insumos"]), PALETA["egresos"], False),
+                  ("Insumos (incl. desechables)", "fila_costo_insumos", lambda p: float(hist.loc[p, "costo_insumos"]), PALETA["egresos"], False),
+                  ("Desechables (parte de insumos)", "fila_desechables", lambda p: float(hist.loc[p, "costo_desechables"]), PALETA["desechables"], False),
                   ("Nómina", "fila_nomina", lambda p: float(hist.loc[p, "nomina"]), tono_claro(PALETA["egresos"], 0.3), False),
                   ("Arriendo y servicios", "fila_arriendo", lambda p: float(hist.loc[p, "arriendo_servicios"]), tono_claro(PALETA["egresos"], 0.55), False),
                   ("Otros", "fila_otros", lambda p: float(hist.loc[p, "otros_gastos"]), tono_claro(PALETA["neutro_oscuro"], 0.4), False)]
@@ -3515,7 +3595,7 @@ def grafico_20(h, ctx):
     ch = nuevo_linea()
     for j, (nom, _cl, _f, color, _x) in enumerate(usables):
         s = serie_fila(ws_d, r0 + 1 + j, c1, c2, nom)
-        color_serie(s, color, linea=True, marcador=True, ancho_pt=3.25 if nom == "Ventas" else 2.0, guion=None if nom == "Ventas" else "solid")
+        color_serie(s, color, linea=True, marcador=True, ancho_pt=3.25 if nom == "Ventas" else 2.0, guion=None if nom == "Ventas" else "dash" if nom.startswith("Desechables") else "solid")
         ch.series.append(s)
     ch.set_categories(cats)
     ejes(ch, x_titulo="Mes", y_titulo="Índice (primer mes real = 100)", y_fmt="0")
