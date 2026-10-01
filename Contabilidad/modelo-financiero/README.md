@@ -26,6 +26,20 @@ pip install openpyxl pandas
 python generar_modelo_financiero.py ElLobo_datos_2026-09-27.xlsx --hasta 2027-12 --mes 2026-09
 ```
 
+> **Datos reales fuera del repo (este repo es público).** El export y el modelo generado
+> contienen los datos del negocio. Lo recomendable es guardar el export en una carpeta **fuera**
+> del repo, p. ej. `C:\Users\<tu usuario>\OneDrive\Documents\Luisk\ElLobo-datos\` (queda
+> respaldada por OneDrive y ningún `git add` puede tocarla), y correr el script con la ruta
+> completa — acepta rutas absolutas, relativas o con `~`:
+>
+> ```
+> python generar_modelo_financiero.py "C:\Users\57EF\OneDrive\Documents\Luisk\ElLobo-datos\ElLobo_datos_2026-10-01.xlsx" --salida "C:\Users\57EF\OneDrive\Documents\Luisk\ElLobo-datos\modelo.xlsx"
+> ```
+>
+> Con `--salida` y una ruta con carpeta, el modelo también queda fuera del repo. Si el export queda
+> dentro del repo, el `.gitignore` ya ignora `*.xlsx`, `ElLobo_datos_*`, `ElLobo_respaldo_*.json` y
+> `datos_*.json`.
+
 Opciones:
 
 | Opción | Descripción |
@@ -150,14 +164,17 @@ Un `.xlsx` con estas hojas, en este orden:
   cierres manuales), el *Revenue Schedule* de `Model` los concilia por turno, en este orden:
   1. *Ventas por pedidos* (valor calculado por el script);
   2. *Ingresos de cierre sin pedido asociado (ajustes y cierres manuales)* = (ingresos del
-     turno − desayuno) − ventas por pedidos (el script imprime cuánto es de ajustes, de cierres
-     manuales y de otros, p. ej. fiados cuya plata no entró al cierre);
+     turno − desayuno) − ventas por pedidos. Debajo, tres filas informativas que **suman exactamente**
+     esa fila: *Ajustes de cierre (efectivo y transferencia)*, *Cierres manuales* y *Diferencia entre
+     pedidos y cierre (fiados no cobrados u otros)* (el residual; el script también lo imprime en consola);
   3. *Pedidos registrados* (cantidad real);
   4. *Ticket promedio* = fila 1 ÷ fila 3;
   5. *Pedidos equivalentes por ingresos sin pedido (ESTIMADO)* = fila 2 ÷ ticket (0 si la fila 2
      es negativa; el script lo reporta);
   6. *Pedidos equivalentes totales* = fila 3 + fila 5, y una fila de verificación
-     (ticket × fila 6 − ingresos del turno, debe dar 0 cuando la fila 2 no es negativa).
+     (ticket × fila 6 − ingresos del turno, debe dar 0 cuando la fila 2 no es negativa; si es
+     negativa, en comida rápida la diferencia son ajustes negativos del turno —faltantes de
+     caja— y no es un error).
   Los gráficos de comportamiento de clientes (#8, #9, #19 y los que cuentan pedidos) y el consumo
   familiar usan solo los pedidos registrados y el ticket; nunca los pedidos equivalentes. Al terminar,
   el script imprime *"Ticket almuerzo del mes en foco: $X (debe coincidir con el Tablero)"*.

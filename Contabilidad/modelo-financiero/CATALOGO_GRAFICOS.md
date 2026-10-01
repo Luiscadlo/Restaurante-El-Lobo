@@ -48,7 +48,9 @@ del turno, **sin Gratis y solo de turnos cerrados** (cantidad nula o 0 cuenta co
 manuales ni cierres manuales, y el desayuno queda fuera del ticket de almuerzo. Los ingresos del modelo
 salen de los cierres, así que `Model → Revenue Schedule` concilia: *Ventas por pedidos*, *Ingresos de cierre
 sin pedido asociado (ajustes y cierres manuales)*, *Pedidos registrados*, *Ticket promedio*, *Pedidos
-equivalentes por ingresos sin pedido (ESTIMADO)* y *Pedidos equivalentes totales* (+ verificación). Los
+equivalentes por ingresos sin pedido (ESTIMADO)* y *Pedidos equivalentes totales* (+ verificación). La fila
+de ingresos sin pedido se desglosa debajo en *Ajustes de cierre*, *Cierres manuales* y *Diferencia entre pedidos y
+cierre (fiados no cobrados u otros)*, que suman exactamente esa fila. Los
 gráficos de pedidos (#8, #9, #19) y el consumo familiar usan **solo los pedidos registrados** y el ticket,
 nunca los equivalentes. La misma estructura aplica a comida rápida.
 

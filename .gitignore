@@ -18,6 +18,11 @@
 ElLobo_respaldo_*.json
 ElLobo_datos_*
 
+# Datos del Tablero exportados a JSON (datos_tablero.json, datos_*.json): datos reales del
+# negocio, igual que los exports de arriba. Guárdalos fuera del repo (p. ej. ~/ElLobo-datos/).
+datos_tablero.json
+datos_*.json
+
 # Python
 __pycache__/
 *.pyc

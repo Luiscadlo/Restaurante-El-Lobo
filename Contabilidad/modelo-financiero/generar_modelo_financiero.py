@@ -768,6 +768,8 @@ def datos_de_ejemplo(n_meses=12):
     for turno_, col_ in (("almuerzo", "ventas_pedidos_almuerzo"), ("cena", "ventas_pedidos_cena")):
         ventas_mes = ped_d[ped_d["turno"] == turno_].groupby("periodo")["monto_total"].sum() if not ped_d.empty else pd.Series(dtype=float)
         hist[col_] = hist["periodo"].map(ventas_mes).fillna(0.0)
+        hist[f"sinped_ajustes_{turno_}"] = 0.0     # el demo no trae ajustes ni cierres manuales
+        hist[f"sinped_manual_{turno_}"] = 0.0
     hist = enriquecer_hist(hist, diario)
     return hist, extra, diario
 
@@ -1269,6 +1271,23 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
             neto = f"({cl}{f_ing}-{cl}{f_des})" if f_des else f"{cl}{f_ing}"
             numero(ws, r, c, f"={neto}-{cl}{fr['ventas']}")
         r += 1
+        # Desglose informativo (suma EXACTAMENTE la fila de arriba): a) ajustes, b) cierres manuales, c) el residual.
+        fr["sin_aj"] = r
+        label(ws, r, "Ajustes de cierre (efectivo y transferencia)", indent=1)
+        for i in range(n_hist):
+            numero(ws, r, col_ini + i, float(hist_df.iloc[i][f"sinped_ajustes_{turno_t}"]))
+        r += 1
+        fr["sin_man"] = r
+        label(ws, r, "Cierres manuales", indent=1)
+        for i in range(n_hist):
+            numero(ws, r, col_ini + i, float(hist_df.iloc[i][f"sinped_manual_{turno_t}"]))
+        r += 1
+        fr["sin_dif"] = r
+        label(ws, r, "Diferencia entre pedidos y cierre (fiados no cobrados u otros)", indent=1)
+        for c in range(col_ini, col_ini + n_hist):
+            cl = get_column_letter(c)
+            numero(ws, r, c, f"={cl}{fr['sin']}-{cl}{fr['sin_aj']}-{cl}{fr['sin_man']}")
+        r += 1
         fr["vol"] = r
         label(ws, r, f"Pedidos registrados — {nombre_t}")
         for i in range(n_hist):
@@ -1299,6 +1318,9 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
             neto = f"({cl}{f_ing}-{cl}{f_des})" if f_des else f"{cl}{f_ing}"
             numero(ws, r, c, f"=ROUND({cl}{fr['tkt']}*{cl}{fr['eqtot']}-{neto},0)")
         filas_rev[turno_t] = fr
+        if turno_t == "cena":
+            nota(ws, r + 1, "Diferencia = ajustes negativos del turno (faltantes de caja); no es un error")
+            r += 1
         r += 2
     fila_ventas_ped_alm, fila_sin_pedido_alm = filas_rev["almuerzo"]["ventas"], filas_rev["almuerzo"]["sin"]
     fila_vol_alm, fila_tkt_alm = filas_rev["almuerzo"]["vol"], filas_rev["almuerzo"]["tkt"]
@@ -1502,6 +1524,8 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
         fila_eq_alm=fila_eq_alm, fila_eqtot_alm=fila_eqtot_alm,
         fila_ventas_ped_cena=fila_ventas_ped_cena, fila_sin_pedido_cena=fila_sin_pedido_cena,
         fila_eq_cena=fila_eq_cena, fila_eqtot_cena=fila_eqtot_cena,
+        fila_sin_aj_alm=filas_rev["almuerzo"]["sin_aj"], fila_sin_man_alm=filas_rev["almuerzo"]["sin_man"], fila_sin_dif_alm=filas_rev["almuerzo"]["sin_dif"],
+        fila_sin_aj_cena=filas_rev["cena"]["sin_aj"], fila_sin_man_cena=filas_rev["cena"]["sin_man"], fila_sin_dif_cena=filas_rev["cena"]["sin_dif"],
         fila_desechables=fila_desech, fila_desech_pct=fila_desech_pct, fila_ins_prov=fila_ins_prov,
     )
     config_impresion(ws, horizontal=True)
@@ -3854,7 +3878,9 @@ def etiquetas_proyeccion(hist_df, hasta, meses_proyeccion):
 # ══════════════════════════════════════════════════════════════════════
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("archivo", nargs="?", help="Excel exportado desde la pestaña Datos")
+    ap.add_argument("archivo", nargs="?", help=(
+        "Excel exportado desde la pestaña Datos. Puede estar en cualquier carpeta (ruta absoluta, relativa o con ~); "
+        "se recomienda guardarlo fuera del repo, p. ej. ~/ElLobo-datos/"))
     ap.add_argument("--demo", action="store_true", help="Usar datos de ejemplo")
     ap.add_argument("--hasta", default="2027-12", metavar="AAAA-MM", help=(
         "Último mes de la proyección (por defecto 2027-12): el script calcula solo "
@@ -3880,7 +3906,14 @@ def main():
         hist_df, extra, diario = datos_de_ejemplo()
         es_demo = True
     else:
-        hist_df, extra, diario = cargar_datos_reales(args.archivo)
+        # El export tiene los datos reales del negocio: lo mejor es guardarlo FUERA de este repo
+        # (público). Se acepta cualquier ruta: absoluta, relativa o con ~ (p. ej. ~/ElLobo-datos/export.xlsx).
+        archivo = Path(args.archivo).expanduser()
+        if not archivo.is_file():
+            print(f"No encuentro el archivo: {archivo}\n"
+                  "Pasa la ruta completa del Excel exportado (entre comillas si tiene espacios).")
+            sys.exit(1)
+        hist_df, extra, diario = cargar_datos_reales(str(archivo))
         es_demo = False
 
     # Nombre + carpeta de salida: siempre deja claro si es DEMO o REAL (para
