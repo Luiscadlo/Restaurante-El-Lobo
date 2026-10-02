@@ -37,9 +37,11 @@ nuevos viven en hojas propias, después de `Outputs`, y sus tablas de apoyo en `
 - **Consumo familiar** (la familia come sin pagar): *almuerzo* se registra por CANTIDAD de comidas
   en el cierre (`cierres_dia.platos_familia`, una por persona aunque haya sido en porciones) y los
   días sin registro se estiman con `Inputs` (comidas por día). Se valora con **el valor por comida
-  de Inputs**, un ticket único y fijo ($15.000 por defecto); valor del almuerzo = comidas del mes ×
-  ese valor. Lo único que varía la valoración mes a mes es la CANTIDAD de comidas, no el precio
-  (el ticket real de platos fuertes del mes ya no alimenta esta cuenta — sigue informativo en #9/#17).
+  de la familia de Inputs**, un estimado fijo ($15.000 por defecto, NO es el ticket del Tablero);
+  valor del almuerzo = comidas del mes × ese valor. Lo único que varía la valoración mes a mes es la
+  CANTIDAD de comidas, no el precio (el ticket real de platos fuertes del mes ya no alimenta esta
+  cuenta — sigue informativo solo en consola y en el Revenue Schedule; el ticket que SÍ usan la
+  tarjeta de `A_Resultado`, #9 y #9B es el normal por unidad vendida, que no cambió).
   #16, #17 y #18 llevan una nota con esta fórmula y los números del mes en foco. *Comida rápida* se
   registra por VALOR real con los pedidos de ubicación **Gratis** (no se estima). Los pedidos
   Gratis **nunca** suman a los ingresos reales ni entran a volúmenes, tickets, Pareto ni conteos
@@ -96,7 +98,7 @@ Color de desechables: `PALETA["desechables"]` (malva oscuro, dentro de la famili
 
 Notas por gráfico:
 
-- **#16 / #17 / #18** Consumo familiar: almuerzo = comidas del mes × valor por comida del mes (nota con la fórmula en cada lámina); el ticket por unidad vendida de #9/#17 no cambia.
+- **#16 / #17 / #18** Consumo familiar: almuerzo = comidas del mes × valor por comida de la familia (nota con la fórmula en cada lámina); el ticket por unidad vendida de #9/#17 no cambia.
 - **#9** Pedidos = pedidos registrados (cantidad real, sin Gratis, turnos cerrados); ticket = Σ monto_total ÷ Σ cantidad. **No incluye pedidos equivalentes por ingresos sin pedido** (ajustes y cierres manuales).
 - **#2 / #11** Insumos va partido en *Insumos (proveedores)* y *Desechables* (juntos = costo de insumos); el valor de los desechables va en el rótulo de #2 y la serie #11 se ve en el tono oscuro.
 - **#4 / #10** El rótulo del rubro Insumos incluye "incl. desechables $X M" (el Plan de insumos de #4 no los separa).

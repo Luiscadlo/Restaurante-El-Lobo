@@ -66,28 +66,32 @@ mediados de mes), el Plan del mes siguiente queda muy bajo.
 ### Consumo familiar (la familia come sin pagar)
 
 La hoja `Inputs` tiene la sección **Consumo familiar (estimado)** (celdas azules editables):
-**comidas de la familia por día** (12), **valor por comida** — ticket único y fijo ($15.000) —, días
-operados por mes en meses proyectados (26) y consumo familiar de comida rápida proyectado por mes (0).
-En `Model`, el bloque **Consumo Familiar (ESTIMADO)** lo calcula así:
+**comidas de la familia por día** (12), **valor por comida de la familia** — estimado fijo, $15.000,
+que NO es el ticket del Tablero —, días operados por mes en meses proyectados (26) y consumo familiar
+de comida rápida proyectado por mes (0). En `Model`, el bloque **Consumo Familiar (ESTIMADO)** lo
+calcula así:
 
 - **Almuerzo:** el cierre registra la *cantidad de comidas* de la familia
   (`cierres_dia.platos_familia`: una por persona, aunque haya sido en porciones). Comidas del mes =
   las registradas + (días sin registro × comidas por día de `Inputs`). Se valora con **el valor por
-  comida de Inputs**, un ticket único y fijo (ya no distingue plato fuerte de porción ni mira el
-  ticket real de platos fuertes del mes): lo único que varía la valoración mes a mes es la *cantidad*
+  comida de la familia de Inputs**, un estimado fijo (ya no distingue plato fuerte de porción ni mira
+  el ticket real de platos fuertes del mes): lo único que varía la valoración mes a mes es la *cantidad*
   de comidas, no el precio.
 
   ```
-  valor del almuerzo del mes = comidas del mes × valor por comida (Inputs)
+  valor del almuerzo del mes = comidas del mes × valor por comida de la familia (Inputs)
   ```
 
-  El **ticket de platos fuertes** (Σ `monto_almuerzo` ÷ Σ `cantidad` de los pedidos pagados de almuerzo)
-  sigue calculándose y mostrándose como dato informativo (consola, #9/#17 y el Revenue Schedule), pero
-  ya **no** alimenta el consumo familiar.
+  El **ticket de platos fuertes** (Σ `monto_almuerzo` ÷ Σ `cantidad` de completo/seco/asado130/asado200)
+  sigue calculándose y mostrándose como dato informativo (consola y la fila "Ticket platos fuertes —
+  Almuerzo" del Revenue Schedule), pero ya **no** alimenta el consumo familiar ni ningún otro cálculo.
+  El ticket que SÍ usan la tarjeta "Ticket promedio almuerzo" de `A_Resultado`, #9 y #9B es el ticket
+  normal por unidad vendida (Σ `monto_total` ÷ Σ `cantidad` de TODOS los pedidos de almuerzo, fila
+  "Ticket promedio — Almuerzo" del Revenue Schedule) — no cambió, sigue coincidiendo con el Tablero.
 - **Comida rápida:** se registra *valor* real con los pedidos de ubicación **Gratis**
   (llevan su precio de venta). No se estima nada en meses reales.
-- **Meses proyectados:** todo sale de `Inputs` (días operados × comidas por día × valor por comida;
-  comida rápida = el input proyectado).
+- **Meses proyectados:** todo sale de `Inputs` (días operados × comidas por día × valor por comida de
+  la familia; comida rápida = el input proyectado).
 - Los pedidos Gratis **nunca** suman a los ingresos reales (ni a volúmenes, tickets o
   conteos de pedidos). El costo de insumos del consumo familiar es solo informativo:
   ya está dentro de los egresos, no se resta de nuevo.
