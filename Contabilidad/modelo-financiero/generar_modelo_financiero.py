@@ -54,7 +54,7 @@ import math
 import re
 import sys
 import argparse
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 # El modelo generado SIEMPRE se guarda en esta misma carpeta
@@ -62,6 +62,25 @@ from pathlib import Path
 # script — así no se dispersan copias sueltas en la raíz del repo o en
 # donde sea que estuviera parada la terminal.
 SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Filas FIJAS de la hoja Model (Estado de Resultados + días operados) — la
+# hoja Inputs las necesita para construir fórmulas que apuntan a Model
+# (costo de insumos %, período base) ANTES de que hoja_model() exista
+# todavía (Inputs se arma primero). El layout de hoja_model() es
+# determinístico (no depende de los datos), así que estos números son
+# estables — hoja_model() los valida con un assert al construirse, para
+# que un cambio de layout ahí avise en vez de romper fórmulas en silencio.
+FILAS_MODEL_FIJAS = dict(
+    dias_operados=6, dias_alm_ingreso=7, dias_cena_ingreso=8,
+    ing_alm=12, ing_cena=13, ingresos=14, costo_insumos=16,
+    nomina=19, arriendo=20, otros=21,
+)
+
+# Los datos reales del negocio (no --demo) empiezan acá — todo lo anterior
+# (agosto 2026: el mes de prueba del dueño, antes de llevar el negocio en
+# serio por el sistema) se ignora en TODAS las tablas del export. Overridable
+# con --inicio AAAA-MM si hace falta correr el modelo con otro corte.
+MES_INICIO_DATOS_REALES = "2026-09"
 
 # En Windows, la consola (cmd/PowerShell) no siempre usa UTF-8 por defecto,
 # y los prints con emoji (✅) revientan con UnicodeEncodeError aunque el
@@ -235,6 +254,73 @@ def _bool(df, col):
     if col in df.columns:
         return df[col] == True  # noqa: E712 — NaN/None cuentan como False
     return pd.Series(False, index=df.index)
+
+
+def _pascua(anio):
+    """Domingo de Pascua de un año — algoritmo de Meeus/Jones/Butcher (calendario gregoriano)."""
+    a = anio % 19
+    b = anio // 100
+    c = anio % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    mes = (h + l - 7 * m + 114) // 31
+    dia = ((h + l - 7 * m + 114) % 31) + 1
+    return date(anio, mes, dia)
+
+
+def _siguiente_lunes(d):
+    """Ley Emiliani: si la fecha no cae lunes, se traslada al lunes siguiente (si ya es lunes, queda igual)."""
+    return d + timedelta(days=(7 - d.weekday()) % 7)
+
+
+def festivos_colombia(anio_inicio, anio_fin):
+    """Festivos civiles de Colombia entre anio_inicio y anio_fin (ambos inclusive) — los 18
+    festivos nacionales oficiales (Ley 51 de 1983 "Ley Emiliani" + Semana Santa), calculados a
+    mano con el algoritmo de Pascua + el corrimiento al lunes siguiente que manda la ley.
+
+    Se probó usar la librería `holidays` (si está instalada) en vez de este cálculo, pero para
+    Colombia agrega un festivo que NO es nacional (Virgen de Chiquinquirá — una fecha religiosa
+    regional de Boyacá, no un festivo civil en el resto del país); por eso se prefiere este
+    cálculo propio, verificado contra la lista oficial de 18. La tabla de Inputs que arma con
+    esto queda editable, así que si el negocio sí para algún día adicional (o no para alguno de
+    estos), se ajusta a mano ahí sin tocar el script.
+
+    Devuelve {fecha: nombre}, ordenado por fecha."""
+    out = {}
+    for anio in range(anio_inicio, anio_fin + 1):
+        fijos = {
+            date(anio, 1, 1): "Año Nuevo",
+            date(anio, 5, 1): "Día del Trabajo",
+            date(anio, 7, 20): "Día de la Independencia",
+            date(anio, 8, 7): "Batalla de Boyacá",
+            date(anio, 12, 8): "La Inmaculada Concepción",
+            date(anio, 12, 25): "Navidad",
+        }
+        out.update(fijos)
+        emiliani = {
+            date(anio, 1, 6): "Reyes Magos",
+            date(anio, 3, 19): "San José",
+            date(anio, 6, 29): "San Pedro y San Pablo",
+            date(anio, 8, 15): "La Asunción",
+            date(anio, 10, 12): "Día de la Raza",
+            date(anio, 11, 1): "Todos los Santos",
+            date(anio, 11, 11): "Independencia de Cartagena",
+        }
+        for d, nombre in emiliani.items():
+            out[_siguiente_lunes(d)] = nombre
+        p = _pascua(anio)
+        out[p - timedelta(days=3)] = "Jueves Santo"
+        out[p - timedelta(days=2)] = "Viernes Santo"
+        for delta_dias, nombre in ((39, "Ascensión del Señor"), (60, "Corpus Christi"), (68, "Sagrado Corazón de Jesús")):
+            out[_siguiente_lunes(p + timedelta(days=delta_dias))] = nombre
+    return dict(sorted(out.items()))
 
 
 def cantidad_pedidos(df):
@@ -528,6 +614,13 @@ def enriquecer_hist(hist, diario):
         "dias_con_registro": con.groupby(alm["periodo"]).sum(),
         "platos_registrados": alm["platos_familia"].where(con, 0).groupby(alm["periodo"]).sum(),
     })
+    # días con ingreso de comida rápida — mismo criterio que dias_alm_operados,
+    # pero del turno de cena. Lo usa el "factor de operación del turno" de la
+    # proyección (Model → Supuestos del dueño): vale 1 si el turno opera
+    # todos los días del período base.
+    cena_op = ing[ing["comida_rapida"] > 0].copy()
+    cena_op["periodo"] = cena_op.index.to_period("M").astype(str)
+    dias_cena_operados = cena_op.groupby("periodo").size()
     # Gratis (a precio de venta): comida rápida = consumo de la familia REGISTRADO;
     # almuerzo = pedidos Gratis legados (anteriores a la regla "Gratis solo en comida rápida").
     if not gr.empty:
@@ -542,6 +635,7 @@ def enriquecer_hist(hist, diario):
         h[c] = por_mes[c].reindex(h.index).fillna(0)
     for c in ("dias_alm_operados", "dias_con_registro"):
         h[c] = h[c].astype(int)
+    h["dias_cena_operados"] = dias_cena_operados.reindex(h.index).fillna(0).astype(int)
     h["valor_cr_registrado"] = gr_cr.reindex(h.index).fillna(0.0)
     h["gratis_alm_valor"] = gr_al.reindex(h.index).fillna(0.0)
     h["gratis_cr_valor"] = h["valor_cr_registrado"]
@@ -555,13 +649,16 @@ def enriquecer_hist(hist, diario):
 # ══════════════════════════════════════════════════════════════════════
 # CARGA DE DATOS — desde el export real, o datos de EJEMPLO
 # ══════════════════════════════════════════════════════════════════════
-def cargar_datos_reales(path_excel):
+def cargar_datos_reales(path_excel, mes_inicio=MES_INICIO_DATOS_REALES):
     """Lee el archivo del botón 'Exportar a Excel' de la pestaña Datos (una
     hoja por tabla de Supabase) y arma (hist, extra, diario):
       hist   — DataFrame mensual (una fila por mes real)
       extra  — saldos puntuales para el Balance (caja, inventario, fiados)
       diario — datos por día para los gráficos (ver construir_diario())
-    Ajusta los nombres de hoja/columna aquí si cambian en el sistema."""
+    Ajusta los nombres de hoja/columna aquí si cambian en el sistema.
+
+    `mes_inicio` (AAAA-MM): cualquier fila con fecha anterior se ignora en
+    TODAS las tablas, antes de calcular nada — ver MES_INICIO_DATOS_REALES."""
     xls = pd.ExcelFile(path_excel)
 
     def hoja(nombre):
@@ -576,6 +673,24 @@ def cargar_datos_reales(path_excel):
     pendientes = hoja("Pedidos_Pendientes")
     abonos = hoja("Abonos_Fiado")
     aperturas = hoja("Aperturas_Turno")
+
+    # Recorta TODO a partir de mes_inicio — datos de antes (ej. el mes de
+    # prueba) se ignoran en cualquier tabla con columna "fecha", antes de que
+    # nada más se calcule (así "Meses históricos reales" de la portada, los
+    # promedios del período base, etc. ya nacen sin esos meses).
+    inicio_ts = pd.Timestamp(f"{mes_inicio}-01")
+    tablas_fecha = dict(Cierres_Dia=cierres, Pedidos_Pagados=pedidos, Pedidos_Pendientes=pendientes,
+                         Egresos=egresos, Gastos_Cierre=gastos_cierre, Movimientos_Caja=movs_caja,
+                         Aperturas_Turno=aperturas, Abonos_Fiado=abonos)
+    for nombre_tabla, df in tablas_fecha.items():
+        if df.empty or "fecha" not in df.columns:
+            continue
+        fechas = pd.to_datetime(df["fecha"], errors="coerce")
+        antes = (fechas < inicio_ts).fillna(False)
+        n = int(antes.sum())
+        if n:
+            print(f"  (ignorando {n} fila(s) de {nombre_tabla} anteriores a {mes_inicio} — MES_INICIO_DATOS_REALES)")
+            df.drop(df.index[antes], inplace=True)
 
     for df in (cierres, pedidos, pendientes, egresos, gastos_cierre, movs_caja, aperturas):
         if not df.empty and "fecha" in df.columns:
@@ -1027,22 +1142,35 @@ def hoja_cover(wb, n_hist, n_fcst, es_demo):
 # HOJA: INPUTS  — devuelve además las filas donde vive cada driver, para
 # que Model las referencie sin duplicar números "quemados" en dos hojas.
 # ══════════════════════════════════════════════════════════════════════
-def hoja_inputs(wb, meses_fcst_labels):
+def hoja_inputs(wb, hist_df, meses_fcst_labels, mes_foco):
     ws = wb.create_sheet("Inputs")
     ws.sheet_view.showGridLines = False
     ws.column_dimensions["A"].width = 2
-    ws.column_dimensions["B"].width = 34
+    ws.column_dimensions["B"].width = 40
     ws.column_dimensions["C"].width = 3
     ws.column_dimensions["D"].width = 3
-    ws.column_dimensions["E"].width = 12
+    ws.column_dimensions["E"].width = 14
+    ws.column_dimensions["F"].width = 28
     for i in range(len(meses_fcst_labels)):
         ws.column_dimensions[get_column_letter(6 + i)].width = 11
 
     col_ini = 6
     col_fin = col_ini + max(len(meses_fcst_labels), 1) - 1
 
-    banner(ws, 2, "Supuestos del Modelo", col_fin=col_fin)
-    nota(ws, 4, "Cambia cualquier celda azul — el modelo se recalcula solo.")
+    # Período base de "si todo sigue igual" (ver Model → Supuestos del
+    # dueño): hasta los 3 últimos meses reales que terminan en el mes en
+    # foco. Las columnas de Model que le corresponden (para las fórmulas de
+    # más abajo) usan las filas FIJAS de FILAS_MODEL_FIJAS.
+    idxs_base = periodo_base_meses(hist_df, mes_foco, max_meses=3)
+    col_pb_ini_m, col_pb_fin_m = get_column_letter(col_ini + idxs_base[0]), get_column_letter(col_ini + idxs_base[-1])
+
+    def rango_model(clave_fila):
+        fila = FILAS_MODEL_FIJAS[clave_fila]
+        return f"{col_pb_ini_m}{fila}:{col_pb_fin_m}{fila}" if len(idxs_base) > 1 else f"{col_pb_ini_m}{fila}"
+
+    banner(ws, 2, "Supuestos del dueño (editables)", col_fin=col_fin)
+    nota(ws, 4, "Cambia cualquier celda azul — el modelo se recalcula solo. Las celdas en negro son fórmulas que vienen de los datos reales (período base: "
+                + ", ".join(hist_df.iloc[i]["periodo"] for i in idxs_base) + ") — no se editan a mano.")
 
     ws["B6"] = "Escenario activo"
     ws["B6"].font = FONT_LABEL_B
@@ -1084,24 +1212,36 @@ def hoja_inputs(wb, meses_fcst_labels):
         return r_result, siguiente
 
     driver_rows = {}
+    n_fcst = len(meses_fcst_labels)
+    # Costo de insumos %: fórmula real (Σ costo de insumos ÷ Σ ingresos del
+    # período base) — NO es una suposición, sale de los datos. Mejor/Base/
+    # Peor quedan iguales (no hay 3 escenarios de esto todavía).
+    costo_insumos_formula = f"=-SUM(Model!{rango_model('costo_insumos')})/SUM(Model!{rango_model('ingresos')})"
     # Caso Base de cada driver (valores sin cambios): el Plan en pandas (plan_pandas)
     # los usa para decidir rangos de ejes y contrastar las fórmulas de Excel.
-    BASE = dict(crecimiento_almuerzo=0.015, crecimiento_cena=0.015, costo_insumos_pct=0.35, inflacion_gastos=0.006)
+    # OJO: hist_df.costo_insumos es POSITIVO (Model lo niega solo al escribir la celda) —
+    # sin negar acá de nuevo.
+    costo_insumos_pct_base = float(hist_df.iloc[idxs_base]["costo_insumos"].sum()) / float(
+        (hist_df.iloc[idxs_base]["ingresos_almuerzo"] + hist_df.iloc[idxs_base]["ingresos_cena"]).sum())
+    BASE = dict(crecimiento_almuerzo=0.01, crecimiento_cena=0.01, costo_insumos_pct=costo_insumos_pct_base, inflacion_gastos=0.0)
     driver_rows["_base_valores"] = BASE
     r = 12
     driver_rows["crecimiento_almuerzo"], r = bloque_driver(
         r, "Crecimiento de ventas — Almuerzo (%/mes)",
-        [0.03] * len(meses_fcst_labels), [BASE["crecimiento_almuerzo"]] * len(meses_fcst_labels), [0.0] * len(meses_fcst_labels))
+        [BASE["crecimiento_almuerzo"]] * n_fcst, [BASE["crecimiento_almuerzo"]] * n_fcst, [BASE["crecimiento_almuerzo"]] * n_fcst,
+        nota_txt="Mejor y Peor: sin definir todavía — son iguales a Base. Edita estas celdas si querés probar un escenario optimista o pesimista distinto.")
     driver_rows["crecimiento_cena"], r = bloque_driver(
         r, "Crecimiento de ventas — Comidas rápidas (%/mes)",
-        [0.035] * len(meses_fcst_labels), [BASE["crecimiento_cena"]] * len(meses_fcst_labels), [-0.01] * len(meses_fcst_labels))
+        [BASE["crecimiento_cena"]] * n_fcst, [BASE["crecimiento_cena"]] * n_fcst, [BASE["crecimiento_cena"]] * n_fcst,
+        nota_txt="Mejor y Peor: sin definir todavía — son iguales a Base. Edita estas celdas si querés probar un escenario optimista o pesimista distinto.")
     driver_rows["costo_insumos_pct"], r = bloque_driver(
         r, "Costo de insumos (% de ingresos)",
-        [0.32] * len(meses_fcst_labels), [BASE["costo_insumos_pct"]] * len(meses_fcst_labels), [0.40] * len(meses_fcst_labels))
+        [costo_insumos_formula] * n_fcst, [costo_insumos_formula] * n_fcst, [costo_insumos_formula] * n_fcst,
+        nota_txt="Fórmula real (Σ costo de insumos ÷ Σ ingresos del período base) — no es una suposición editable. Mejor/Base/Peor quedan iguales.")
     driver_rows["inflacion_gastos"], r = bloque_driver(
         r, "Inflación de gastos fijos — nómina / arriendo / servicios / otros (%/mes)",
-        [0.003] * len(meses_fcst_labels), [BASE["inflacion_gastos"]] * len(meses_fcst_labels), [0.012] * len(meses_fcst_labels),
-        nota_txt="Aplica a nómina + arriendo/servicios + otros gastos proyectados.")
+        [BASE["inflacion_gastos"]] * n_fcst, [BASE["inflacion_gastos"]] * n_fcst, [BASE["inflacion_gastos"]] * n_fcst,
+        nota_txt="Mejor y Peor: sin definir todavía — son iguales a Base (0%). Edita estas celdas si querés modelar inflación.")
     # Fila donde vive el caso "Base" de cada driver (3 filas debajo de la fila
     # del resultado, ver bloque_driver): el Plan (Datos_Graficos) lo usa SIEMPRE,
     # sin importar qué escenario esté activo en Inputs!E6.
@@ -1117,6 +1257,34 @@ def hoja_inputs(wb, meses_fcst_labels):
     label(ws, r, "Primer mes de proyección")
     ws.cell(row=r, column=5, value=meses_fcst_labels[0] if meses_fcst_labels else "").font = Font(bold=True, color=AZUL_TEXTO)
 
+    # ── Festivos en que NO abrimos ─────────────────────────────────────
+    # No se abre domingos (NETWORKDAYS.INTL "0000001", ver Model) ni estos
+    # festivos — tabla editable: agregá, quitá o cambiá fechas según cómo
+    # opere el negocio de verdad (insertando filas DENTRO de la tabla para
+    # que el rango que usa NETWORKDAYS.INTL en Model las siga incluyendo).
+    r += 3
+    banner(ws, r, "Festivos en que NO abrimos", col_fin=col_fin)
+    r += 1
+    anio_ini_fest = int(hist_df["periodo"].min().split("-")[0])
+    anio_fin_fest = int(meses_fcst_labels[-1].split("-")[0]) if meses_fcst_labels else anio_ini_fest
+    nota(ws, r, f"Festivos civiles de Colombia {anio_ini_fest}–{anio_fin_fest} (Ley Emiliani + Semana Santa), calculados por el script. "
+                "No incluye domingos (esos ya se excluyen aparte). Editable: agregá o quitá filas si tu negocio no sigue exactamente este calendario.")
+    r += 2
+    festivos = festivos_colombia(anio_ini_fest, anio_fin_fest)
+    label(ws, r, "Fecha", bold=True)
+    label(ws, r, "Festivo", bold=True, col=6)
+    r += 1
+    fila_festivos_ini = r
+    for fecha_f, nombre_f in festivos.items():
+        c = ws.cell(row=r, column=5, value=fecha_f)
+        c.number_format = "DD/MM/YYYY"
+        c.font = Font(name="Calibri", size=10, bold=False, color=AZUL_TEXTO)
+        label(ws, r, nombre_f, col=6)
+        r += 1
+    fila_festivos_fin = r - 1
+    driver_rows["_festivos_rango"] = f"Inputs!$E${fila_festivos_ini}:$E${fila_festivos_fin}"
+    r += 1
+
     # ── Consumo familiar (estimado): la familia come sin pagar ────────────
     # Almuerzo: el cierre registra la CANTIDAD de platos (platos_familia); los
     # días sin registro (y los meses proyectados) se estiman con estas celdas.
@@ -1129,13 +1297,12 @@ def hoja_inputs(wb, meses_fcst_labels):
                 "— ya no distingue plato fuerte de porción. Lo único que varía mes a mes es la CANTIDAD de comidas: lo que ya registra "
                 "el cierre, y para días sin registro (y meses proyectados) se usan las comidas por día de aquí abajo (ver Model → Consumo Familiar).")
     r += 2
-    FAM = dict(comidas_dia=12, valor_comida=15000, dias_proy=26)   # valores por defecto (celdas editables de Inputs)
+    FAM = dict(comidas_dia=12, valor_comida=15000, cr_estimado=500000)   # valores por defecto (celdas editables de Inputs)
     driver_rows["_familia_valores"] = FAM
     entradas = [
         ("fam_comidas_dia", "Comidas de la familia por día", FAM["comidas_dia"], "0"),
         ("fam_valor_comida", "Valor por comida de la familia ($) — estimado fijo", FAM["valor_comida"], FMT_CONTABLE),
-        ("fam_dias_proy", "Días operados por mes en meses proyectados", FAM["dias_proy"], "0"),
-        ("fam_cr_proy", "Consumo familiar de comida rápida proyectado por mes ($)", 0, FMT_CONTABLE),
+        ("fam_cr_proy", "Consumo familiar de comida rápida — estimado mensual ($)", FAM["cr_estimado"], FMT_CONTABLE),
     ]
     for clave, texto, valor, fmt_celda in entradas:
         label(ws, r, texto)
@@ -1151,7 +1318,7 @@ def hoja_inputs(wb, meses_fcst_labels):
 # ══════════════════════════════════════════════════════════════════════
 # HOJA: MODEL
 # ══════════════════════════════════════════════════════════════════════
-def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
+def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows, mes_foco):
     ws = wb.create_sheet("Model")
     ws.sheet_view.showGridLines = False
     ws.column_dimensions["A"].width = 2
@@ -1187,9 +1354,38 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
         cl = get_column_letter(col_ini + i)
         return f"Inputs!{cl}{driver_rows[driver_key]}"
 
+    # ── Días operados — real (histórico) y NETWORKDAYS.INTL (proyectado) ──
+    # "0000001" = solo domingo es no-laborable (sábado SÍ opera, aunque sea
+    # con cierre manual). Reemplaza el viejo input fijo "días operados
+    # proyectados" (26) — ahora varía mes a mes según festivos reales.
+    # Las dos filas de abajo (días CON INGRESO por turno) son históricas
+    # nada más: alimentan el "factor de operación del turno" del período
+    # base (Supuestos del dueño) — un turno que no vende todos los días
+    # (p. ej. comida rápida) no debe proyectarse como si vendiera siempre.
+    fila_dias_operados = 6
+    label(ws, fila_dias_operados, "Días operados del mes")
+    for i in range(n_hist):
+        numero(ws, fila_dias_operados, col_ini + i, int(hist_df.iloc[i]["dias_operados"]))
+    festivos_rango = driver_rows.get("_festivos_rango")
+    for i, c in enumerate(cols_fcst):
+        anio_m, mes_m = (int(x) for x in meses_fcst_labels[i].split("-"))
+        f_festivos = f',"0000001",{festivos_rango}' if festivos_rango else ',"0000001"'
+        numero(ws, fila_dias_operados, c, f"=NETWORKDAYS.INTL(DATE({anio_m},{mes_m},1),EOMONTH(DATE({anio_m},{mes_m},1),0){f_festivos})")
+    fila_dias_alm_ingreso = fila_dias_operados + 1
+    label(ws, fila_dias_alm_ingreso, "· de los cuales, con ingreso de almuerzo (histórico)")
+    for i in range(n_hist):
+        numero(ws, fila_dias_alm_ingreso, col_ini + i, int(hist_df.iloc[i]["dias_alm_operados"]))
+    fila_dias_cena_ingreso = fila_dias_alm_ingreso + 1
+    label(ws, fila_dias_cena_ingreso, "· de los cuales, con ingreso de comida rápida (histórico)")
+    for i in range(n_hist):
+        numero(ws, fila_dias_cena_ingreso, col_ini + i, int(hist_df.iloc[i]["dias_cena_operados"]))
+    assert (fila_dias_operados, fila_dias_alm_ingreso, fila_dias_cena_ingreso) == (
+        FILAS_MODEL_FIJAS["dias_operados"], FILAS_MODEL_FIJAS["dias_alm_ingreso"], FILAS_MODEL_FIJAS["dias_cena_ingreso"]
+    ), "FILAS_MODEL_FIJAS quedó desincronizado con el layout real de hoja_model() — actualízalo."
+
     # ══ ESTADO DE RESULTADOS ═════════════════════════════════════════
-    banner(ws, 8, "Estado de Resultados", col_fin=col_fin)
-    r = 10
+    banner(ws, 10, "Estado de Resultados", col_fin=col_fin)
+    r = 12
     fila_ing_alm = r
     label(ws, r, "Ingresos Almuerzo")
     for i in range(n_hist):
@@ -1256,20 +1452,84 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
         cl = get_column_letter(c)
         numero(ws, r, c, f"={cl}{fila_utilidad_op}", bold=True)
     subtotal_borde(ws, r, col_ini, col_fin)
-    nota(ws, r + 1, "Utilidad neta = utilidad operativa (el modelo aún no separa impuestos formales — ajústalo si aplica).")
+    nota(ws, r + 1, "Utilidad neta = utilidad operativa: el negocio no paga impuestos ni intereses mensuales.")
     r += 3
 
-    # ── proyección: sobrescribe las columnas de pronóstico con fórmulas
-    #    que jalan los drivers de Inputs (mismo mecanismo INDEX+MATCH que
-    #    ya resuelve Mejor/Base/Peor en la propia hoja Inputs) ──────────
+    assert (fila_ing_alm, fila_ing_cena, fila_ingresos, fila_costo_insumos, fila_nomina, fila_arriendo, fila_otros) == (
+        FILAS_MODEL_FIJAS["ing_alm"], FILAS_MODEL_FIJAS["ing_cena"], FILAS_MODEL_FIJAS["ingresos"], FILAS_MODEL_FIJAS["costo_insumos"],
+        FILAS_MODEL_FIJAS["nomina"], FILAS_MODEL_FIJAS["arriendo"], FILAS_MODEL_FIJAS["otros"]
+    ), "FILAS_MODEL_FIJAS quedó desincronizado con el layout real del Estado de Resultados — actualízalo."
+
+    # ══ SUPUESTOS DEL DUEÑO — período base de la proyección ════════════
+    # "Si todo sigue igual, con los datos reales": hasta los 3 últimos
+    # meses reales que terminan en el mes en foco (hoy, con 1 solo mes
+    # real, el período base es ese único mes). De acá sale el ritmo de
+    # ventas por día operado y el ancla de gastos fijos que usa la
+    # proyección de abajo — el costo de insumos % (fórmula, Inputs) también
+    # usa este mismo período base.
+    col_ini_l = get_column_letter(col_ini)
+    idxs_base = periodo_base_meses(hist_df, mes_foco, max_meses=3)
+    col_pb_ini, col_pb_fin = get_column_letter(col_ini + idxs_base[0]), get_column_letter(col_ini + idxs_base[-1])
+    rango_pb = lambda fila: f"{col_pb_ini}{fila}:{col_pb_fin}{fila}" if len(idxs_base) > 1 else f"{col_pb_ini}{fila}"
+    banner(ws, r, "Supuestos del dueño — período base de la proyección", col_fin=col_fin)
+    r += 1
+    nota(ws, r, f"Período base: {', '.join(hist_df.iloc[i]['periodo'] for i in idxs_base)} (hasta los 3 últimos meses reales que terminan en el mes en foco). "
+                "Ingreso por día operado = Σ ingresos del turno ÷ Σ días CON INGRESO de ese turno; factor de operación = Σ días con ingreso ÷ Σ días operados totales "
+                "(vale 1 si el turno opera todos los días). La proyección de abajo multiplica estos dos por el crecimiento y los días operados de cada mes.")
+    r += 2
+    fila_rate_alm = r
+    label(ws, r, "Ingreso por día operado — Almuerzo (período base)")
+    numero(ws, r, col_ini, f"=SUM({rango_pb(fila_ing_alm)})/SUM({rango_pb(fila_dias_alm_ingreso)})")
+    r += 1
+    fila_factor_alm = r
+    label(ws, r, "Factor de operación — Almuerzo (período base)")
+    numero(ws, r, col_ini, f"=SUM({rango_pb(fila_dias_alm_ingreso)})/SUM({rango_pb(fila_dias_operados)})", pct=True)
+    r += 1
+    fila_rate_cena = r
+    label(ws, r, "Ingreso por día operado — Comidas Rápidas (período base)")
+    numero(ws, r, col_ini, f"=SUM({rango_pb(fila_ing_cena)})/SUM({rango_pb(fila_dias_cena_ingreso)})")
+    r += 1
+    fila_factor_cena = r
+    label(ws, r, "Factor de operación — Comidas Rápidas (período base)")
+    numero(ws, r, col_ini, f"=SUM({rango_pb(fila_dias_cena_ingreso)})/SUM({rango_pb(fila_dias_operados)})", pct=True)
+    r += 1
+    fila_gf_nomina = r
+    label(ws, r, "Nómina promedio mensual (período base)")
+    numero(ws, r, col_ini, f"=AVERAGE({rango_pb(fila_nomina)})")
+    r += 1
+    fila_gf_arriendo = r
+    label(ws, r, "Arriendo + Servicios promedio mensual (período base)")
+    numero(ws, r, col_ini, f"=AVERAGE({rango_pb(fila_arriendo)})")
+    r += 1
+    fila_gf_otros = r
+    label(ws, r, "Otros Gastos promedio mensual (período base)")
+    numero(ws, r, col_ini, f"=AVERAGE({rango_pb(fila_otros)})")
+    r += 2
+
+    # ── proyección: ingresos = ritmo del período base × crecimiento^n ×
+    #    días operados proyectados del mes × factor de operación del turno
+    #    (n=1 el primer mes proyectado). Nómina/arriendo/otros arrancan del
+    #    promedio del período base y desde ahí encadenan mes a mes con la
+    #    inflación de Inputs (igual que antes). Costo de insumos sigue
+    #    siendo % de los ingresos de ESE mes (fórmula de Inputs, mismo
+    #    período base). Todo jala los drivers de Inputs (mismo mecanismo
+    #    INDEX+MATCH que ya resuelve Mejor/Base/Peor ahí). ────────────────
     for i, c in enumerate(cols_fcst):
         cl, cl_prev = get_column_letter(c), get_column_letter(c - 1)
-        numero(ws, fila_ing_alm, c, f"={cl_prev}{fila_ing_alm}*(1+{fila_inputs('crecimiento_almuerzo', i)})")
-        numero(ws, fila_ing_cena, c, f"={cl_prev}{fila_ing_cena}*(1+{fila_inputs('crecimiento_cena', i)})")
+        n = i + 1
+        numero(ws, fila_ing_alm, c,
+               f"=${col_ini_l}${fila_rate_alm}*(1+{fila_inputs('crecimiento_almuerzo', i)})^{n}*{cl}{fila_dias_operados}*${col_ini_l}${fila_factor_alm}")
+        numero(ws, fila_ing_cena, c,
+               f"=${col_ini_l}${fila_rate_cena}*(1+{fila_inputs('crecimiento_cena', i)})^{n}*{cl}{fila_dias_operados}*${col_ini_l}${fila_factor_cena}")
         numero(ws, fila_costo_insumos, c, f"=-{cl}{fila_ingresos}*{fila_inputs('costo_insumos_pct', i)}")
-        numero(ws, fila_nomina, c, f"={cl_prev}{fila_nomina}*(1+{fila_inputs('inflacion_gastos', i)})")
-        numero(ws, fila_arriendo, c, f"={cl_prev}{fila_arriendo}*(1+{fila_inputs('inflacion_gastos', i)})")
-        numero(ws, fila_otros, c, f"={cl_prev}{fila_otros}*(1+{fila_inputs('inflacion_gastos', i)})")
+        if i == 0:
+            numero(ws, fila_nomina, c, f"=${col_ini_l}${fila_gf_nomina}*(1+{fila_inputs('inflacion_gastos', i)})")
+            numero(ws, fila_arriendo, c, f"=${col_ini_l}${fila_gf_arriendo}*(1+{fila_inputs('inflacion_gastos', i)})")
+            numero(ws, fila_otros, c, f"=${col_ini_l}${fila_gf_otros}*(1+{fila_inputs('inflacion_gastos', i)})")
+        else:
+            numero(ws, fila_nomina, c, f"={cl_prev}{fila_nomina}*(1+{fila_inputs('inflacion_gastos', i)})")
+            numero(ws, fila_arriendo, c, f"={cl_prev}{fila_arriendo}*(1+{fila_inputs('inflacion_gastos', i)})")
+            numero(ws, fila_otros, c, f"={cl_prev}{fila_otros}*(1+{fila_inputs('inflacion_gastos', i)})")
 
     # ══ REVENUE SCHEDULE ═════════════════════════════════════════════
     r += 1
@@ -1552,7 +1812,8 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows):
         ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst, col_fin,
         dict(ingresos=fila_ingresos, utilidad_neta=fila_utilidad_neta, costo_insumos=fila_costo_insumos,
              nomina=fila_nomina, arriendo=fila_arriendo, otros=fila_otros, tkt_alm=fila_tkt_alm, cost_pct=fila_cost_pct,
-             desech=fila_desech, tkt_pf=filas_rev["almuerzo"]["tkt_pf"], unid_pf=filas_rev["almuerzo"]["unid_pf"]))
+             desech=fila_desech, tkt_pf=filas_rev["almuerzo"]["tkt_pf"], unid_pf=filas_rev["almuerzo"]["unid_pf"],
+             dias_operados=fila_dias_operados))
 
     model_refs = dict(
         fila_ingresos=fila_ingresos, fila_utilidad_bruta=fila_utilidad_bruta,
@@ -1669,9 +1930,10 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
                 numero(ws, filas[clave], c, v, bold=bold, pct=pct_de[clave])
     F = lambda k, cl: f"{cl}{filas[k]}"     # celda de una fila de este bloque
     M = lambda k, cl: f"{cl}{f[k]}"         # celda de una fila del resto del Model
-    # ── OPERACIÓN
-    put("dias_op", lambda i, cl, proy: f"={I('fam_dias_proy')}" if proy else int(h(i, "dias_operados")))
-    put("dias_alm", lambda i, cl, proy: f"={I('fam_dias_proy')}" if proy else int(h(i, "dias_alm_operados")))
+    # ── OPERACIÓN (días operados proyectados: NETWORKDAYS.INTL de más arriba
+    #    en Model, ya no un input fijo — reemplazado en el bloque A de días/festivos)
+    put("dias_op", lambda i, cl, proy: f"={M('dias_operados', cl)}" if proy else int(h(i, "dias_operados")))
+    put("dias_alm", lambda i, cl, proy: f"={M('dias_operados', cl)}" if proy else int(h(i, "dias_alm_operados")))
     # ── ALMUERZO registrado
     put("dias_reg", lambda i, cl, proy: 0 if proy else int(h(i, "dias_con_registro")))
     put("dias_sin", lambda i, cl, proy: f"={F('dias_alm', cl)}-{F('dias_reg', cl)}")
@@ -3882,6 +4144,17 @@ def resolver_mes_foco(mes_arg, hist_df):
     return mes_arg
 
 
+def periodo_base_meses(hist_df, mes_foco, max_meses=3):
+    """Índices (posición 0-based en hist_df) de hasta `max_meses` últimos meses
+    reales que terminan en mes_foco (inclusive) — el período base de "si todo
+    sigue igual" que usa la proyección (Model → Supuestos del dueño): ritmo de
+    ventas por día operado, costo de insumos % y gastos fijos promedio.
+    Con un solo mes real (hoy), el período base es ese único mes."""
+    periodos = list(hist_df["periodo"])
+    idx = periodos.index(mes_foco) if mes_foco in periodos else len(periodos) - 1
+    return list(range(max(0, idx - max_meses + 1), idx + 1))
+
+
 def reportar_ingresos_sin_pedido(hist):
     """Imprime, por mes real, cuánto del ingreso de cierre NO tiene pedido detrás (ajustes manuales y
     cierres manuales) y reporta los meses donde ese monto es negativo (pedidos equivalentes = 0)."""
@@ -3919,6 +4192,16 @@ def reportar_ticket_platos_fuertes(hist):
             print(f"  ⚠ {r['periodo']}: no hubo pedidos de platos fuertes de almuerzo; el ticket informativo arrastra el de {ultimo[0]} ({fmt_pesos(ultimo[1])}).")
         else:
             print(f"  ⚠ {r['periodo']}: no hubo pedidos de platos fuertes de almuerzo y no hay un mes anterior con dato: el ticket informativo queda en $0.")
+
+
+def reportar_festivos(festivos, desde, hasta):
+    """Imprime por consola los festivos (fecha: nombre) entre desde y hasta (AAAA-MM, inclusive) —
+    para validar el calendario que usa NETWORKDAYS.INTL en Model (ver festivos_colombia())."""
+    d0, d1 = pd.Period(desde, freq="M").start_time, pd.Period(hasta, freq="M").end_time
+    en_rango = {f: n for f, n in festivos.items() if d0.date() <= f <= d1.date()}
+    print(f"\nFestivos Colombia {desde} a {hasta} ({len(en_rango)}) — usados por NETWORKDAYS.INTL en Model, tabla editable en Inputs:")
+    for f, n in en_rango.items():
+        print(f"  {f.strftime('%Y-%m-%d')} ({DIAS_SEMANA[f.weekday()]}): {n}")
 
 
 def reportar_meses_pocos_dias(hist, umbral=15):
@@ -3996,6 +4279,10 @@ def main():
     ap.add_argument("--mes", default=None, metavar="AAAA-MM", help=(
         "Mes en foco de los gráficos mensuales (por defecto, el último mes con datos reales)."
     ))
+    ap.add_argument("--inicio", default=MES_INICIO_DATOS_REALES, metavar="AAAA-MM", help=(
+        f"Primer mes de datos reales a considerar (por defecto {MES_INICIO_DATOS_REALES}): "
+        "cualquier fila anterior, en cualquier tabla, se ignora. Solo aplica a datos reales, no a --demo."
+    ))
     ap.add_argument("--salida", default=None, help=(
         "Nombre del archivo generado. Por defecto se arma solo — "
         "ElLobo_Modelo_Financiero_DEMO.xlsx o _REAL.xlsx según el modo — y "
@@ -4016,7 +4303,7 @@ def main():
             print(f"No encuentro el archivo: {archivo}\n"
                   "Pasa la ruta completa del Excel exportado (entre comillas si tiene espacios).")
             sys.exit(1)
-        hist_df, extra, diario = cargar_datos_reales(str(archivo))
+        hist_df, extra, diario = cargar_datos_reales(str(archivo), mes_inicio=args.inicio)
         es_demo = False
 
     # Nombre + carpeta de salida: siempre deja claro si es DEMO o REAL (para
@@ -4042,13 +4329,14 @@ def main():
     reportar_meses_pocos_dias(hist_df)
 
     meses_fcst_labels = etiquetas_proyeccion(hist_df, args.hasta, args.meses_proyeccion)
+    reportar_festivos(festivos_colombia(2026, 2027), "2026-10", "2027-12")
 
     wb = Workbook()
     wb.remove(wb.active)
 
     hoja_cover(wb, len(hist_df), len(meses_fcst_labels), es_demo)
-    ws_inputs, driver_rows = hoja_inputs(wb, meses_fcst_labels)
-    ws_model, model_refs = hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows)
+    ws_inputs, driver_rows = hoja_inputs(wb, hist_df, meses_fcst_labels, mes_foco)
+    ws_model, model_refs = hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows, mes_foco)
     hoja_outputs(wb, model_refs)
 
     # Hojas de apoyo y gráficos nuevos (ctx = todo lo que necesitan para armar sus tablas)
