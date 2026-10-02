@@ -1288,8 +1288,9 @@ def hoja_inputs(wb, hist_df, meses_fcst_labels, mes_foco):
     # ── Consumo familiar (estimado): la familia come sin pagar ────────────
     # Almuerzo: el cierre registra la CANTIDAD de platos (platos_familia); los
     # días sin registro (y los meses proyectados) se estiman con estas celdas.
-    # Comida rápida: se registra VALOR real con los pedidos "Gratis"; solo se
-    # proyecta un valor mensual. Nada de esto suma a los ingresos reales.
+    # Comida rápida: se usa el MÁXIMO entre lo registrado con pedidos "Gratis"
+    # y este estimado mensual (no siempre se anota como Gratis); en meses
+    # proyectados, directo el estimado. Nada de esto suma a los ingresos reales.
     r += 3
     banner(ws, r, "Consumo familiar (estimado)", col_fin=col_fin)
     r += 1
@@ -1851,10 +1852,12 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
       por día de Inputs). UN valor por comida por mes, fijo (ticket único de Inputs, no un blend con
       platos fuertes/porciones): valor del almuerzo = comidas del mes × valor por comida de Inputs.
       Lo único que varía mes a mes es la CANTIDAD de comidas, nunca el precio.
-    COMIDA RÁPIDA: se registra VALOR real, con los pedidos de ubicación "Gratis"
-      (llevan su precio de venta); no se estima nada en meses reales.
+    COMIDA RÁPIDA: valor usado = MÁXIMO(Gratis registrado del mes, estimado mensual de Inputs) — el
+      dueño no siempre anota el consumo familiar de comida rápida como pedido Gratis, así que el
+      estimado es un piso, nunca se cuenta menos de eso. Fila aparte ("· Fuente") marca si ganó lo
+      registrado ("reg.") o el estimado ("est.").
     Meses PROYECTADOS: todo sale de Inputs (días operados × comidas por día × valor por comida;
-      comida rápida = el input proyectado).
+      comida rápida = directo el estimado, no hay nada registrado todavía que comparar).
     El costo de insumos de este consumo es solo informativo: ese costo YA está
     en los egresos (no se resta de nuevo). Los pedidos Gratis NUNCA suman a los
     ingresos reales.
@@ -1884,8 +1887,9 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
         ("val_alm_reg", "Valor registrado a precio de venta (comidas registradas × valor por comida)", False, False),
         ("val_alm_est", "Valor estimado a precio de venta (comidas estimadas × valor por comida)", False, False),
         ("val_alm_tot", "Valor almuerzo a precio de venta (registrado + estimado)", True, False),
-        ("sec_cr", "COMIDA RÁPIDA — pedidos Gratis (valor real)", None, False),
-        ("val_cr", "◆ Valor a precio de venta (real; en meses proyectados = input)", True, False),
+        ("sec_cr", "COMIDA RÁPIDA — MÁXIMO(Gratis registrado, estimado de Inputs)", None, False),
+        ("val_cr", "◆ Valor usado (máximo entre lo registrado y el estimado; en meses proyectados = el estimado)", True, False),
+        ("val_cr_fuente", "· Fuente del valor usado arriba", False, False),
         ("sec_tot", "TOTAL DEL CONSUMO FAMILIAR", None, False),
         ("val_tot", "Valor total a precio de venta", True, False),
         ("costo_fam", "· Costo de insumos del consumo (informativo; YA está en los egresos, no restar)", False, False),
@@ -1951,8 +1955,14 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
     put("val_alm_reg", lambda i, cl, proy: f"={F('platos_reg', cl)}*{F('val_comida', cl)}")
     put("val_alm_est", lambda i, cl, proy: f"={F('platos_est', cl)}*{F('val_comida', cl)}")
     put("val_alm_tot", lambda i, cl, proy: f"={F('val_alm_reg', cl)}+{F('val_alm_est', cl)}", bold=True)
-    # ── COMIDA RÁPIDA y total
-    put("val_cr", lambda i, cl, proy: f"={I('fam_cr_proy')}" if proy else h(i, "valor_cr_registrado"), bold=True)
+    # ── COMIDA RÁPIDA y total — "no se lleva el conteo" (el dueño no siempre
+    #    anota el consumo familiar de comida rápida como pedido Gratis), así
+    #    que el valor usado es el MÁXIMO entre lo registrado y el estimado de
+    #    Inputs — nunca menos que el estimado, y más si de verdad se registró
+    #    más. Proyectado: no hay nada que registrar todavía, así que es
+    #    directo el estimado.
+    put("val_cr", lambda i, cl, proy: f"={I('fam_cr_proy')}" if proy else f"=MAX({h(i, 'valor_cr_registrado')},{I('fam_cr_proy')})", bold=True)
+    put("val_cr_fuente", lambda i, cl, proy: "est." if proy else f'=IF({h(i, "valor_cr_registrado")}>={I("fam_cr_proy")},"reg.","est.")')
     put("val_tot", lambda i, cl, proy: f"={F('val_alm_tot', cl)}+{F('val_cr', cl)}", bold=True)
     put("costo_fam", lambda i, cl, proy: f"={F('val_tot', cl)}*{M('cost_pct', cl)}")
     # ── REAL vs. AJUSTADO
@@ -3800,7 +3810,9 @@ def _nota_familia(ctx, i, previo=""):
     cuerpo = ('"Almuerzo: valor por comida de la familia = $"&FIXED(' + cm(ctx, "val_comida", i)
               + ',0)&" (estimado fijo, editable en Inputs — no es el ticket del Tablero); valor del almuerzo = comidas del mes ("&FIXED(' + cm(ctx, "platos_tot", i) + ',0)&": "&FIXED(' + cm(ctx, "pct_reg", i)
               + '*100,0)&"% de los días con registro real; el resto, "&' + I("fam_comidas_dia") + '&" comidas por día, editable en Inputs) × valor por comida. "'
-              + '&' + _lit("Comida rápida: pedidos Gratis a precio de venta (valor real). Nada de esto suma a los ingresos reales. Fuente: hoja Model — Consumo Familiar (fórmulas)."))
+              + '&"Comida rápida: $"&FIXED(' + cm(ctx, "val_cr", i) + ',0)&" ("&' + cm(ctx, "val_cr_fuente", i)
+              + '&", máximo entre lo registrado con pedidos Gratis y el estimado mensual de Inputs). "'
+              + '&' + _lit("Nada de esto suma a los ingresos reales. Fuente: hoja Model — Consumo Familiar (fórmulas)."))
     return "=" + (_lit(previo) + "&" if previo else "") + cuerpo
 
 
@@ -4376,15 +4388,18 @@ def main():
     platos_est = dias_sin_reg * FAM["comidas_dia"]
     platos_tot = platos_reg + platos_est
     valor_alm_fam = platos_tot * FAM["valor_comida"]
-    valor_cr_fam = float(fila_foco["valor_cr_registrado"])
+    valor_cr_registrado = float(fila_foco["valor_cr_registrado"])
+    valor_cr_fam = max(valor_cr_registrado, FAM["cr_estimado"])
+    fuente_cr = "reg." if valor_cr_registrado >= FAM["cr_estimado"] else "est."
     total_fam = valor_alm_fam + valor_cr_fam
     print(f"Consumo familiar del mes en foco ({mes_foco}):")
     print(f"  comidas por día (Inputs): {fmt_n(FAM['comidas_dia'])} · días sin registro: {dias_sin_reg} de {dias_alm_op} días de almuerzo operados "
           f"({dias_con_reg} con registro real)")
     print(f"  comidas registradas: {fmt_n(platos_reg)} + comidas estimadas: {fmt_n(platos_est)} = comidas totales: {fmt_n(platos_tot)}")
     print(f"  valor por comida de la familia (Inputs, estimado fijo — no es el ticket del Tablero): {fmt_pesos(FAM['valor_comida'])} -> valor del almuerzo familiar: {fmt_pesos(valor_alm_fam)}")
-    print(f"  valor de comida rápida Gratis: {fmt_pesos(valor_cr_fam)}")
+    print(f"  comida rápida: registrado {fmt_pesos(valor_cr_registrado)} vs. estimado {fmt_pesos(FAM['cr_estimado'])} -> usado: {fmt_pesos(valor_cr_fam)} ({fuente_cr})")
     print(f"  total consumo familiar a precio de venta: {fmt_pesos(total_fam)}")
+    print(f"  utilidad ajustada (como si la familia hubiera pagado): {fmt_pesos(float(fila_foco['ingresos_almuerzo'] + fila_foco['ingresos_cena'] - fila_foco['costo_insumos'] - fila_foco['nomina'] - fila_foco['arriendo_servicios'] - fila_foco['otros_gastos']) + total_fam)}")
 
 
 if __name__ == "__main__":
