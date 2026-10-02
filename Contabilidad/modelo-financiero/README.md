@@ -184,7 +184,7 @@ no quede ilegible al imprimir):
 |---|---|
 | 1 — *¿Cómo nos fue en {mes}?* | Las 6 tarjetas del mes en foco (ingreso/gasto/utilidad diaria, punto de equilibrio, ticket, días operados) + Estado de Resultados completo con columna de proyección del mes siguiente y chequeo de cuadre |
 | 2 | #2 — *De cada $100 vendidos, ¿cuánto queda?* (cascada) + #6 — *¿Qué días vendo más?* |
-| 3 — *¿Cuánto cuesta la familia?* | #16 — *¿Cuánto dejo de ganar por el consumo familiar?* (cascada utilidad real → ajustada) + #18 — *Peso del consumo familiar en el tiempo* |
+| 3 — *¿Cuánto cuesta la familia?* | #16 — *¿Cuánto dejo de ganar por el consumo familiar?* (cascada utilidad real → ajustada) + #17 — *Indicadores: reales vs. si la familia pagara* (tabla: margen neto, costo de insumos, desechables, costo primo, utilidad diaria, punto de equilibrio) |
 | 4 — *¿Qué se vende más?* | #8A y #8B — Pareto de almuerzo y de comida rápida |
 
 Cada bloque reutiliza las MISMAS tablas/fórmulas de `Datos_Graficos` que ya arman

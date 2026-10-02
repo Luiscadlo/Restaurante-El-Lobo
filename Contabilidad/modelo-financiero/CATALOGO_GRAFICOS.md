@@ -4,7 +4,7 @@ Referencia numerada de los gráficos que genera `generar_modelo_financiero.py`. 
 (#1–#21) es la que se usa para pedir cambios** ("cambia el #6", "agrega X al #13"). Los gráficos
 viven en hojas propias (`A_Resultado`, `B_Ingresos`, …), después de `Outputs`, y sus tablas de
 apoyo en `Datos_Graficos` (última hoja). `Outputs` es la ÚNICA hoja pensada para exportar a PDF:
-reutiliza una selección de estos gráficos (#2, #6, #8A, #8B, #16, #18) en 4 páginas fijas — ver
+reutiliza una selección de estos gráficos (#2, #6, #8A, #8B, #16, #17) en 4 páginas fijas — ver
 "Outputs — lo que se exporta a PDF" en el `README.md`.
 
 ## Cómo leerlos
@@ -129,7 +129,7 @@ gráficos nuevos: reutiliza, en versión compacta, los que ya existen en sus hoj
 |---|---|---|
 | 1 — "¿Cómo nos fue en {mes}?" | Tarjetas del mes + Estado de Resultados completo | `tabla_tarjetas` (la misma de `A_Resultado`) |
 | 2 | Cascada "de cada $100, cuánto queda" + ingresos por día de la semana | **#2**, **#6** |
-| 3 — "¿Cuánto cuesta la familia?" | Cascada utilidad real → ajustada + consumo familiar por mes | **#16**, **#18** |
+| 3 — "¿Cuánto cuesta la familia?" | Cascada utilidad real → ajustada + tabla de indicadores (margen neto, insumos %, costo primo %, utilidad diaria, punto de equilibrio) | **#16**, **#17** |
 | 4 — "¿Qué se vende más?" | Pareto almuerzo + Pareto comida rápida | **#8A**, **#8B** |
 
 Las hojas de origen (`A_Resultado`, `B_Ingresos`, …) no cambiaron: siguen siendo las hojas de

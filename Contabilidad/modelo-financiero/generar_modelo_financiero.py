@@ -2243,43 +2243,79 @@ def _out_bloque_dia_semana(ws, ctx, fila0):
     return fila + OUTPUTS_FILAS_BLOQUE
 
 
-def _out_bloque_consumo_18(ws, ctx, fila0):
-    dg, mr = ctx["dg"], ctx["mr"]
-    labels, n_hist, i = mr["labels_periodo"], mr["n_hist"], ctx["i"]
-    desde = max(0, i - 5)
-    hasta = min(len(labels) - 1, i + 1) if i + 1 < len(labels) else i
-    idxs = list(range(desde, hasta + 1))
-    titulo = "Peso del consumo familiar en el tiempo"
+def _out_bloque_indicadores_17(ws, ctx, fila0):
+    """Tabla compacta de #17 (reales vs. si la familia pagara) — MISMAS
+    fórmulas que grafico_17 (F_Familia), una sola columna por campo en vez
+    de encabezados fusionados a 2 columnas, para caber en el ancho de
+    Outputs (B..M, más angosto que B..N de F_Familia)."""
+    i = ctx["i"]
+    tiene_ant, tiene_plan = i > 0, hay_plan(ctx)
+    P = lambda k: cplan(ctx, k)
+    dias = cm(ctx, "dias_op", i)
+    plan_f = None
+    if tiene_plan:
+        plan_ing, plan_ut = P("ingresos"), P("utilidad")
+        plan_f = {
+            "mg": f"IF({plan_ing}=0,0,{plan_ut}/{plan_ing})",
+            "ins": f"IF({plan_ing}=0,0,{P('insumos')}/{plan_ing})",
+            "primo": f"IF({plan_ing}=0,0,({P('insumos')}+{P('nomina')})/{plan_ing})",
+            "util": f"IF({dias}=0,0,{plan_ut}/{dias})",
+            "pe": f"IF(OR({dias}=0,{plan_ing}=0,{P('insumos')}/{plan_ing}>=1),0,({P('nomina')}+{P('arriendo')}+{P('otros')})/(1-{P('insumos')}/{plan_ing})/{dias})",
+        }
+    filas_def = [("Margen neto", "mg_real", "mg_aj", "pct", True, "mg"),
+                 ("Costo de insumos (% de ventas)", "ins_real", "ins_aj", "pct", False, "ins"),
+                 ("· Desechables (% de ventas)", "des_real", "des_aj", "pct", False, None),
+                 ("Costo primo (% de ventas)", "primo_real", "primo_aj", "pct", False, "primo"),
+                 ("Utilidad diaria promedio", "util_dia_real", "util_dia_aj", "money", True, "util"),
+                 ("Punto de equilibrio diario", "pe_real", "pe_aj", "money", False, "pe")]
+
+    titulo = "Indicadores: reales vs. si la familia pagara"
     fila = _out_titulo(ws, fila0, titulo)
-    r0 = dg.seccion("#18 (Outputs) — Consumo familiar a precio de venta, por mes ($ M)",
-                     "FÓRMULAS hacia Model (Consumo Familiar). Últimos 6 meses reales + el mes siguiente proyectado (si existe).")
-    ws_d = dg.ws
-    label(ws_d, r0, "Mes", bold=True)
-    for k, ix in enumerate(idxs):
-        c = dg.col(k)
-        proy = ix >= n_hist
-        etiqueta = etiqueta_mes(labels[ix]) + (" (proy.)" if proy else "")
-        ws_d.cell(row=r0, column=c, value=etiqueta).font = Font(bold=True, size=9)
-        numero(ws_d, r0 + 1, c, f"={cm(ctx, 'val_alm_tot', ix)}/1000000").number_format = "#,##0.00"
-        numero(ws_d, r0 + 2, c, f"={cm(ctx, 'val_cr', ix)}/1000000").number_format = "#,##0.00"
-    label(ws_d, r0 + 1, "Almuerzo ($ M)"); label(ws_d, r0 + 2, "Comida rápida ($ M)")
-    dg.cerrar(r0 + 2)
-    L_foco = get_column_letter(dg.col(i - desde))
-    sub_f = (f'="En {ctx["nombre_mes"]} el consumo familiar a precio de venta fue "&FIXED(Datos_Graficos!{L_foco}{r0 + 1}+Datos_Graficos!{L_foco}{r0 + 2},1)&" M '
-             f'("&Datos_Graficos!{L_foco}{r0}&")."')
-    fila = _out_lectura(ws, fila, sub_f, filas_alto=2)
-    c1, c2 = dg.col(0), dg.col(len(idxs) - 1)
-    cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=r0)
-    bar = nuevo_bar(apilado=True, ancho_gap=45)
-    s1 = serie_fila(ws_d, r0 + 1, c1, c2, "Almuerzo"); color_serie(s1, PALETA["almuerzo"])
-    s2 = serie_fila(ws_d, r0 + 2, c1, c2, "Comida rápida"); color_serie(s2, PALETA["comida_rapida"])
-    bar.series += [s1, s2]
-    bar.set_categories(cats)
-    ejes(bar, x_titulo="Mes", y_titulo="$ millones", y_fmt="#,##0.0", y_min=0, rot_x=-45)
-    leyenda(bar, "b")
-    tamano(bar, ancho=OUTPUTS_ANCHO_CHART, alto=OUTPUTS_ALTO_CHICO)
-    ws.add_chart(bar, f"B{fila}")
-    return fila + OUTPUTS_FILAS_BLOQUE
+    hallazgo = (f'="Con el consumo familiar a precio de venta, el margen neto pasa de "&FIXED({cm(ctx, "mg_real", i)}*100,1)&"% a "'
+                f'&FIXED({cm(ctx, "mg_aj", i)}*100,1)&"% y el punto de equilibrio diario de $"&FIXED({cm(ctx, "pe_real", i)},0)&" a $"'
+                f'&FIXED({cm(ctx, "pe_aj", i)},0)&"."')
+    fila = _out_lectura(ws, fila, hallazgo, filas_alto=2)
+
+    encabezados = ["Indicador", "Real", "Ajustado", "Diferencia", "vs. mes anterior", "vs. Plan"]
+    cols = [2, 3, 4, 5, 6, 7]
+    cab = fila
+    for col, enc in zip(cols, encabezados):
+        c = ws.cell(row=cab, column=col, value=enc)
+        c.font = FONT_LABEL_B
+        c.alignment = Alignment(horizontal="left" if col == 2 else "center")
+    fila += 1
+    for nombre, k_real, k_aj, tipo, fav_sube, k_plan in filas_def:
+        real, aj = cm(ctx, k_real, i), cm(ctx, k_aj, i)
+        prev = cm(ctx, k_real, i - 1) if tiene_ant else None
+        if tipo == "pct":
+            f_dif = f"=({aj}-{real})*100"
+            fmt_val, fmt_dif = "0.0%", '+0.0" pp";-0.0" pp";0.0" pp"'
+            f_ant = f'=IF({real}>={prev},"▲ ","▼ ")&FIXED(ABS({real}-{prev})*100,1)&" pp"' if prev else '="—"'
+            f_pl = f'=IF({real}>={plan_f[k_plan]},"▲ ","▼ ")&FIXED(ABS({real}-{plan_f[k_plan]})*100,1)&" pp"' if (plan_f and k_plan) else '="—"'
+        else:
+            f_dif = f"={aj}-{real}"
+            fmt_val, fmt_dif = "$ #,##0", '+$ #,##0;-$ #,##0;$ 0'
+            f_ant = f'=IF(OR({prev}=0),"—",IF({real}>={prev},"▲ ","▼ ")&FIXED(ABS({real}/{prev}-1)*100,1)&"%")' if prev else '="—"'
+            f_pl = f'=IF({plan_f[k_plan]}=0,"—",IF({real}>={plan_f[k_plan]},"▲ ","▼ ")&FIXED(ABS({real}/{plan_f[k_plan]}-1)*100,1)&"%")' if (plan_f and k_plan) else '="—"'
+        valores = [nombre, f"={real}", f"={aj}", f_dif, f_ant, f_pl]
+        for col, v in zip(cols, valores):
+            c = ws.cell(row=fila, column=col, value=v)
+            c.alignment = Alignment(horizontal="left" if col == 2 else "center")
+            c.font = Font(name="Calibri", size=10, bold=(col in (2, 4)), color=PALETA["neutro_oscuro"])
+            if col in (3, 4):
+                c.number_format = fmt_val
+            elif col == 5:
+                c.number_format = fmt_dif
+        bien, mal = PALETA["utilidad"], PALETA["alerta"]
+        sube_c, baja_c = (bien, mal) if fav_sube else (mal, bien)
+        for col in (6, 7):
+            L = get_column_letter(col)
+            ws.conditional_formatting.add(f"{L}{fila}", FormulaRule(formula=[f'LEFT({L}{fila},1)="▲"'], font=Font(color=sube_c, bold=True)))
+            ws.conditional_formatting.add(f"{L}{fila}", FormulaRule(formula=[f'LEFT({L}{fila},1)="▼"'], font=Font(color=baja_c, bold=True)))
+        fila += 1
+    if not tiene_plan:
+        fila = _out_lectura(ws, fila, "Sin Plan para este mes: la columna 'vs. Plan' queda en —.", filas_alto=1)
+    return fila + 1
 
 
 def _out_bloque_pareto(ws, ctx, fila0, titulo_pagina):
@@ -2348,7 +2384,7 @@ def _out_pagina3_familia16(ws, ctx, fila0):
 # ══════════════════════════════════════════════════════════════════════
 def hoja_outputs(wb, ctx):
     """4 páginas horizontales fijas: (1) Tarjetas + Estado de Resultados,
-    (2) #2 Cascada + #6 Día de la semana, (3) #16 + #18 Consumo familiar,
+    (2) #2 Cascada + #6 Día de la semana, (3) #16 Cascada + #17 Indicadores,
     (4) #8A + #8B Pareto de ventas. Reutiliza las MISMAS tablas de
     Datos_Graficos que ya usan A_Resultado/G_Extras/F_Familia/B_Ingresos
     (tarjetas) o arma unas nuevas con la MISMA fórmula (cascada/pareto/día
@@ -2382,17 +2418,17 @@ def hoja_outputs(wb, ctx):
     fila3_0 = _out_encabezado_pagina(ws, fila3_0, ctx)
     fila3_0 = _out_titulo(ws, fila3_0, "¿Cuánto cuesta la familia?") + 1
     f_16 = _out_pagina3_familia16(ws, ctx, fila3_0)
-    f_18 = _out_bloque_consumo_18(ws, ctx, f_16)
-    saltos.append(f_18)
+    f_17 = _out_bloque_indicadores_17(ws, ctx, f_16)
+    saltos.append(f_17)
 
-    fila4_0 = f_18 + 1
+    fila4_0 = f_17 + 1
     fila4_0 = _out_encabezado_pagina(ws, fila4_0, ctx)
     f_pareto = _out_bloque_pareto(ws, ctx, fila4_0, "¿Qué se vende más?")
     saltos.append(f_pareto)
 
     if os.environ.get("OUTPUTS_DEBUG"):
         print("DEBUG filas:", dict(fila=fila, fila2_0=fila2_0, f_cascada=f_cascada, f_dia=f_dia,
-                                    fila3_0=fila3_0, f_16=f_16, f_18=f_18, fila4_0=fila4_0, f_pareto=f_pareto, saltos=saltos))
+                                    fila3_0=fila3_0, f_16=f_16, f_17=f_17, fila4_0=fila4_0, f_pareto=f_pareto, saltos=saltos))
 
     for s in saltos[:-1]:
         _out_salto(ws, s)
