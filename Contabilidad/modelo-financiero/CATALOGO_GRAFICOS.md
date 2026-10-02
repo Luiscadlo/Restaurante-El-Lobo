@@ -2,8 +2,10 @@
 
 Referencia numerada de los gráficos que genera `generar_modelo_financiero.py`. **La numeración
 (#1–#21) es la que se usa para pedir cambios** ("cambia el #6", "agrega X al #13"). Los gráficos
-nuevos viven en hojas propias, después de `Outputs`, y sus tablas de apoyo en `Datos_Graficos`
-(última hoja).
+viven en hojas propias (`A_Resultado`, `B_Ingresos`, …), después de `Outputs`, y sus tablas de
+apoyo en `Datos_Graficos` (última hoja). `Outputs` es la ÚNICA hoja pensada para exportar a PDF:
+reutiliza una selección de estos gráficos (#2, #6, #8A, #8B, #16, #18) en 4 páginas fijas — ver
+"Outputs — lo que se exporta a PDF" en el `README.md`.
 
 ## Cómo leerlos
 
@@ -114,22 +116,30 @@ Notas por gráfico:
 - **#19** Canal: Domicilio, Para llevar / sin mesa, Mesa; "Otro" = sin ubicación (p. ej. fiados). Efectivo/transferencia según el reparto real de cada pedido.
 - **#21** Es un snapshot: el sistema solo guarda los fiados pendientes de hoy; monto bruto del pedido (el saldo de Cuentas por Cobrar del Balance descuenta abonos).
 
-## Qué gráficos de `Outputs` quedan superados
+## `Outputs`: la hoja para exportar a PDF
 
-`Outputs` **no se modifica ni se elimina nada** todavía; estos gráficos viejos quedan superados por los nuevos:
+El Dashboard viejo (5 gráficos genéricos de 16 meses: Ingresos vs. Utilidad Neta, Margen
+Operativo, ¿En qué se va la plata?, Composición de Ingresos por Turno, Costo de Insumos % de
+Ingresos) **se borró por completo**. `Outputs` se reconstruyó desde cero como 4 páginas
+horizontales fijas, pensadas para imprimir/exportar a PDF (área de impresión Carta, escala fija,
+saltos de página manuales — ver "Outputs — lo que se exporta a PDF" en el `README.md`). No agrega
+gráficos nuevos: reutiliza, en versión compacta, los que ya existen en sus hojas de origen.
 
-| Gráfico de `Outputs` | Lo supera | Por qué |
+| Página de `Outputs` | Contenido | Gráficos/tablas reutilizados |
 |---|---|---|
-| Gráf. 1 — Ingresos vs. Utilidad Neta por mes | **#3** | Mismo dato mensual, con egresos, margen y distinción real/proyectado |
-| Gráf. 2 — Margen Operativo por mes | **#3** | El margen va como línea en #3 |
-| Gráf. 3 — ¿En qué se va la plata? (histórico acumulado) | **#10** | #10 lo hace del mes en foco, con % de los ingresos |
-| Gráf. 4 — Composición de Ingresos por Turno | **#5** | El gráf. 4 rotula "Almuerzo" pero **incluye el desayuno**; #5 separa Desayuno / Almuerzo (neto) / Comida rápida |
-| Gráf. 5 — Costo de Insumos % de Ingresos | **#11** | #11 muestra insumos % junto al resto de la estructura de costos |
+| 1 — "¿Cómo nos fue en {mes}?" | Tarjetas del mes + Estado de Resultados completo | `tabla_tarjetas` (la misma de `A_Resultado`) |
+| 2 | Cascada "de cada $100, cuánto queda" + ingresos por día de la semana | **#2**, **#6** |
+| 3 — "¿Cuánto cuesta la familia?" | Cascada utilidad real → ajustada + consumo familiar por mes | **#16**, **#18** |
+| 4 — "¿Qué se vende más?" | Pareto almuerzo + Pareto comida rápida | **#8A**, **#8B** |
+
+Las hojas de origen (`A_Resultado`, `B_Ingresos`, …) no cambiaron: siguen siendo las hojas de
+trabajo completas, con todos los gráficos #1–#21 y su paginación normal.
 
 ## Hojas y datos
 
 | Hoja | Contenido |
 |---|---|
+| `Outputs` | 4 páginas fijas para PDF — ver tabla arriba |
 | `A_Resultado` | Tarjetas + #1, #2, #3, #4 y #12 (Bloque D) |
 | `B_Ingresos` | #5 a #9 |
 | `C_Egresos` | #10 y #11 |

@@ -1085,8 +1085,8 @@ def hoja_cover(wb, n_hist, n_fcst, es_demo):
     ws["C8"] = "Contenido"
     ws["C8"].font = FONT_BANNER
     hojas = [
-        ("Outputs", "KPIs clave, gráficos y resumen ejecutivo"),
-        ("Inputs", "Supuestos y escenarios (Mejor / Base / Peor)"),
+        ("Outputs", "Resumen para presentación (se exporta a PDF) — 4 páginas fijas"),
+        ("Inputs", "Supuestos del dueño (editables) y escenarios (Mejor / Base / Peor)"),
         ("Model", "Estado de Resultados, Balance General y Flujo de Caja"),
     ]
     r = 10
@@ -1124,7 +1124,7 @@ def hoja_cover(wb, n_hist, n_fcst, es_demo):
     ws.cell(row=r, column=3, value="Estado de las 3 secciones del modelo").font = FONT_BANNER
     r += 2
     for nombre, est in [
-        ("Estado de Resultados", "✅ Completo — histórico real + proyección con escenarios"),
+        ("Estado de Resultados", "✅ Completo — histórico real + proyección con supuestos del dueño (editables en Inputs)"),
         ("Balance General", "🟠 Estructura lista — completar activos/pasivos que el sistema aún no registra"),
         ("Flujo de Caja", "🟠 Estructura lista — histórico real, proyección simplificada"),
     ]:
