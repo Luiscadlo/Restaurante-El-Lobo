@@ -51,6 +51,7 @@ Requiere: pip install openpyxl pandas
 """
 
 import math
+import os
 import re
 import sys
 import argparse
@@ -1433,6 +1434,13 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows, mes_foco):
     for i in range(n_hist):
         numero(ws, r, col_ini + i, -float(hist_df.iloc[i]["otros_gastos"]))
     r += 1
+    fila_total_gastos_op = r
+    label(ws, r, "Total Gastos Operativos", bold=True)
+    for c in range(col_ini, col_fin + 1):
+        cl = get_column_letter(c)
+        numero(ws, r, c, f"=SUM({cl}{fila_nomina}:{cl}{fila_otros})", bold=True)
+    subtotal_borde(ws, r, col_ini, col_fin)
+    r += 1
     fila_utilidad_op = r
     label(ws, r, "Utilidad Operativa (EBITDA)", bold=True)
     for c in range(col_ini, col_fin + 1):
@@ -1453,6 +1461,12 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows, mes_foco):
         cl = get_column_letter(c)
         numero(ws, r, c, f"={cl}{fila_utilidad_op}", bold=True)
     subtotal_borde(ws, r, col_ini, col_fin)
+    r += 1
+    fila_margen_neto = r
+    label(ws, r, "Margen Neto")
+    for c in range(col_ini, col_fin + 1):
+        cl = get_column_letter(c)
+        numero(ws, r, c, f"={cl}{fila_utilidad_neta}/{cl}{fila_ingresos}", pct=True)
     nota(ws, r + 1, "Utilidad neta = utilidad operativa: el negocio no paga impuestos ni intereses mensuales.")
     r += 3
 
@@ -1834,6 +1848,8 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows, mes_foco):
         fila_sin_aj_alm=filas_rev["almuerzo"]["sin_aj"], fila_sin_man_alm=filas_rev["almuerzo"]["sin_man"], fila_sin_dif_alm=filas_rev["almuerzo"]["sin_dif"],
         fila_sin_aj_cena=filas_rev["cena"]["sin_aj"], fila_sin_man_cena=filas_rev["cena"]["sin_man"], fila_sin_dif_cena=filas_rev["cena"]["sin_dif"],
         fila_desechables=fila_desech, fila_desech_pct=fila_desech_pct, fila_ins_prov=fila_ins_prov,
+        fila_total_gastos_op=fila_total_gastos_op, fila_margen_neto=fila_margen_neto,
+        fila_dias_operados=fila_dias_operados,
     )
     config_impresion(ws, horizontal=True)
     return ws, model_refs
@@ -1992,181 +2008,410 @@ def bloque_consumo_familiar(ws, r, hist_df, driver_rows, col_ini, n_hist, n_fcst
     return filas
 
 
+# ── Área de impresión de Outputs: Carta horizontal, 0.5" de margen por lado
+# → 10 x 7.5" útiles. Sin fitToPage (los saltos de página son manuales, y
+# Excel los ignora si hay fitToPage activo) — escala fija en cambio.
+OUTPUTS_ESCALA = 64          # % — calibrado a ojo con el PDF exportado
+OUTPUTS_COLS = list(range(2, 14))   # B..M (12 columnas)
+OUTPUTS_COL_FIN = get_column_letter(OUTPUTS_COLS[-1])
+OUTPUTS_ANCHO_CHART = 23     # cm — ancho de cada gráfico chico (título + lectura + gráfico)
+OUTPUTS_ALTO_CHICO = 8.0     # cm — alto de cada gráfico chico (2 por página, apilados)
+OUTPUTS_FILAS_BLOQUE = 21    # filas que ocupa título + lectura + gráfico chico (a 15pt/fila ≈ el alto de arriba)
+
+
+def _out_fuente_header():
+    return Font(name="Calibri", size=9, italic=True, color=GRIS_NOTA)
+
+
+def _out_titulo(ws, fila, texto):
+    """Título de un bloque de Outputs — devuelve la fila SIGUIENTE libre (no la celda)."""
+    ws.merge_cells(f"B{fila}:{OUTPUTS_COL_FIN}{fila}")
+    c = ws.cell(row=fila, column=2, value=texto)
+    c.font = Font(name="Calibri", size=14, bold=True, color=PALETA["neutro_oscuro"])
+    ws.row_dimensions[fila].height = 20
+    return fila + 1
+
+
+def _out_lectura(ws, fila, formula_o_texto, filas_alto=2):
+    """Escribe la línea 'Lectura' (título ya puesto aparte) y devuelve la
+    fila SIGUIENTE libre (no la celda) — así se encadena directo: fila =
+    _out_lectura(ws, fila, texto)."""
+    ws.merge_cells(f"B{fila}:{OUTPUTS_COL_FIN}{fila}")
+    c = ws.cell(row=fila, column=2, value=formula_o_texto)
+    c.font = Font(name="Calibri", size=10, color=PALETA["neutro_oscuro"])
+    c.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.row_dimensions[fila].height = 14 * filas_alto
+    return fila + 1
+
+
+def _out_encabezado_pagina(ws, fila, ctx):
+    """'Restaurante El Lobo — {mes}' + 'Cifras en pesos colombianos', en cada página."""
+    ws.merge_cells(f"B{fila}:G{fila}")
+    c = ws.cell(row=fila, column=2, value=f"Restaurante El Lobo — {ctx['nombre_mes'].capitalize()}")
+    c.font = Font(name="Calibri", size=11, bold=True, color=PALETA["ingresos"])
+    ws.merge_cells(f"H{fila}:{OUTPUTS_COL_FIN}{fila}")
+    c2 = ws.cell(row=fila, column=8, value="Cifras en pesos colombianos")
+    c2.font = _out_fuente_header()
+    c2.alignment = Alignment(horizontal="right")
+    ws.row_dimensions[fila].height = 16
+    return fila + 2
+
+
+def _out_salto(ws, fila_ultima):
+    """Salto de página manual al final de un bloque — NO se usa junto con fitToPage."""
+    ws.row_breaks.append(Break(id=fila_ultima))
+
+
 # ══════════════════════════════════════════════════════════════════════
-# HOJA: OUTPUTS
+# OUTPUTS — Página 1: "¿Cómo nos fue en {mes}?" (tarjetas + Estado de Resultados)
 # ══════════════════════════════════════════════════════════════════════
-def hoja_outputs(wb, model_refs):
+def _out_pagina1(ws, ctx, fila0):
+    dg, mr, i = ctx["dg"], ctx["mr"], ctx["i"]
+    hist = ctx["hist"]
+    tiene_ant = i > 0
+    fila = _out_encabezado_pagina(ws, fila0, ctx)
+    fila = _out_titulo(ws, fila, f"¿Cómo nos fue en {ctx['nombre_mes']}?")
+    fila += 1
+
+    # ── #1 Tarjetas del mes en foco (NO el gráfico de barras — la tabla) ──
+    T = dg.refs["tarjetas"]["filas"]
+    dgc = lambda clave, col: f"Datos_Graficos!{col}{T[clave]}"
+    tiles = [
+        ("INGRESO DIARIO PROMEDIO", "ingreso", True, True), ("GASTO DIARIO PROMEDIO", "gasto", False, True), ("UTILIDAD DIARIA PROMEDIO", "utilidad", True, True),
+        ("PUNTO DE EQUILIBRIO DIARIO", "pe", False, False), ("TICKET PROMEDIO ALMUERZO", "ticket", True, False), ("DÍAS OPERADOS", "dias", True, False),
+    ]
+    fila_tiles = fila
+    for k, (titulo, clave, fav_sube, con_plan) in enumerate(tiles):
+        f = fila_tiles + (k // 3) * 6
+        col = 2 + (k % 3) * 4
+        tarjeta(ws, f, col, titulo, f"={dgc(clave, 'C')}", "$ #,##0" if clave != "dias" else "0",
+                f_var_texto(dgc(clave, "F"), "mes anterior"), f_var_texto(dgc(clave, "G"), "Plan"),
+                fav_sube=fav_sube, con_plan=con_plan and hay_plan(ctx))
+    fila = fila_tiles + 6 + 6 + 1  # 2 filas de tarjetas (5 altas + 1 de aire) + 1 de separación
+
+    # ── Estado de Resultados ───────────────────────────────────────────
+    fila = _out_titulo(ws, fila, "Estado de Resultados")
+    fila += 1
+    hay_sig = i + 1 < len(mr["labels_periodo"])
+    cl_foco = get_column_letter(mr["col_ini"] + i)
+    cl_ant = get_column_letter(mr["col_ini"] + i - 1) if tiene_ant else None
+    cl_sig = get_column_letter(mr["col_ini"] + i + 1) if hay_sig else None
+    # Columnas: Concepto | [Mes anterior] | Mes en foco | [Cambio] | % Ingresos | [Proyección]
+    # Sin mes anterior, esas 2 columnas quedan en blanco (no hay con qué comparar)
+    # en vez de celdas con fórmula — mismo efecto visual que "ocultas", sin
+    # tocar columnas que la sección de tarjetas de arriba también usa.
+    encabezados = ["Concepto", "Mes anterior", "Mes en foco", "Cambio ($ y %)", "% Ingresos", "Proyección mes siguiente"]
+    cols_tabla = ["B", "C", "D", "E", "F", "G"]
+    for col, enc in zip(cols_tabla, encabezados):
+        c = ws.cell(row=fila, column=ws[col + "1"].column, value=enc)
+        c.font = FONT_LABEL_B
+    fila += 1
+    f_ing = mr["fila_ingresos"]
+    filas_er = [
+        ("Ingresos Almuerzo", "fila_ing_alm", False, False),
+        ("· de los cuales, desayuno (informativo)", "fila_desayuno", False, True),
+        ("Ingresos Comidas Rápidas", "fila_ing_cena", False, False),
+        ("INGRESOS TOTALES", "fila_ingresos", True, False),
+        ("(−) Insumos de proveedores", "fila_ins_prov", False, False),
+        ("(−) Desechables", "fila_desechables", False, False),
+        ("(−) COSTO DE INSUMOS", "fila_costo_insumos", True, False),
+        ("UTILIDAD BRUTA", "fila_utilidad_bruta", True, False),
+        ("(−) Nómina", "fila_nomina", False, False),
+        ("(−) Arriendo + Servicios", "fila_arriendo", False, False),
+        ("(−) Otros gastos", "fila_otros", False, False),
+        ("TOTAL GASTOS OPERATIVOS", "fila_total_gastos_op", True, False),
+        ("UTILIDAD OPERATIVA (EBITDA)", "fila_utilidad_op", True, False),
+        ("Margen Operativo", "fila_margen_op", False, False),
+        ("UTILIDAD NETA", "fila_utilidad_neta", True, False),
+        ("Margen Neto", "fila_margen_neto", False, False),
+    ]
+    # Filas que Model guarda en NEGATIVO (costos/gastos) — acá se muestran en
+    # POSITIVO porque la etiqueta ya lleva el "(−)". "fila_ins_prov" y
+    # "fila_desechables" son sub-componentes de costo_insumos que Model YA
+    # guarda en positivo (ver Cost Schedule), así que no se vuelven a negar.
+    NEGATIVAS_EN_MODEL = {"fila_costo_insumos", "fila_nomina", "fila_arriendo", "fila_otros", "fila_total_gastos_op"}
+    for nombre, clave, negrita, indent in filas_er:
+        label(ws, fila, nombre, bold=negrita, indent=1 if indent else 0)
+        fm = mr[clave]
+        es_pct = clave in ("fila_margen_op", "fila_margen_neto")
+        signo = "-" if clave in NEGATIVAS_EN_MODEL else ""
+        if tiene_ant:
+            numero(ws, fila, 3, f"={signo}Model!{cl_ant}{fm}", bold=negrita, pct=es_pct)
+        numero(ws, fila, 4, f"={signo}Model!{cl_foco}{fm}", bold=negrita, pct=es_pct)
+        if tiene_ant and not es_pct:
+            # FIXED() y no TEXT(...,"0.0"): bajo configuración regional es-CO,
+            # TEXT con formato con punto decimal no respeta el separador y
+            # muestra enteros raros (ver f_var_texto/f_mill, mismo patrón).
+            numero(ws, fila, 5,
+                   f'=IF(C{fila}=0,"",IF(D{fila}>=C{fila},"+","−")&FIXED(ABS(D{fila}-C{fila}),0)&" ("&IF(D{fila}>=C{fila},"+","−")&FIXED(ABS(IF(C{fila}=0,0,D{fila}/C{fila}-1))*100,0)&"%)")')
+            ws.cell(row=fila, column=5).font = Font(name="Calibri", size=10)
+            ws.conditional_formatting.add(f"E{fila}", FormulaRule(formula=[f'LEFT(E{fila},1)="+"'], font=Font(color=PALETA["utilidad"])))
+            ws.conditional_formatting.add(f"E{fila}", FormulaRule(formula=[f'LEFT(E{fila},1)="−"'], font=Font(color=PALETA["alerta"])))
+        if not es_pct:
+            numero(ws, fila, 6, f"=IF(Model!{cl_foco}{f_ing}=0,0,{signo}Model!{cl_foco}{fm}/Model!{cl_foco}{f_ing})", pct=True)
+        if hay_sig:
+            numero(ws, fila, 7, f"={signo}Model!{cl_sig}{fm}", pct=es_pct)
+        fila += 1
+
+    # ── Chequeo de cuadre: suma de líneas = total (Ingresos − Costo Insumos
+    # − Total Gastos Operativos debe dar exactamente Utilidad Neta) ───────
+    fila += 1
+    label(ws, fila, "Chequeo de cuadre (debe ser 0)")
+    numero(ws, fila, 4, f'=ROUND(Model!{cl_foco}{mr["fila_ingresos"]}+Model!{cl_foco}{mr["fila_costo_insumos"]}+'
+                         f'Model!{cl_foco}{mr["fila_total_gastos_op"]}-Model!{cl_foco}{mr["fila_utilidad_neta"]},0)')
+    ws.cell(row=fila, column=4).font = Font(italic=True, size=9, color=GRIS_NOTA)
+    fila += 2
+
+    # ── Supuestos de la proyección del mes siguiente (fórmulas) ──────────
+    # Solo tiene sentido si el mes siguiente es de verdad PROYECTADO (no otro
+    # mes real) — ahí sí existe una columna de Inputs con los supuestos.
+    proy_sig = hay_sig and (i + 1) >= mr["n_hist"]
+    if proy_sig:
+        idx_proy = (i + 1) - mr["n_hist"]
+        cl_inputs_sig = get_column_letter(mr["col_ini"] + idx_proy)
+        dr = ctx["dr"]
+        lbl_sig = mr["labels_periodo"][i + 1]
+        # FIXED() y no TEXT(...,"0.0"): bajo configuración regional es-CO,
+        # TEXT con formato de punto decimal no lo respeta (ver f_mill/f_var_texto).
+        formula_sup = (
+            f'="Proyección de {etiqueta_mes(lbl_sig, corto=False)}: ingresos por día +"&FIXED(Inputs!{cl_inputs_sig}${dr["crecimiento_almuerzo"]}*100,1)&"% sobre {ctx["nombre_mes"]} (almuerzo) y "'
+            f'&FIXED(Inputs!{cl_inputs_sig}${dr["crecimiento_cena"]}*100,1)&"% (comida rápida), "&Model!{cl_sig}{mr["fila_dias_operados"]}&" días de atención (sin domingos ni festivos); '
+            f'insumos "&FIXED(Inputs!{cl_inputs_sig}${dr["costo_insumos_pct"]}*100,1)&"% de los ingresos (igual que el real); gastos fijos iguales (inflación "&FIXED(Inputs!{cl_inputs_sig}${dr["inflacion_gastos"]}*100,1)&"%)."'
+        )
+        fila = _out_lectura(ws, fila, formula_sup, filas_alto=2)
+    aviso = aviso_dias(ctx) if tiene_ant else ""
+    if aviso:
+        fila = _out_lectura(ws, fila, aviso.strip(), filas_alto=1)
+    return fila + 1
+
+
+# ══════════════════════════════════════════════════════════════════════
+# OUTPUTS — bloques de media página reutilizables (cascada, pareto, etc.)
+# ══════════════════════════════════════════════════════════════════════
+def _out_bloque_cascada(ws, ctx, fila0, titulo, subtitulo, pasos, colores, nota_txt, dec=1, filas_lectura=2):
+    dg = ctx["dg"]
+    fila = _out_titulo(ws, fila0, titulo)
+    fila = _out_lectura(ws, fila, subtitulo, filas_alto=filas_lectura)
+    a, b = tabla_cascada(dg, titulo, nota_txt, pasos, dec=dec)
+    dg.cerrar(b)
+    ch = grafico_cascada(ws, dg, a, b, colores, y_fmt="#,##0.0")
+    tamano(ch, ancho=OUTPUTS_ANCHO_CHART, alto=OUTPUTS_ALTO_CHICO)
+    ejes(ch, y_titulo="$ millones", y_fmt="#,##0.0")
+    ws.add_chart(ch, f"B{fila}")
+    return fila + OUTPUTS_FILAS_BLOQUE + (filas_lectura - 2)
+
+
+def _out_bloque_dia_semana(ws, ctx, fila0):
+    dg = ctx["dg"]
+    op = ctx["op_m"]
+    dows = dias_semana_presentes(op)
+    prom_mes = {d: float(op[op.index.dayofweek == d]["total"].mean()) / 1000 for d in dows}
+    n_dias = {d: int((op.index.dayofweek == d).sum()) for d in dows}
+    prom_general = float(op["total"].mean()) / 1000 if len(op) else 0.0
+    cand = [d for d in dows if n_dias[d] >= 2] or dows
+    mejor = max(cand, key=lambda d: prom_mes[d]) if cand else 0
+    peor = min(cand, key=lambda d: prom_mes[d]) if cand else 0
+    hallazgo = (f"El {DIAS_SEMANA[mejor]} vende {fmt_pct(prom_mes[mejor] / prom_general - 1)} más que el promedio del mes y el {DIAS_SEMANA[peor]} {fmt_pct(1 - prom_mes[peor] / prom_general)} menos "
+                f"(promedio por día operado: {fmt_pesos(prom_general * 1000)}).") if prom_general else "No hay días operados en el mes."
+    titulo = f"¿Qué días vendo más? — {ctx['nombre_mes'].capitalize()}"
+    fila = _out_titulo(ws, fila0, titulo)
+    fila = _out_lectura(ws, fila, hallazgo, filas_alto=2)
+    r0 = dg.seccion("#6 (Outputs) — Ingreso promedio por día operado, por día de la semana ($ miles)",
+                    "Calculado por el script al generar el modelo (Cierres_Dia). Misma tabla que la hoja B_Ingresos.")
+    filas = [[DIAS_SEMANA[d], prom_mes[d], prom_general] for d in dows]
+    a, b = escribir_tabla(dg, r0, ["Día", "Promedio del mes", "Promedio general del mes"], filas, formatos=[None, "#,##0", "#,##0"])
+    dg.cerrar(b)
+    cats = Reference(dg.ws, min_col=2, min_row=a, max_row=b)
+    bar = nuevo_bar(ancho_gap=55)
+    s = serie_col(dg.ws, 3, a, b, "Promedio por día operado")
+    color_serie(s, PALETA["ingresos"])
+    puntos_color(s, [PALETA["utilidad"] if d == mejor else PALETA["alerta"] if d == peor else PALETA["ingresos"] for d in dows])
+    etiquetas(s, fmt="#,##0", pos="outEnd")
+    bar.series.append(s)
+    bar.set_categories(cats)
+    techo = techo_bonito(max(list(prom_mes.values()) + [prom_general] + [1]) * 1.12)
+    ejes(bar, x_titulo="Día de la semana", y_titulo="$ miles por día operado", y_fmt="#,##0", y_min=0, y_max=techo)
+    linea = nuevo_linea()
+    s3 = serie_col(dg.ws, 4, a, b, "Promedio general del mes")
+    color_serie(s3, PALETA["neutro_oscuro"], linea=True, ancho_pt=1.75)
+    linea.series.append(s3)
+    linea.set_categories(cats)
+    bar += linea
+    leyenda(bar, "b")
+    tamano(bar, ancho=OUTPUTS_ANCHO_CHART, alto=OUTPUTS_ALTO_CHICO)
+    ws.add_chart(bar, f"B{fila}")
+    return fila + OUTPUTS_FILAS_BLOQUE
+
+
+def _out_bloque_consumo_18(ws, ctx, fila0):
+    dg, mr = ctx["dg"], ctx["mr"]
+    labels, n_hist, i = mr["labels_periodo"], mr["n_hist"], ctx["i"]
+    desde = max(0, i - 5)
+    hasta = min(len(labels) - 1, i + 1) if i + 1 < len(labels) else i
+    idxs = list(range(desde, hasta + 1))
+    titulo = "Peso del consumo familiar en el tiempo"
+    fila = _out_titulo(ws, fila0, titulo)
+    r0 = dg.seccion("#18 (Outputs) — Consumo familiar a precio de venta, por mes ($ M)",
+                     "FÓRMULAS hacia Model (Consumo Familiar). Últimos 6 meses reales + el mes siguiente proyectado (si existe).")
+    ws_d = dg.ws
+    label(ws_d, r0, "Mes", bold=True)
+    for k, ix in enumerate(idxs):
+        c = dg.col(k)
+        proy = ix >= n_hist
+        etiqueta = etiqueta_mes(labels[ix]) + (" (proy.)" if proy else "")
+        ws_d.cell(row=r0, column=c, value=etiqueta).font = Font(bold=True, size=9)
+        numero(ws_d, r0 + 1, c, f"={cm(ctx, 'val_alm_tot', ix)}/1000000").number_format = "#,##0.00"
+        numero(ws_d, r0 + 2, c, f"={cm(ctx, 'val_cr', ix)}/1000000").number_format = "#,##0.00"
+    label(ws_d, r0 + 1, "Almuerzo ($ M)"); label(ws_d, r0 + 2, "Comida rápida ($ M)")
+    dg.cerrar(r0 + 2)
+    L_foco = get_column_letter(dg.col(i - desde))
+    sub_f = (f'="En {ctx["nombre_mes"]} el consumo familiar a precio de venta fue "&FIXED(Datos_Graficos!{L_foco}{r0 + 1}+Datos_Graficos!{L_foco}{r0 + 2},1)&" M '
+             f'("&Datos_Graficos!{L_foco}{r0}&")."')
+    fila = _out_lectura(ws, fila, sub_f, filas_alto=2)
+    c1, c2 = dg.col(0), dg.col(len(idxs) - 1)
+    cats = Reference(ws_d, min_col=c1, max_col=c2, min_row=r0)
+    bar = nuevo_bar(apilado=True, ancho_gap=45)
+    s1 = serie_fila(ws_d, r0 + 1, c1, c2, "Almuerzo"); color_serie(s1, PALETA["almuerzo"])
+    s2 = serie_fila(ws_d, r0 + 2, c1, c2, "Comida rápida"); color_serie(s2, PALETA["comida_rapida"])
+    bar.series += [s1, s2]
+    bar.set_categories(cats)
+    ejes(bar, x_titulo="Mes", y_titulo="$ millones", y_fmt="#,##0.0", y_min=0, rot_x=-45)
+    leyenda(bar, "b")
+    tamano(bar, ancho=OUTPUTS_ANCHO_CHART, alto=OUTPUTS_ALTO_CHICO)
+    ws.add_chart(bar, f"B{fila}")
+    return fila + OUTPUTS_FILAS_BLOQUE
+
+
+def _out_bloque_pareto(ws, ctx, fila0, titulo_pagina):
+    dg = ctx["dg"]
+    ped = ctx["diario"]["pedidos"]
+    mf = ctx["mes_foco"]
+    pm = ped[ped["periodo"] == mf] if not ped.empty else ped
+    alm = pm[pm["turno"] == "almuerzo"].groupby("grupo_producto")["monto_total"].sum() if not pm.empty else pd.Series(dtype=float)
+    cr = pm[pm["turno"] == "cena"].groupby("grupo_producto")["monto_total"].sum() if not pm.empty else pd.Series(dtype=float)
+    a1, b1, s1 = tabla_pareto(dg, "#8A (Outputs) — Pareto de almuerzo por tipo de pedido ($ M)", alm)
+    a2, b2, s2 = tabla_pareto(dg, "#8B (Outputs) — Pareto de comida rápida por categoría ($ M)", cr)
+    fila = _out_titulo(ws, fila0, titulo_pagina)
+    hallazgo = frase_pareto(s1, "almuerzo") + " " + frase_pareto(s2, "comida rápida")
+    fila = _out_lectura(ws, fila, hallazgo, filas_alto=2)
+    # chart_pareto() siempre usa CHART_ANCHO (25cm) de ancho — ponerlas una
+    # al lado de la otra las hace solaparse. Se apilan igual que las demás
+    # páginas (más angostas, en su propio bloque) en vez de lado a lado.
+    ch1 = chart_pareto(dg, a1, b1, OUTPUTS_ALTO_CHICO, x_titulo="Almuerzo — tipo de pedido")
+    ch1.width = OUTPUTS_ANCHO_CHART
+    ws.add_chart(ch1, f"B{fila}")
+    fila += OUTPUTS_FILAS_BLOQUE
+    ch2 = chart_pareto(dg, a2, b2, OUTPUTS_ALTO_CHICO, x_titulo="Comida rápida — categoría")
+    ch2.width = OUTPUTS_ANCHO_CHART
+    ws.add_chart(ch2, f"B{fila}")
+    return fila + OUTPUTS_FILAS_BLOQUE
+
+
+def _out_pagina2_cascada(ws, ctx, fila0):
+    i = ctx["i"]
+    fh = ctx["fila_hist"]
+    ins, nom, arr, otr = (float(fh[k]) for k in ("costo_insumos", "nomina", "arriendo_servicios", "otros_gastos"))
+    des = float(fh["costo_desechables"])
+    ing = float(fh["ingresos_almuerzo"] + fh["ingresos_cena"])
+    ut = ing - ins - nom - arr - otr
+    por100 = lambda x: fmt_n(100 * x / ing, 1) if ing else "0"
+    titulo = f"De cada $100 vendidos, ¿cuánto queda? — {ctx['nombre_mes'].capitalize()}"
+    sub = (f"De cada $100 vendidos: ${por100(ins)} van a insumos (${por100(des)} de ellos son desechables), ${por100(nom)} a nómina, "
+           f"${por100(arr)} a arriendo y servicios, ${por100(otr)} a otros gastos y quedan ${por100(ut)} de utilidad.")
+    pasos = [("Ingresos", f"={cm(ctx,'fila_ingresos',i)}", "total"),
+             ("Insumos (proveedores)", f"=-{cm(ctx,'fila_ins_prov',i)}", "delta"),
+             (f"Desechables ({fmt_mill(des)})", f"=-{cm(ctx,'fila_desechables',i)}", "delta"),
+             ("Nómina", f"={cm(ctx,'fila_nomina',i)}", "delta"),
+             ("Arriendo y servicios", f"={cm(ctx,'fila_arriendo',i)}", "delta"),
+             ("Otros", f"={cm(ctx,'fila_otros',i)}", "delta"),
+             ("Utilidad", f"={cm(ctx,'fila_utilidad_neta',i)}", "total")]
+    colores = ([PALETA["ingresos"], PALETA["egresos"], PALETA["desechables"]] + [PALETA["egresos"]] * 3
+               + [PALETA["utilidad"] if ut >= 0 else PALETA["alerta"]])
+    return _out_bloque_cascada(ws, ctx, fila0, titulo, sub, pasos, colores,
+                                "FÓRMULAS hacia Model. Las columnas Base son invisibles: sostienen las barras flotantes.")
+
+
+def _out_pagina3_familia16(ws, ctx, fila0):
+    i = ctx["i"]
+    pasos = [("Utilidad real", f"={cm(ctx, 'fila_utilidad_neta', i)}", "total"),
+             ("+ Familia: almuerzo", f"={cm(ctx, 'val_alm_tot', i)}", "delta"),
+             ("+ Familia: comida rápida", f"={cm(ctx, 'val_cr', i)}", "delta"),
+             ("Utilidad ajustada", f"={cm(ctx, 'ut_aj', i)}", "total")]
+    sub = _nota_familia(ctx, i, "Si la familia hubiera pagado, así quedaría la utilidad del mes. ")
+    colores = [PALETA["utilidad"], PALETA["almuerzo"], PALETA["comida_rapida"], PALETA["utilidad"]]
+    return _out_bloque_cascada(ws, ctx, fila0, "¿Cuánto dejo de ganar por el consumo familiar?", sub, pasos, colores,
+                                "FÓRMULAS hacia Model (Consumo Familiar).", dec=2, filas_lectura=4)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# HOJA: OUTPUTS — resumen para presentación (lo único que se exporta a PDF)
+# ══════════════════════════════════════════════════════════════════════
+def hoja_outputs(wb, ctx):
+    """4 páginas horizontales fijas: (1) Tarjetas + Estado de Resultados,
+    (2) #2 Cascada + #6 Día de la semana, (3) #16 + #18 Consumo familiar,
+    (4) #8A + #8B Pareto de ventas. Reutiliza las MISMAS tablas de
+    Datos_Graficos que ya usan A_Resultado/G_Extras/F_Familia/B_Ingresos
+    (tarjetas) o arma unas nuevas con la MISMA fórmula (cascada/pareto/día
+    de semana/consumo familiar) — corre DESPUÉS de construir esas hojas."""
     ws = wb.create_sheet("Outputs")
     ws.sheet_view.showGridLines = False
-    ws.column_dimensions["B"].width = 26
-    col_ini, col_fin = model_refs["col_ini"], model_refs["col_fin"]
-    for c in range(col_ini, col_fin + 1):
-        ws.column_dimensions[get_column_letter(c)].width = 11
+    ws.column_dimensions["A"].width = 1.6
+    ws.column_dimensions["B"].width = 24
+    for c in OUTPUTS_COLS[1:]:
+        ws.column_dimensions[get_column_letter(c)].width = 9.2
+    # C..H (las columnas del Estado de Resultados) más anchas que el resto:
+    # pesos colombianos de 7-8 cifras ($18.219.400) no caben en 9.2 (sale
+    # "########"). El resto se queda angosto (los gráficos son objetos
+    # flotantes de tamaño fijo en cm — no dependen del ancho de columna) para
+    # no estirar el ancho total de la página.
+    for c in range(3, 9):
+        ws.column_dimensions[get_column_letter(c)].width = 13.5
+    ws.column_dimensions[get_column_letter(OUTPUTS_COLS[-1] + 1)].width = 1.6
 
-    banner(ws, 2, "Dashboard — Resumen Ejecutivo", col_fin=col_fin)
-    ws.cell(row=4, column=2, value="Escenario:").font = FONT_LABEL_B
-    ws.cell(row=4, column=4, value="=Inputs!$E$6").font = Font(bold=True, color=AZUL_TEXTO)
+    saltos = []
+    fila = _out_pagina1(ws, ctx, 2)
+    saltos.append(fila)
 
-    fila_periodos = 6
-    for i, lab in enumerate(model_refs["labels_periodo"]):
-        ws.cell(row=fila_periodos, column=col_ini + i, value=lab).font = Font(bold=True, size=9)
+    fila2_0 = fila + 1
+    fila2_0 = _out_encabezado_pagina(ws, fila2_0, ctx)
+    f_cascada = _out_pagina2_cascada(ws, ctx, fila2_0)
+    f_dia = _out_bloque_dia_semana(ws, ctx, f_cascada)
+    saltos.append(f_dia)
 
-    filas_kpi = [
-        ("Ingresos Totales", model_refs["fila_ingresos"], False),
-        ("Utilidad Operativa", model_refs["fila_utilidad_op"], False),
-        ("Margen Operativo", model_refs["fila_margen_op"], True),
-        ("Utilidad Neta", model_refs["fila_utilidad_neta"], False),
-    ]
-    fila_ref = {}
-    r = fila_periodos + 1
-    for nombre, fila_modelo, pct in filas_kpi:
-        label(ws, r, nombre, bold=True)
-        for c in range(col_ini, col_fin + 1):
-            cl = get_column_letter(c)
-            numero(ws, r, c, f"=Model!{cl}{fila_modelo}", pct=pct, bold=True)
-        fila_ref[nombre] = r
-        r += 1
+    fila3_0 = f_dia + 1
+    fila3_0 = _out_encabezado_pagina(ws, fila3_0, ctx)
+    fila3_0 = _out_titulo(ws, fila3_0, "¿Cuánto cuesta la familia?") + 1
+    f_16 = _out_pagina3_familia16(ws, ctx, fila3_0)
+    f_18 = _out_bloque_consumo_18(ws, ctx, f_16)
+    saltos.append(f_18)
 
-    r += 2
-    ws.cell(row=r, column=2, value="Detalle para gráficos").font = FONT_SUBTITULO
-    r += 1
-    for nombre, fila_modelo in [
-        ("Ingresos Almuerzo", model_refs["fila_ing_alm"]),
-        ("Ingresos Comidas Rápidas", model_refs["fila_ing_cena"]),
-    ]:
-        label(ws, r, nombre)
-        for c in range(col_ini, col_fin + 1):
-            cl = get_column_letter(c)
-            numero(ws, r, c, f"=Model!{cl}{fila_modelo}")
-        fila_ref[nombre] = r
-        r += 1
-    label(ws, r, "Costo de Insumos (% de Ingresos)")
-    for c in range(col_ini, col_fin + 1):
-        cl = get_column_letter(c)
-        numero(ws, r, c, f"=ABS(Model!{cl}{model_refs['fila_costo_insumos']})/Model!{cl}{model_refs['fila_ingresos']}", pct=True)
-    fila_ref["Costo Insumos Pct"] = r
-    r += 1
-    # Desechables (ya incluidos en el costo de insumos): solo meses reales.
-    label(ws, r, "· de los cuales, desechables (% de Ingresos)")
-    for c in range(col_ini, col_ini + model_refs["n_hist"]):
-        cl = get_column_letter(c)
-        numero(ws, r, c, f"=Model!{cl}{model_refs['fila_desech_pct']}", pct=True)
-    fila_ref["Desechables Pct"] = r
-    r += 1
+    fila4_0 = f_18 + 1
+    fila4_0 = _out_encabezado_pagina(ws, fila4_0, ctx)
+    f_pareto = _out_bloque_pareto(ws, ctx, fila4_0, "¿Qué se vende más?")
+    saltos.append(f_pareto)
 
-    r += 2
-    ws.cell(row=r, column=2, value="📊 Ingresos vs. Utilidad Neta por mes").font = FONT_BANNER
-    fila_chart_ancla = r + 1
+    if os.environ.get("OUTPUTS_DEBUG"):
+        print("DEBUG filas:", dict(fila=fila, fila2_0=fila2_0, f_cascada=f_cascada, f_dia=f_dia,
+                                    fila3_0=fila3_0, f_16=f_16, f_18=f_18, fila4_0=fila4_0, f_pareto=f_pareto, saltos=saltos))
 
-    cats = Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_periodos)
+    for s in saltos[:-1]:
+        _out_salto(ws, s)
 
-    chart1 = BarChart()
-    chart1.type = "col"
-    chart1.title = "Ingresos vs. Utilidad Neta"
-    chart1.y_axis.title = "COP"
-    chart1.height, chart1.width = 8, 22
-    # from_rows=True es clave: cada fila (Ingresos / Utilidad Neta) es UNA
-    # serie con 18 puntos (uno por mes) — sin esto, openpyxl interpreta cada
-    # COLUMNA como una serie distinta (18 series de 1 punto, se ve mal).
-    chart1.add_data(Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_ref["Ingresos Totales"]), titles_from_data=False, from_rows=True)
-    chart1.add_data(Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_ref["Utilidad Neta"]), titles_from_data=False, from_rows=True)
-    chart1.series[0].tx = SeriesLabel(v="Ingresos Totales")
-    chart1.series[1].tx = SeriesLabel(v="Utilidad Neta")
-    chart1.set_categories(cats)
-    chart1.series[0].graphicalProperties.solidFill = "4C7EA6"
-    chart1.series[1].graphicalProperties.solidFill = "3FA66B"
-    ws.add_chart(chart1, f"B{fila_chart_ancla}")
-
-    r2 = fila_chart_ancla + 18
-    ws.cell(row=r2, column=2, value="📈 Margen Operativo por mes").font = FONT_BANNER
-    chart2 = LineChart()
-    chart2.title = "Margen Operativo (%)"
-    chart2.height, chart2.width = 8, 22
-    chart2.add_data(Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_ref["Margen Operativo"]), titles_from_data=False, from_rows=True)
-    chart2.series[0].tx = SeriesLabel(v="Margen Operativo")
-    chart2.set_categories(cats)
-    ws.add_chart(chart2, f"B{r2 + 1}")
-
-    # ── Gráfico 3: ¿en qué se va la plata? — barras horizontales, orden fijo
-    # de mayor a menor gasto típico. Se evita un pie/donut a propósito: con
-    # 4 categorías un ranking de barras se lee mejor que comparar ángulos.
-    r3 = r2 + 18
-    ws.cell(row=r3, column=2, value="💸 Distribución de Gastos por Categoría (histórico)").font = FONT_BANNER
-    ws.column_dimensions["D"].width = 16
-    fila_tabla_gastos = r3 + 2
-    categorias_gasto = [
-        ("Costo de Insumos", model_refs["fila_costo_insumos"], "1B4F72"),
-        ("Nómina", model_refs["fila_nomina"], "3B6FA0"),
-        ("Arriendo + Servicios", model_refs["fila_arriendo"], "6E97C4"),
-        ("Otros Gastos", model_refs["fila_otros"], "A9C2DE"),
-    ]
-    col_hist_ini = get_column_letter(col_ini)
-    col_hist_fin = get_column_letter(col_ini + model_refs["n_hist"] - 1)
-    for i, (nombre, fila_modelo, _color) in enumerate(categorias_gasto):
-        rr = fila_tabla_gastos + i
-        if fila_modelo == model_refs["fila_costo_insumos"]:
-            # el rótulo de Insumos deja a la vista cuánto del total son desechables
-            nombre = (f'="Costo de Insumos (incl. desechables $"&FIXED(SUM(Model!{col_hist_ini}{model_refs["fila_desechables"]}:'
-                      f'{col_hist_fin}{model_refs["fila_desechables"]})/1000000,1)&" M)"')
-        label(ws, rr, nombre)
-        numero(ws, rr, 4, f"=ABS(SUM(Model!{col_hist_ini}{fila_modelo}:{col_hist_fin}{fila_modelo}))")
-    nota(ws, fila_tabla_gastos + len(categorias_gasto), "Suma de los meses históricos reales (no incluye proyección).")
-
-    chart3 = BarChart()
-    chart3.type = "bar"  # horizontal — más fácil de leer un ranking de 4 categorías
-    chart3.title = "¿En qué se va la plata?"
-    chart3.y_axis.title = "COP (histórico acumulado)"
-    chart3.height, chart3.width = 8, 22
-    data3 = Reference(ws, min_col=4, min_row=fila_tabla_gastos, max_row=fila_tabla_gastos + len(categorias_gasto) - 1)
-    cats3 = Reference(ws, min_col=2, min_row=fila_tabla_gastos, max_row=fila_tabla_gastos + len(categorias_gasto) - 1)
-    chart3.add_data(data3, titles_from_data=False)
-    chart3.series[0].tx = SeriesLabel(v="Gasto histórico")
-    chart3.set_categories(cats3)
-    chart3.legend = None  # una sola serie con colores por categoría — la leyenda no aporta
-    chart3.series[0].data_points = [
-        DataPoint(idx=i, spPr=GraphicalProperties(solidFill=color))
-        for i, (_n, _f, color) in enumerate(categorias_gasto)
-    ]
-    ws.add_chart(chart3, f"B{fila_tabla_gastos + len(categorias_gasto) + 2}")
-
-    # ── Gráfico 4: composición de ingresos por turno, mes a mes (barras
-    # apiladas) — muestra a la vez el volumen total y el mix Almuerzo/Cena.
-    r4 = fila_tabla_gastos + len(categorias_gasto) + 2 + 18
-    ws.cell(row=r4, column=2, value="🍽️ Ingresos por Turno — Almuerzo vs. Comidas Rápidas").font = FONT_BANNER
-    chart4 = BarChart()
-    chart4.type = "col"
-    chart4.grouping = "stacked"
-    chart4.overlap = 100
-    chart4.title = "Composición de Ingresos por Turno"
-    chart4.y_axis.title = "COP"
-    chart4.height, chart4.width = 8, 22
-    chart4.add_data(Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_ref["Ingresos Almuerzo"]), titles_from_data=False, from_rows=True)
-    chart4.add_data(Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_ref["Ingresos Comidas Rápidas"]), titles_from_data=False, from_rows=True)
-    chart4.series[0].tx = SeriesLabel(v="Almuerzo")
-    chart4.series[1].tx = SeriesLabel(v="Comidas Rápidas")
-    chart4.set_categories(cats)
-    chart4.series[0].graphicalProperties.solidFill = "4C7EA6"
-    chart4.series[1].graphicalProperties.solidFill = "D98B3F"
-    ws.add_chart(chart4, f"B{r4 + 1}")
-
-    # ── Gráfico 5: tendencia del costo de insumos como % de ingresos — para
-    # detectar si el margen se está comiendo antes de que duela en la caja.
-    r5 = r4 + 18
-    ws.cell(row=r5, column=2, value="⚠️ Costo de Insumos como % de Ingresos (tendencia)").font = FONT_BANNER
-    chart5 = LineChart()
-    chart5.title = "Costo de Insumos (% de Ingresos)"
-    chart5.height, chart5.width = 8, 22
-    chart5.add_data(Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_ref["Costo Insumos Pct"]), titles_from_data=False, from_rows=True)
-    chart5.series[0].tx = SeriesLabel(v="Costo Insumos % Ingresos")
-    chart5.series[0].graphicalProperties.line.solidFill = "C0392B"
-    # Segunda línea: la parte de los insumos que son desechables (dentro del total de arriba)
-    chart5.add_data(Reference(ws, min_col=col_ini, max_col=col_fin, min_row=fila_ref["Desechables Pct"]), titles_from_data=False, from_rows=True)
-    chart5.series[1].tx = SeriesLabel(v="de los cuales, desechables")
-    chart5.series[1].graphicalProperties.line.solidFill = "F1948A"
-    chart5.set_categories(cats)
-    ws.add_chart(chart5, f"B{r5 + 1}")
-
-    config_impresion(ws, horizontal=True)
+    ws.print_area = f"A1:{get_column_letter(OUTPUTS_COLS[-1] + 1)}{saltos[-1]}"
+    ws.page_setup.orientation = "landscape"
+    ws.page_setup.paperSize = ws.PAPERSIZE_LETTER
+    ws.page_setup.fitToWidth = 0
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = False
+    ws.page_setup.scale = OUTPUTS_ESCALA
+    ws.print_options.gridLines = False
+    ws.page_margins.left = ws.page_margins.right = 0.5
+    ws.page_margins.top = ws.page_margins.bottom = 0.5
+    ws.page_margins.header = ws.page_margins.footer = 0.2
+    ws.oddHeader.left.text = "Restaurante El Lobo"
+    ws.oddHeader.center.text = "Página &P de &N"
+    ws.oddHeader.right.text = "Generado: &D"
+    ws.sheet_view.view = "pageBreakPreview"
     return ws
 
 
@@ -4349,7 +4594,6 @@ def main():
     hoja_cover(wb, len(hist_df), len(meses_fcst_labels), es_demo)
     ws_inputs, driver_rows = hoja_inputs(wb, hist_df, meses_fcst_labels, mes_foco)
     ws_model, model_refs = hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows, mes_foco)
-    hoja_outputs(wb, model_refs)
 
     # Hojas de apoyo y gráficos nuevos (ctx = todo lo que necesitan para armar sus tablas)
     ctx = dict(hist=hist_df, fcst=meses_fcst_labels, mr=model_refs, dr=driver_rows, diario=diario,
@@ -4360,6 +4604,11 @@ def main():
     preparar_foco(ctx)
     hojas_nuevas = construir_hojas_graficos(wb, ctx)
     config_impresion(dg.ws, horizontal=True)
+
+    # Outputs se arma AL FINAL: reutiliza las mismas tablas de Datos_Graficos
+    # que ya armaron las hojas de arriba (tarjetas, etc.) — nada se calcula
+    # dos veces. Es la única hoja pensada para exportar a PDF.
+    hoja_outputs(wb, ctx)
 
     # Orden final de hojas: Cover, Outputs, hojas de gráficos nuevas, Inputs, Model, Datos_Graficos
     wb._sheets = [wb["Cover"], wb["Outputs"]] + hojas_nuevas + [wb["Inputs"], wb["Model"], dg.ws]
