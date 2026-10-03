@@ -3916,6 +3916,10 @@ function verDetalleGrupoIngreso(ids) {
   const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
   const descuentoTotal = orders.reduce((a,b) => a + (b.descuento||0), 0);
   const valorListaTotal = orders.reduce((a,b) => a + valorListaFila(b), 0);
+  // Domicilio: el envío se cobra una sola vez (en el primer ítem insertado)
+  // y el empaque por cada almuerzo del pedido — entre todas las filas suman
+  // el valor de domicilio completo de este pedido (ver agregarIngreso()).
+  const domicilioTotal = primero.es_domicilio ? orders.reduce((a,b) => a + (b.monto_domicilio||0), 0) : 0;
   let html = `<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:var(--accent);margin-bottom:16px;">
     ${primero.turno === 'cena' ? '🌙' : '☀️'} Pedido completo — ${orders.length} ítems
   </div>`;
@@ -3923,6 +3927,16 @@ function verDetalleGrupoIngreso(ids) {
       <div class="modal-field-label">Ubicación</div>
       <div class="modal-field-value">${primero.es_gratis?'🎁 Gratis':primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Domicilio':primero.mesa?`Mesa ${primero.mesa}`:'—'}</div>
     </div>`;
+  if (primero.es_domicilio) {
+    html += `<div class="modal-field">
+        <div class="modal-field-label">Valor comida</div>
+        <div class="modal-field-value">${fmt(total - domicilioTotal)}</div>
+      </div>
+      <div class="modal-field">
+        <div class="modal-field-label">Valor domicilio (envío + empaque, cobrado al registrar)</div>
+        <div class="modal-field-value">${fmt(domicilioTotal)}</div>
+      </div>`;
+  }
   html += orders.map(o => `
     <div class="modal-field">
       <div class="modal-field-label">${LABELS[o.pedido]||o.pedido}${(o.cantidad||1) > 1 ? ' × ' + o.cantidad : ''}</div>
