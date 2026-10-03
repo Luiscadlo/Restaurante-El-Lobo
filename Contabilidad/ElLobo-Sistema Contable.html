@@ -520,6 +520,8 @@
         <div class="report-line"><span>Transferencia</span><strong id="rp-trans" class="amount-pos">$0</strong></div>
         <div class="report-line"><span>🌙 Comidas rápidas</span><strong id="rp-tcr" class="amount-pos">$0</strong></div>
         <div class="report-line"><span><strong>Total ingresos</strong></span><strong id="rp-ting" class="amount-pos">$0</strong></div>
+        <div class="report-line"><span>🏷 Descuentos otorgados</span><strong id="rp-descuentos" class="amount-neg">$0</strong></div>
+        <div class="report-line"><span>Ventas a precio de lista</span><strong id="rp-ventas-lista" class="amount-pos">$0</strong></div>
       </div>
       <div class="report-block">
         <div class="report-block-title">📤 Egresos por categoría</div>
@@ -769,6 +771,19 @@
           + Agregar Comida (mismo pedido)
         </button>
         <div id="ing-almuerzos-cola-lista" style="margin-top:8px;margin-bottom:16px;"></div>
+
+        <!-- Descuento / promoción (no aplica a "Gratis": ya no cobra nada) -->
+        <div class="form-group mb" id="ing-descuento-section">
+          <label>Descuento ($) <span style="color:var(--text3);font-weight:400;">(opcional — plata que no ingresa, no es un gasto)</span></label>
+          <input type="text" inputmode="numeric" id="ing-descuento" placeholder="0"
+            oninput="formatMilesInput(this); actualizarMontoDisplay(); validarRegistro();">
+          <input type="text" id="ing-descuento-motivo" list="descuento-motivos" placeholder="Motivo del descuento (obligatorio si hay descuento)"
+            style="margin-top:6px;" oninput="validarRegistro()">
+          <datalist id="descuento-motivos">
+            <option value="Amigo"><option value="Familiar"><option value="Promoción"><option value="Cortesía"><option value="Error de cobro">
+          </datalist>
+          <div id="ing-descuento-info" style="font-size:11px;color:var(--text3);margin-top:4px;"></div>
+        </div>
 
         <!-- Monto display -->
         <div class="monto-display">
@@ -1556,6 +1571,17 @@
         </table>
       </div>
     </div>
+    <div class="panel" style="margin-top:20px;">
+      <div class="panel-header">
+        <div class="panel-title">🏷 Descuentos aplicados</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cuándo</th><th>Pedido</th><th>Lista</th><th>Descuento</th><th>Motivo</th><th>Impacto en cierre</th><th>Gastos borrados</th></tr></thead>
+          <tbody id="auditoria-descuentos-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -1832,6 +1858,19 @@
     </div>
 
     <button class="btn btn-primary" style="width:100%;" onclick="guardarEdicionPedido()">💾 Guardar cambios</button>
+  </div>
+</div>
+
+<!-- Modal: Aplicar descuento/promoción a un pedido completo (pendiente o ya
+     pagado, incluido con el turno ya cerrado — es el caso principal). El
+     contenido se arma entero en JS (renderModalDescuento) porque cambia
+     mucho según el estado del pedido (pendiente/pagado, dividido o no, con
+     cierre o no, cierre manual o no). -->
+<div id="modal-descuento" class="modal-overlay" style="display:none;" onclick="cerrarModalDescuentoClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModalDescuento()">✕</button>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:16px;">🏷 Descuento / promoción</div>
+    <div id="descuento-modal-cuerpo"></div>
   </div>
 </div>
 
@@ -2154,7 +2193,10 @@ let ST = {
   ingresosExtra: [], // ingresos adicionales personalizados (sección Ingresos)
   pedidosEliminados: [], // auditoría de pedidos pagados eliminados
   clientesFiado: [], // clientes registrados para asociar a pedidos fiados
-  abonosFiado: [] // abonos parciales contra el saldo total de un cliente fiado
+  abonosFiado: [], // abonos parciales contra el saldo total de un cliente fiado
+  // Log de auditoría de descuentos aplicados — null (no []) si la tabla
+  // pedidos_descuentos todavía no existe en Supabase (ver descuentosDisponibles()).
+  pedidosDescuentos: null
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -2196,7 +2238,7 @@ function showToast(msg, tipo = 'info', accion = null) {
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado, abonosFiado] = await Promise.all([
+    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado, abonosFiado, pedidosDescuentos] = await Promise.all([
       sbGetAll('pedidos',     'order=created_at.desc'),
       sbGetAll('egresos',     'order=created_at.desc'),
       sbGetAll('inventario',  'order=nombre.asc'),
@@ -2210,7 +2252,8 @@ async function loadState() {
       sbGetAll('ingresos_extra', 'order=fecha.desc').catch(() => []),
       sbGetAll('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
       sbGetAll('clientes_fiado', 'order=nombre.asc').catch(() => []),
-      sbGetAll('abonos_fiado', 'order=fecha.desc').catch(() => [])
+      sbGetAll('abonos_fiado', 'order=fecha.desc').catch(() => []),
+      sbGetAll('pedidos_descuentos', 'order=created_at.desc').catch(() => null)
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
@@ -2228,6 +2271,7 @@ async function loadState() {
     ST.pedidosEliminados = pedidosEliminados;
     ST.clientesFiado   = clientesFiado;
     ST.abonosFiado     = abonosFiado;
+    ST.pedidosDescuentos = pedidosDescuentos;
 
     setSyncBadge('ok');
   } catch (e) {
@@ -2418,6 +2462,66 @@ function montoIngreso(p) {
   return p.es_gratis ? 0 : (p.monto_total || 0);
 }
 
+// ── Descuentos / promociones ────────────────────────────────────────────
+// Un descuento es plata que NO ingresó (no es un gasto, no cambia la
+// cantidad vendida, no toca Egresos/inventario/consumos). Con descuento d en
+// una fila de "pedidos": descuento=d, motivo_descuento, y monto_almuerzo/
+// monto_total quedan NETOS (restando d). monto_unit, cantidad y
+// monto_domicilio NO se tocan (no se descuenta envío ni empaque). Valor de
+// lista de una fila = monto_almuerzo + descuento (reconstruible siempre,
+// sin importar si ya tiene descuento aplicado o no).
+function valorListaFila(p) {
+  return (p.monto_almuerzo || 0) + (p.descuento || 0);
+}
+
+// Reparte un descuento D (entero, pesos) entre varias filas de UN MISMO
+// pedido, proporcional al valor de lista de cada una. `filas` es un array de
+// objetos con `.valorLista` (entero, >= 0). Devuelve un array de enteros
+// (mismo orden) que suman EXACTO D — ninguna fila queda negativa ni por
+// encima de su propio valor de lista. D mayor que la suma de las filas, o
+// negativo, es un error (función PURA: ni lee ni toca el DOM/ST/Supabase).
+function repartirDescuento(filas, D) {
+  const n = filas.length;
+  const total = filas.reduce((a, f) => a + f.valorLista, 0);
+  if (!Number.isInteger(D) || D < 0) throw new Error('El descuento debe ser un entero mayor o igual a 0');
+  if (D > total) throw new Error('El descuento no puede superar el valor de lista del pedido');
+  if (n === 0) { if (D > 0) throw new Error('No hay filas para repartir el descuento'); return []; }
+  if (D === 0) return filas.map(() => 0);
+
+  const base = filas.map(f => Math.floor(f.valorLista * D / total));
+  let restante = D - base.reduce((a, b) => a + b, 0);
+
+  // Filas candidatas a recibir 1 peso más (del redondeo hacia abajo),
+  // ordenadas por mayor capacidad restante (valorLista - ya asignado) y
+  // luego por índice original, para que el resultado sea determinístico.
+  const orden = filas
+    .map((f, i) => i)
+    .sort((a, b) => (filas[b].valorLista - base[b]) - (filas[a].valorLista - base[a]) || a - b);
+
+  let k = 0;
+  while (restante > 0) {
+    const i = orden[k % orden.length];
+    if (base[i] < filas[i].valorLista) { base[i]++; restante--; }
+    k++;
+  }
+  return base;
+}
+
+// ¿Están disponibles las columnas de descuento y la tabla pedidos_descuentos
+// en Supabase? Se detecta a partir de lo que ya está cargado en memoria (sin
+// un GET aparte): la clave "descuento" aparece en las filas de pedidos en
+// cuanto PostgREST la conoce (aunque su valor sea 0), y ST.pedidosDescuentos
+// queda en null (no []) si la tabla no existe — ver loadState(). Si ambos
+// arreglos de pedidos están vacíos (instalación nueva, sin datos todavía) no
+// hay forma de saberlo desde acá: se asume que SÍ están (igual que el resto
+// de columnas opcionales del sistema, se corrige solo con el primer intento).
+function descuentosDisponibles() {
+  const muestra = ST.ingresos[0] || ST.pendientes[0];
+  const columnasOk = muestra ? ('descuento' in muestra) : true;
+  const tablaOk = ST.pedidosDescuentos !== null && ST.pedidosDescuentos !== undefined;
+  return columnasOk && tablaOk;
+}
+
 // ── Exportar / Importar ───────────────────────────────────────────────
 function exportarDatos() {
   const fecha = today();
@@ -2496,6 +2600,7 @@ function datosParaExportar() {
     consumos:   porFecha(ST.consumos),
     notas:      porFecha(ST.notasDia),
     eliminados: porFecha(ST.pedidosEliminados),
+    descuentos: porFecha(ST.pedidosDescuentos),
   };
 }
 
@@ -2533,8 +2638,12 @@ function exportarExcelCompleto() {
   // identifican por la columna es_gratis (TRUE) — y también por metodo =
   // 'gratis' — con su monto en monto_total (no suma a ingresos). Pendientes
   // mientras no se marquen como entregados; Pagados una vez entregados.
-  addSheet('Pedidos_Pagados', d.pagados);
-  addSheet('Pedidos_Pendientes', ST.pendientes);
+  // descuento/motivo_descuento se fuerzan como columna (como platos_familia):
+  // 0/'' si la migración de descuentos todavía no corrió, para que el esquema
+  // del Excel sea estable sin importar si ya se usó la función o no.
+  const conDescuentoForzado = p => ({ ...p, descuento: p.descuento ?? 0, motivo_descuento: p.motivo_descuento || '' });
+  addSheet('Pedidos_Pagados', d.pagados.map(conDescuentoForzado));
+  addSheet('Pedidos_Pendientes', ST.pendientes.map(conDescuentoForzado));
   addSheet('Egresos', d.egresos);
   addSheet('Gastos_Cierre', d.gastos);
   // platos_familia (almuerzos de la familia) se fuerza como columna aunque
@@ -2548,6 +2657,7 @@ function exportarExcelCompleto() {
   addSheet('Consumos', d.consumos);
   addSheet('Notas_Dia', d.notas);
   addSheet('Pedidos_Eliminados', d.eliminados);
+  if (d.descuentos?.length) addSheet('Descuentos_Log', d.descuentos);
   if (ST.clientesFiado?.length) addSheet('Clientes_Fiado', ST.clientesFiado);
   if (ST.abonosFiado?.length)   addSheet('Abonos_Fiado', ST.abonosFiado);
   // Hoja informativa: deja constancia del período con el que se generó el archivo.
@@ -2884,6 +2994,18 @@ function seleccionarUbicacion(ubicacion) {
   const fiarSection   = document.getElementById('fiar-info-section');
   const gratisSection = document.getElementById('gratis-info-section');
 
+  // "Gratis" no cobra nada — no tiene sentido un descuento sobre $0.
+  const descSection = document.getElementById('ing-descuento-section');
+  if (descSection) {
+    descSection.style.display = ubicacion === 'gratis' ? 'none' : '';
+    if (ubicacion === 'gratis') {
+      document.getElementById('ing-descuento').value = '';
+      document.getElementById('ing-descuento-motivo').value = '';
+      const descInfoElG = document.getElementById('ing-descuento-info');
+      if (descInfoElG) descInfoElG.textContent = '';
+    }
+  }
+
   if (ubicacion === 'domicilio') {
     domSection.style.display        = 'block';
     if (fiarSection) fiarSection.style.display = 'none';
@@ -2988,6 +3110,11 @@ function validarRegistro() {
   // Un fiado necesita cliente asociado — sin eso no se deja registrar.
   const clienteOk = selectedUbicacion !== 'fiar' || !!clienteFiadoSeleccionadoId;
 
+  // Descuento: válido si no hay (0), o si no supera el valor de lista Y trae motivo.
+  const { totalLista, descRaw } = calcularTotalPedido();
+  const motivoDescuentoVal = document.getElementById('ing-descuento-motivo')?.value.trim() || '';
+  const descuentoOk = descRaw === 0 || (descRaw <= totalLista && !!motivoDescuentoVal);
+
   // "Agregar almuerzo" necesita un almuerzo válido en el formulario en este momento.
   const okAgregar = !!(actualValido && selectedUbicacion && abierto && clienteOk);
   if (btnAgregarAlmuerzo) btnAgregarAlmuerzo.disabled = !okAgregar;
@@ -2995,7 +3122,7 @@ function validarRegistro() {
   // Registrar/Pagado inmediatamente puede ir con lo que ya está en cola,
   // aunque el formulario actual esté vacío (por eso no exige actualValido).
   const hayAlgoParaRegistrar = actualValido || almuerzosEnCola.length > 0 || extrasIngresoPendientes.length > 0;
-  const okRegistrar = !!(hayAlgoParaRegistrar && selectedUbicacion && abierto && clienteOk);
+  const okRegistrar = !!(hayAlgoParaRegistrar && selectedUbicacion && abierto && clienteOk && descuentoOk);
   btn.disabled = !okRegistrar;
   if (btnPagado) btnPagado.disabled = !okRegistrar;
 }
@@ -3314,18 +3441,28 @@ function calcularTotalPedido() {
 
   const extrasTotal = extrasIngresoPendientes.reduce((a, ex) => a + ex.valorUnitario * ex.cantidad, 0);
 
-  const total = montoAlmTotal + domVal + extrasTotal;
+  // Descuento: se define sobre el PEDIDO COMPLETO (almuerzos + extras), nunca
+  // sobre el domicilio/empaque (eso no es parte de lo que se cobra el plato).
+  // "Gratis" no cobra nada, así que no tiene descuento. descRaw es el valor
+  // crudo del input (sin recortar) — agregarIngreso() lo valida de verdad y
+  // bloquea el registro si se pasa; acá solo se recorta para que el total
+  // mostrado en pantalla nunca se vaya a negativo mientras se escribe.
+  const totalLista = montoAlmTotal + extrasTotal; // sin domicilio/empaque
+  const descRaw    = selectedUbicacion === 'gratis' ? 0 : valMiles('ing-descuento');
+  const descuento  = Math.max(0, Math.min(descRaw, totalLista));
 
-  return { baseAlm, montoBebida, montoUnit, cant, paraLlevar, montoActual, colaTotal, montoAlmTotal, domValRaw, empaqueDomicilio, domVal, extrasTotal, total };
+  const total = (totalLista - descuento) + domVal;
+
+  return { baseAlm, montoBebida, montoUnit, cant, paraLlevar, montoActual, colaTotal, montoAlmTotal, domValRaw, empaqueDomicilio, domVal, extrasTotal, totalLista, descRaw, descuento, total };
 }
 
 function actualizarMontoDisplay() {
-  const { baseAlm, montoBebida, montoUnit, cant, paraLlevar, montoActual, colaTotal, montoAlmTotal, domValRaw, empaqueDomicilio, domVal, extrasTotal, total } = calcularTotalPedido();
+  const { baseAlm, montoBebida, montoUnit, cant, paraLlevar, montoActual, colaTotal, montoAlmTotal, domValRaw, empaqueDomicilio, domVal, extrasTotal, totalLista, descuento, total } = calcularTotalPedido();
 
   const dispEl  = document.getElementById('monto-display');
   const labelEl = document.getElementById('monto-label');
 
-  if (total > 0) {
+  if (total > 0 || descuento > 0) {
     dispEl.textContent = fmt(total);
     const partes = [];
     if (almuerzosEnCola.length > 0) partes.push(`${almuerzosEnCola.length} almuerzo(s) en cola ${fmt(colaTotal)}`);
@@ -3340,6 +3477,11 @@ function actualizarMontoDisplay() {
   } else {
     dispEl.textContent  = '$—';
     labelEl.textContent = 'Monto total del pedido';
+  }
+
+  const descInfoEl = document.getElementById('ing-descuento-info');
+  if (descInfoEl) {
+    descInfoEl.textContent = descuento > 0 ? `Precio lista ${fmt(totalLista)} − descuento ${fmt(descuento)}` : '';
   }
 
   calcularVuelto();
@@ -3508,7 +3650,26 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   if (!items.length && !extrasIngresoPendientes.length) { showToast('⚠ Agrega al menos un almuerzo o un producto extra', 'warning'); return; }
 
   const esGratis = selectedUbicacion === 'gratis';
-  const { total: totalPedidoCompleto } = calcularTotalPedido();
+  const { total: totalPedidoCompleto, totalLista: totalListaPedido, descRaw: descuentoPedido } = calcularTotalPedido();
+
+  // Descuento del pedido completo: se reparte proporcional al valor de lista
+  // de cada fila que se va a insertar (almuerzos + extras, en ese orden —
+  // el mismo orden en el que se insertan más abajo). Motivo obligatorio si
+  // hay descuento; nunca aplica a "Gratis" (ya no cobra nada).
+  const motivoDescuentoPedido = document.getElementById('ing-descuento-motivo')?.value.trim() || '';
+  if (!esGratis && descuentoPedido > 0) {
+    if (descuentoPedido > totalListaPedido) { showToast('⚠ El descuento no puede superar el valor de lista del pedido', 'warning'); return; }
+    if (!motivoDescuentoPedido) { showToast('⚠ Escribe el motivo del descuento', 'warning'); return; }
+    if (!descuentosDisponibles()) { showToast('⚠ Falta correr el script SQL de descuentos en Supabase (migracion_supabase_descuentos.sql)', 'warning'); return; }
+  }
+  const filasParaDescuento = [
+    ...items.map(it => ({ valorLista: it.monto_almuerzo })),
+    ...extrasIngresoPendientes.map(ex => ({ valorLista: ex.valorUnitario * ex.cantidad }))
+  ];
+  const descuentoPorFila = (!esGratis && descuentoPedido > 0)
+    ? repartirDescuento(filasParaDescuento, descuentoPedido)
+    : filasParaDescuento.map(() => 0);
+
   const dividido = esGratis ? null : leerPagoDivididoIngreso(totalPedidoCompleto);
   if (dividido && dividido.error) { showToast('⚠ Pago dividido: efectivo + transferencia debe sumar exactamente el total', 'warning'); return; }
   // "Gratis" no genera ingreso: metodo queda fijo en 'gratis' sin importar el
@@ -3545,7 +3706,9 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
       const envio = domicilioPendienteDeCobrar ? valMiles('ing-domicilio-valor') : 0;
       if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
       const monto_domicilio = envio + empaquePorUnidad * (item.cantidad || 1);
-      const monto_total = item.monto_almuerzo + monto_domicilio;
+      const descuentoFila = descuentoPorFila[i] || 0;
+      const monto_almuerzo_neto = item.monto_almuerzo - descuentoFila;
+      const monto_total = monto_almuerzo_neto + monto_domicilio;
 
       const esPrimeroDividido = divididoPendienteDeAsignar;
       if (divididoPendienteDeAsignar) divididoPendienteDeAsignar = false;
@@ -3554,7 +3717,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         fecha, hora, turno, pedido: item.pedido,
         sopa: item.sopa, arroz: item.arroz, proteina: item.proteina, acomp: item.acomp,
         detalle: item.detalle, metodo, cantidad: item.cantidad,
-        monto_unit: item.monto_unit, monto_almuerzo: item.monto_almuerzo, monto_domicilio, monto_total,
+        monto_unit: item.monto_unit, monto_almuerzo: monto_almuerzo_neto, monto_domicilio, monto_total,
         monto_efectivo: esPrimeroDividido ? dividido.efectivo : 0,
         monto_transferencia: esPrimeroDividido ? dividido.transferencia : 0,
         estado: estadoFinal, es_domicilio: selectedUbicacion === 'domicilio',
@@ -3563,7 +3726,11 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         es_sin_mesa: selectedUbicacion === 'sinmesa',
         es_gratis: esGratis,
         cliente_fiado_id: selectedUbicacion === 'fiar' ? clienteFiadoSeleccionadoId : null,
-        direccion: direccionValue || '', grupo_pedido: grupoPedido
+        direccion: direccionValue || '', grupo_pedido: grupoPedido,
+        // Si D=0 no se manda nada (retrocompatible: el default de la columna
+        // en Supabase ya es 0) — así los pedidos sin descuento, la gran
+        // mayoría, nunca dependen de que la migración ya esté corrida.
+        ...(descuentoFila > 0 ? { descuento: descuentoFila, motivo_descuento: motivoDescuentoPedido } : {})
       };
 
       let newPedido;
@@ -3571,6 +3738,12 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         [newPedido] = await sbInsert('pedidos', pedidoData);
       } catch (e) {
         const msg = e.message || '';
+        if (descuentoFila > 0 && (msg.includes('descuento') || msg.includes('motivo_descuento'))) {
+          // PROHIBIDO reintentar sin esta columna: perderla significaría
+          // cobrar de más sin que quede registro de por qué. Se aborta del
+          // todo en vez de guardar a medias.
+          throw new Error('Falta correr el script SQL de descuentos en Supabase (migracion_supabase_descuentos.sql) — el pedido con descuento NO se guardó.');
+        }
         if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia') || msg.includes('cliente_fiado_id')) {
           // Columnas opcionales aún no existen en Supabase — reintenta sin ellas
           const { es_fiar: esFiarVal, direccion: dirVal, es_sin_mesa: esSinMesaVal, es_gratis: esGratisVal, grupo_pedido: grupoVal, monto_efectivo: mEf, monto_transferencia: mTr, cliente_fiado_id: clienteVal, ...pedidoBase } = pedidoData;
@@ -3604,7 +3777,8 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
 
     // Insertar los productos extra en cola (si hay), con el mismo grupo_pedido
     if (extrasIngresoPendientes.length) {
-      for (const ex of extrasIngresoPendientes) {
+      for (let j = 0; j < extrasIngresoPendientes.length; j++) {
+        const ex = extrasIngresoPendientes[j];
         // Si el pedido es solo de extras (sin almuerzo), el valor del domicilio
         // se cobra aquí, en el primero — la bandera ya se apagó arriba si hubo
         // ítems. Los extras (bebidas, botella de agua, etc.) NUNCA llevan
@@ -3615,12 +3789,15 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
         const esPrimeroDividido = divididoPendienteDeAsignar;
         if (divididoPendienteDeAsignar) divididoPendienteDeAsignar = false;
+        const descuentoFila = descuentoPorFila[items.length + j] || 0;
+        const valorExtra = ex.valorUnitario * ex.cantidad;
+        const valorExtraNeto = valorExtra - descuentoFila;
         const extraData = {
           fecha, hora, turno, pedido: 'extra',
           sopa: '', arroz: '', proteina: '', acomp: '',
           detalle: ex.descripcion, metodo, cantidad: ex.cantidad,
-          monto_unit: ex.valorUnitario, monto_almuerzo: ex.valorUnitario * ex.cantidad,
-          monto_domicilio: montoDomicilioExtra, monto_total: ex.valorUnitario * ex.cantidad + montoDomicilioExtra,
+          monto_unit: ex.valorUnitario, monto_almuerzo: valorExtraNeto,
+          monto_domicilio: montoDomicilioExtra, monto_total: valorExtraNeto + montoDomicilioExtra,
           monto_efectivo: esPrimeroDividido ? dividido.efectivo : 0,
           monto_transferencia: esPrimeroDividido ? dividido.transferencia : 0,
           estado: estadoFinal, es_domicilio: selectedUbicacion === 'domicilio',
@@ -3628,7 +3805,8 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
           es_fiar: selectedUbicacion === 'fiar', es_sin_mesa: selectedUbicacion === 'sinmesa',
           es_gratis: esGratis,
           cliente_fiado_id: selectedUbicacion === 'fiar' ? clienteFiadoSeleccionadoId : null,
-          direccion: '', grupo_pedido: grupoPedido
+          direccion: '', grupo_pedido: grupoPedido,
+          ...(descuentoFila > 0 ? { descuento: descuentoFila, motivo_descuento: motivoDescuentoPedido } : {})
         };
         try {
           let newExtra;
@@ -3636,6 +3814,9 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
             [newExtra] = await sbInsert('pedidos', extraData);
           } catch (e) {
             const msg = e.message || '';
+            if (descuentoFila > 0 && (msg.includes('descuento') || msg.includes('motivo_descuento'))) {
+              throw new Error('Falta correr el script SQL de descuentos en Supabase (migracion_supabase_descuentos.sql) — el extra con descuento NO se guardó.');
+            }
             if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia') || msg.includes('cliente_fiado_id')) {
               const { es_fiar: efV, direccion: dV, es_sin_mesa: esmV, es_gratis: egV, grupo_pedido: gV, monto_efectivo: mEf, monto_transferencia: mTr, cliente_fiado_id: clV, ...extraBase } = extraData;
               [newExtra] = await sbInsert('pedidos', extraBase);
@@ -3682,6 +3863,10 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     document.getElementById('ing-dividido-chk').checked = false;
     toggleDivididoIngreso();
     document.getElementById('ing-domicilio-valor').value = '';
+    document.getElementById('ing-descuento').value = '';
+    document.getElementById('ing-descuento-motivo').value = '';
+    const descInfoElReset = document.getElementById('ing-descuento-info');
+    if (descInfoElReset) descInfoElReset.textContent = '';
     const dirResetEl = document.getElementById('ing-direccion');
     if (dirResetEl) dirResetEl.value = '';
     document.getElementById('para-llevar-section').style.display = 'none';
@@ -3729,6 +3914,8 @@ function verDetalleGrupoIngreso(ids) {
 
   const primero = orders[0];
   const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
+  const descuentoTotal = orders.reduce((a,b) => a + (b.descuento||0), 0);
+  const valorListaTotal = orders.reduce((a,b) => a + valorListaFila(b), 0);
   let html = `<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:var(--accent);margin-bottom:16px;">
     ${primero.turno === 'cena' ? '🌙' : '☀️'} Pedido completo — ${orders.length} ítems
   </div>`;
@@ -3741,8 +3928,18 @@ function verDetalleGrupoIngreso(ids) {
       <div class="modal-field-label">${LABELS[o.pedido]||o.pedido}${(o.cantidad||1) > 1 ? ' × ' + o.cantidad : ''}</div>
       <div class="modal-field-value">${o.detalle ? o.detalle + ' — ' : ''}${fmt(o.monto_total||0)}</div>
     </div>`).join('');
+  if (descuentoTotal > 0) {
+    html += `<div class="modal-field">
+        <div class="modal-field-label">Precio de lista</div>
+        <div class="modal-field-value">${fmt(valorListaTotal)}</div>
+      </div>
+      <div class="modal-field">
+        <div class="modal-field-label">Descuento${primero.motivo_descuento ? ' (' + primero.motivo_descuento + ')' : ''}</div>
+        <div class="modal-field-value" style="color:var(--red);">−${fmt(descuentoTotal)}</div>
+      </div>`;
+  }
   html += `<div class="modal-field">
-      <div class="modal-field-label">Total</div>
+      <div class="modal-field-label">${descuentoTotal > 0 ? 'Total cobrado' : 'Total'}</div>
       <div class="modal-field-value"><span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(total)}</span></div>
     </div>`;
 
@@ -3782,7 +3979,9 @@ function mostrarDetallePedidoModal(i) {
     i.para_llevar       ? ['Para llevar',    '✓ Sí (+$1.000)'] : null,
     i.monto_almuerzo && i.es_domicilio ? ['Valor comida',    fmt(i.monto_almuerzo)] : null,
     i.monto_domicilio && i.es_domicilio ? ['Valor domicilio (incluye envío y/o empaque de este plato)', fmt(i.monto_domicilio)] : null,
-    ['Total', `<span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(i.monto_total || 0)}</span>`],
+    (i.descuento||0) > 0 ? ['Precio de lista', fmt(valorListaFila(i))] : null,
+    (i.descuento||0) > 0 ? [`Descuento${i.motivo_descuento ? ' (' + i.motivo_descuento + ')' : ''}`, `<span style="color:var(--red);">−${fmt(i.descuento)}</span>`] : null,
+    [(i.descuento||0) > 0 ? 'Total cobrado' : 'Total', `<span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(i.monto_total || 0)}</span>`],
   ].filter(Boolean);
 
   html += campos.map(([label, val]) =>
@@ -4190,6 +4389,405 @@ async function cancelarGrupoPendiente(ids, mesaNum) {
   } catch (e) { showToast('⚠ Error al cancelar', 'warning'); }
 }
 
+// Botón "🏷 Descuento" reutilizado en Pendientes (mesas/domicilios/sin mesa/
+// fiados — nunca en "Gratis", que ya no cobra nada) y en Ingresos ya
+// pagados. Deshabilitado con mensaje claro si falta correr la migración SQL.
+function botonDescuentoHTML(idsGrupo) {
+  const disp = descuentosDisponibles();
+  return `<button class="btn btn-outline" ${disp ? '' : 'disabled'} onclick="abrirModalDescuento([${idsGrupo.join(',')}])" title="${disp ? 'Aplicar descuento a este pedido' : 'Falta correr el script SQL de descuentos (migracion_supabase_descuentos.sql)'}">🏷 Descuento</button>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// MODAL ÚNICO DE DESCUENTO — se usa desde Pendientes (mesas/domicilios/sin
+// mesa/fiados) Y desde Ingresos ya pagados (hoy e Historial), incluido con
+// el turno ya cerrado — ese es el caso principal. Busca los ids tanto en
+// ST.pendientes como en ST.ingresos porque el mismo botón sirve para los dos.
+// ══════════════════════════════════════════════════════════════════════
+let descuentoModalIds = [];
+
+// Filas de un pedido que SÍ se pueden descontar: nunca "Gratis" (no cobra
+// nada) ni pagado_via_abono (dañaría el cálculo de saldo/abonos del fiado).
+function filasDescontablesDeIds(ids) {
+  const todas = ids.map(id => ST.pendientes.find(p => p.id === id) || ST.ingresos.find(p => p.id === id)).filter(Boolean);
+  return {
+    todas,
+    elegibles: todas.filter(p => !p.es_gratis && !p.pagado_via_abono),
+    excluidas: todas.filter(p => p.es_gratis || p.pagado_via_abono)
+  };
+}
+
+function abrirModalDescuento(ids) {
+  if (!descuentosDisponibles()) {
+    showToast('⚠ Falta correr el script SQL de descuentos en Supabase (migracion_supabase_descuentos.sql)', 'warning');
+    return;
+  }
+  const idArr = Array.isArray(ids) ? ids : [ids];
+  const { todas } = filasDescontablesDeIds(idArr);
+  if (!todas.length) return;
+  const primero = todas[0];
+  // Mismo candado que corregirCierreActual(): un pedido YA PAGADO de otro
+  // día solo se puede tocar con la contraseña de administrador — cambiar su
+  // monto equivale a corregir un cierre de otro día.
+  if (primero.estado === 'pagado' && primero.fecha !== today() && !adminAutenticado) {
+    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, ingresa la contraseña en Auditoría o el historial de cierres', 'warning');
+    return;
+  }
+  descuentoModalIds = idArr;
+  renderModalDescuento();
+  document.getElementById('modal-descuento').style.display = 'flex';
+}
+
+function cerrarModalDescuento() {
+  document.getElementById('modal-descuento').style.display = 'none';
+  descuentoModalIds = [];
+}
+function cerrarModalDescuentoClick(e) { if (e.target.id === 'modal-descuento') cerrarModalDescuento(); }
+
+function renderModalDescuento() {
+  const cuerpo = document.getElementById('descuento-modal-cuerpo');
+  if (!cuerpo) return;
+  const { todas, elegibles, excluidas } = filasDescontablesDeIds(descuentoModalIds);
+  if (!todas.length) { cuerpo.innerHTML = '<div style="color:var(--text3);font-size:12px;">Este pedido ya no existe.</div>'; return; }
+
+  const motivosExcl = [...new Set(excluidas.map(p => p.es_gratis ? '"Gratis" no cobra nada' : 'ya pagado vía abono de fiado'))].join(' · ');
+  const avisoExcluidas = excluidas.length
+    ? `<div class="alert warning" style="margin-bottom:12px;">⚠ ${excluidas.length} ítem(s) de este pedido no se pueden descontar (${motivosExcl}) y quedan fuera.</div>`
+    : '';
+
+  if (!elegibles.length) {
+    cuerpo.innerHTML = avisoExcluidas + '<div style="color:var(--text3);font-size:12px;">No hay nada que descontar en este pedido.</div>';
+    return;
+  }
+
+  const primero = elegibles[0];
+  const estaPagado = primero.estado === 'pagado';
+  const esDividido = primero.metodo === 'dividido';
+  const fecha = primero.fecha, turno = primero.turno;
+  const valorListaTotal = elegibles.reduce((a, p) => a + valorListaFila(p), 0);
+  const descuentoActual = elegibles.reduce((a, p) => a + (p.descuento || 0), 0);
+  const cierre = estaPagado ? ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno) : null;
+
+  let html = avisoExcluidas;
+  html += elegibles.map(p => `
+    <div class="modal-field">
+      <div class="modal-field-label">${LABELS[p.pedido] || p.pedido}${(p.cantidad||1)>1 ? ' × ' + p.cantidad : ''}${p.detalle ? ' — ' + p.detalle : ''}</div>
+      <div class="modal-field-value">${fmt(valorListaFila(p))}${p.descuento > 0 ? ` <span style="color:var(--text3);font-size:11px;">(hoy: −${fmt(p.descuento)})</span>` : ''}</div>
+    </div>`).join('');
+  html += `<div class="modal-field" style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">
+      <div class="modal-field-label"><strong>Precio de lista</strong></div>
+      <div class="modal-field-value"><strong>${fmt(valorListaTotal)}</strong></div>
+    </div>`;
+
+  html += `<div class="form-group mb" style="margin-top:14px;">
+      <label>Descuento total del pedido ($)</label>
+      <input type="text" inputmode="numeric" id="descuento-modal-valor" value="${descuentoActual ? descuentoActual.toLocaleString('es-CO') : ''}" placeholder="0"
+        oninput="formatMilesInput(this); recalcularPreviewDescuento();">
+    </div>
+    <div class="form-group mb">
+      <label>Motivo</label>
+      <input type="text" id="descuento-modal-motivo" list="descuento-motivos" value="${(primero.motivo_descuento||'').replace(/"/g,'&quot;')}" placeholder="Obligatorio si hay descuento">
+    </div>
+    <div class="monto-display" style="margin-bottom:14px;">
+      <div class="monto-val" id="descuento-modal-cobra">${fmt(valorListaTotal - descuentoActual)}</div>
+      <div class="monto-label">Se cobra</div>
+    </div>`;
+
+  // Reparto del cambio (delta) en pago dividido — solo tiene sentido con
+  // metodo='dividido' (la única forma en la que un pedido guarda por
+  // separado cuánto de su monto es efectivo y cuánto transferencia).
+  if (esDividido) {
+    html += `<div class="form-group mb">
+        <label>¿Cómo se reparte el cambio? <span style="color:var(--text3);font-weight:400;">(entre efectivo y transferencia de este pedido)</span></label>
+        <div class="form-row">
+          <div class="form-group">
+            <label style="font-size:11px;">De efectivo</label>
+            <input type="text" inputmode="numeric" id="descuento-modal-reparto-ef" placeholder="0" oninput="formatMilesConSigno(this); actualizarRepartoRestanteDescuento();">
+          </div>
+          <div class="form-group">
+            <label style="font-size:11px;">De transferencia</label>
+            <input type="text" inputmode="numeric" id="descuento-modal-reparto-tr" placeholder="0" oninput="formatMilesConSigno(this); actualizarRepartoRestanteDescuento();">
+          </div>
+        </div>
+        <div id="descuento-modal-reparto-restante" style="font-size:11px;margin-top:4px;"></div>
+      </div>`;
+  }
+
+  // Impacto en el cierre (solo si ya está pagado y su turno tiene cierre guardado)
+  if (estaPagado && cierre) {
+    html += `<div id="descuento-modal-cierre-aviso" class="alert info" style="margin-bottom:10px;display:none;"></div>`;
+    if (cierre.manual) {
+      html += `<div class="para-llevar-row mb">
+          <input type="checkbox" id="descuento-modal-restar-manual" checked>
+          <label for="descuento-modal-restar-manual" style="cursor:pointer;font-size:12px;">Restar también del cierre manual <span style="color:var(--text3);">(desmárcalo si la cifra que escribiste a mano ya tenía el descuento)</span></label>
+        </div>`;
+    }
+  }
+
+  // Gastos "Otro" ya anotados a mano, candidatos a borrar junto con el descuento
+  let gastosCandidatos = [];
+  if (estaPagado) {
+    const gDia = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno && g.categoria === 'otro')
+      .map(g => ({ tipo: 'gasto_dia', id: g.id, nombre: g.nombre, monto: g.monto }));
+    const gEgr = ST.egresos.filter(e => e.fecha === fecha && e.cat === 'otro' && (!e.turno || e.turno === turno))
+      .map(e => ({ tipo: 'egreso', id: e.id, nombre: e.description || '(sin detalle)', monto: e.monto }));
+    gastosCandidatos = [...gDia, ...gEgr];
+  }
+  if (gastosCandidatos.length) {
+    html += `<div class="form-group mb">
+        <label>¿Ya anotaste este descuento como gasto "Otro"? <span style="color:var(--text3);font-weight:400;">(márcalos para borrarlos en la misma operación)</span></label>
+        ${gastosCandidatos.map(g => `
+          <div class="para-llevar-row" style="margin-bottom:4px;">
+            <input type="checkbox" class="descuento-modal-gasto-chk" data-tipo="${g.tipo}" data-id="${g.id}" data-monto="${g.monto}">
+            <label style="cursor:pointer;font-size:12px;">${(g.nombre||'(sin nombre)').replace(/</g,'&lt;')} — ${fmt(g.monto)}</label>
+          </div>`).join('')}
+        <div style="font-size:11px;color:var(--red);margin-top:4px;">⚠ Si no borras ese gasto, el descuento quedará descontado dos veces.</div>
+      </div>`;
+  }
+
+  html += `<button class="btn btn-primary" id="descuento-modal-btn-aplicar" style="width:100%;" onclick="aplicarDescuentoGrupo()">Aplicar descuento</button>`;
+
+  cuerpo.innerHTML = html;
+  recalcularPreviewDescuento();
+}
+
+function recalcularPreviewDescuento() {
+  const { elegibles } = filasDescontablesDeIds(descuentoModalIds);
+  if (!elegibles.length) return;
+  const primero = elegibles[0];
+  const valorListaTotal = elegibles.reduce((a, p) => a + valorListaFila(p), 0);
+  const descuentoActual = elegibles.reduce((a, p) => a + (p.descuento || 0), 0);
+  const D = valMiles('descuento-modal-valor');
+
+  const cobraEl = document.getElementById('descuento-modal-cobra');
+  if (cobraEl) cobraEl.textContent = fmt(Math.max(0, valorListaTotal - D));
+
+  const delta = D - descuentoActual; // >0: se descuenta más que antes (sale plata); <0: menos (entra plata)
+
+  const repEf = document.getElementById('descuento-modal-reparto-ef');
+  const repTr = document.getElementById('descuento-modal-reparto-tr');
+  if (repEf && repTr) {
+    // Cada vez que cambia D se reprellenan los campos de reparto con el
+    // default (todo a efectivo) — igual que el pago dividido del registro.
+    repEf.value = delta ? delta.toLocaleString('es-CO') : '';
+    repTr.value = '0';
+  }
+  actualizarRepartoRestanteDescuento();
+
+  const cierreAviso = document.getElementById('descuento-modal-cierre-aviso');
+  if (cierreAviso) {
+    const cierre = ST.cierresDia.find(c => c.fecha === primero.fecha && c.turno === primero.turno);
+    if (cierre && delta !== 0) {
+      cierreAviso.style.display = '';
+      cierreAviso.textContent = `Esto ${delta>0?'baja':'sube'} el ingreso del cierre del ${primero.fecha} (${primero.turno==='cena'?'comidas rápidas':'almuerzo'}): ${fmtSigned(-delta)}`;
+    } else {
+      cierreAviso.style.display = 'none';
+    }
+  }
+}
+
+function actualizarRepartoRestanteDescuento() {
+  const { elegibles } = filasDescontablesDeIds(descuentoModalIds);
+  if (!elegibles.length) return;
+  const descuentoActual = elegibles.reduce((a, p) => a + (p.descuento || 0), 0);
+  const D = valMiles('descuento-modal-valor');
+  const delta = D - descuentoActual;
+  const restanteEl = document.getElementById('descuento-modal-reparto-restante');
+  if (!restanteEl) return;
+  const ef = valMilesConSigno('descuento-modal-reparto-ef');
+  const tr = valMilesConSigno('descuento-modal-reparto-tr');
+  const falta = delta - (ef + tr);
+  restanteEl.innerHTML = falta === 0
+    ? `<span style="color:var(--green);">✓ Reparto completo</span>`
+    : `<span style="color:var(--red);">Falta repartir ${fmtSigned(falta)}</span>`;
+}
+
+// Aplica (o quita, con D=0) el descuento al pedido completo — ver el
+// comentario del TAREA original para el orden exacto: validar todo → PATCH
+// filas de pedidos → PATCH cierre → borrar gastos → insert en el log. Si
+// falla el PATCH del cierre, revierte los pedidos. Si falla solo el log,
+// solo avisa (no bloquea) — mismo patrón que eliminarGrupoIngreso().
+async function aplicarDescuentoGrupo() {
+  const { elegibles } = filasDescontablesDeIds(descuentoModalIds);
+  if (!elegibles.length) { cerrarModalDescuento(); return; }
+
+  const primero = elegibles[0];
+  const estaPagado = primero.estado === 'pagado';
+  const esDividido = primero.metodo === 'dividido';
+  const fecha = primero.fecha, turno = primero.turno;
+
+  const valorListaTotal = elegibles.reduce((a, p) => a + valorListaFila(p), 0);
+  const descuentoActual = elegibles.reduce((a, p) => a + (p.descuento || 0), 0);
+  const D = valMiles('descuento-modal-valor');
+  const motivo = (document.getElementById('descuento-modal-motivo').value || '').trim();
+
+  if (!Number.isInteger(D) || D < 0) { showToast('⚠ El descuento debe ser un número entero mayor o igual a 0', 'warning'); return; }
+  if (D > valorListaTotal) { showToast('⚠ El descuento no puede superar el precio de lista', 'warning'); return; }
+  if (D > 0 && !motivo) { showToast('⚠ Escribe el motivo del descuento', 'warning'); return; }
+
+  const delta = D - descuentoActual;
+
+  // Fila que de verdad guarda el reparto efectivo/transferencia de un pago
+  // dividido (la "primera" del pedido original, ver armarPatchPago) — puede
+  // no ser elegibles[0] si esa fila se excluyó (gratis/abono).
+  const filaDividido = elegibles.find(p => (p.monto_efectivo||0) > 0 || (p.monto_transferencia||0) > 0) || primero;
+
+  let repartoEf = 0, repartoTr = 0;
+  if (esDividido && delta !== 0) {
+    repartoEf = valMilesConSigno('descuento-modal-reparto-ef');
+    repartoTr = valMilesConSigno('descuento-modal-reparto-tr');
+    if (repartoEf + repartoTr !== delta) { showToast('⚠ El reparto del cambio debe sumar exacto el delta', 'warning'); return; }
+    const nuevoEf = (filaDividido.monto_efectivo || 0) - repartoEf;
+    const nuevoTr = (filaDividido.monto_transferencia || 0) - repartoTr;
+    if (nuevoEf < 0 || nuevoTr < 0) { showToast('⚠ El reparto deja efectivo o transferencia en negativo', 'warning'); return; }
+  }
+
+  // Cuánto de "delta" sale de efectivo vs. transferencia, para el cierre —
+  // igual que el reparto dividido, pero aplica también a un pedido normal
+  // (todo del único método que tenga).
+  let deltaEfectivo = 0, deltaTransferencia = 0;
+  if (delta !== 0) {
+    if (esDividido) { deltaEfectivo = repartoEf; deltaTransferencia = repartoTr; }
+    else if (primero.metodo === 'efectivo') deltaEfectivo = delta;
+    else if (primero.metodo === 'transferencia') deltaTransferencia = delta;
+  }
+
+  // Semántica "reemplazar": cada fila vuelve a su valor de lista y D_nuevo se
+  // reparte desde cero — así un reemplazo 3.000 → 5.000 → 0 siempre cuadra
+  // exacto, sin arrastrar el redondeo de la vez anterior.
+  const filasParaReparto = elegibles.map(p => ({ valorLista: valorListaFila(p) }));
+  let nuevoDescPorFila;
+  try {
+    nuevoDescPorFila = repartirDescuento(filasParaReparto, D);
+  } catch (e) {
+    showToast('⚠ ' + e.message, 'warning');
+    return;
+  }
+
+  const gastosMarcados = [...document.querySelectorAll('.descuento-modal-gasto-chk:checked')]
+    .map(chk => ({ tipo: chk.dataset.tipo, id: Number(chk.dataset.id), monto: Number(chk.dataset.monto) }));
+  const chkManual = document.getElementById('descuento-modal-restar-manual');
+  const sumarACierreManual = !chkManual || chkManual.checked;
+
+  // Valores ANTERIORES de cada fila — para poder revertir si falla el PATCH del cierre.
+  const anteriores = elegibles.map(p => ({
+    id: p.id, monto_almuerzo: p.monto_almuerzo, monto_total: p.monto_total,
+    descuento: p.descuento || 0, motivo_descuento: p.motivo_descuento || null,
+    monto_efectivo: p.monto_efectivo || 0, monto_transferencia: p.monto_transferencia || 0
+  }));
+
+  const btn = document.getElementById('descuento-modal-btn-aplicar');
+  if (btn) btn.disabled = true;
+
+  try {
+    // 1) PATCH de las filas de pedidos
+    const patches = elegibles.map((p, i) => {
+      const nuevoDesc = nuevoDescPorFila[i];
+      const nuevoAlmuerzo = valorListaFila(p) - nuevoDesc;
+      const patch = {
+        monto_almuerzo: nuevoAlmuerzo,
+        monto_total: nuevoAlmuerzo + (p.monto_domicilio || 0),
+        descuento: nuevoDesc,
+        motivo_descuento: nuevoDesc > 0 ? motivo : null
+      };
+      if (p.id === filaDividido.id && esDividido && delta !== 0) {
+        patch.monto_efectivo = (filaDividido.monto_efectivo || 0) - repartoEf;
+        patch.monto_transferencia = (filaDividido.monto_transferencia || 0) - repartoTr;
+      }
+      return { id: p.id, patch };
+    });
+
+    for (const { id, patch } of patches) {
+      await sbPatch('pedidos', `id=eq.${id}`, patch);
+      const p = ST.pendientes.find(x => x.id === id) || ST.ingresos.find(x => x.id === id);
+      if (p) Object.assign(p, patch);
+    }
+
+    // 2) PATCH del cierre (si está pagado, su turno ya tiene cierre guardado,
+    // y de verdad hay algo que mover). Un cierre manual respeta la casilla.
+    let cierreAjustado = false;
+    const cierre = estaPagado ? ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno) : null;
+    const gastosDiaEliminadosMonto = gastosMarcados.filter(g => g.tipo === 'gasto_dia').reduce((a,g) => a + g.monto, 0);
+    const hayAlgoQueAjustarEnCierre = cierre && (delta !== 0 || gastosDiaEliminadosMonto !== 0) && (!cierre.manual || sumarACierreManual);
+
+    if (hayAlgoQueAjustarEnCierre) {
+      const nuevoEfectivo = (cierre.efectivo || 0) - deltaEfectivo;
+      const nuevoTransferencia = (cierre.transferencia || 0) - deltaTransferencia;
+      const nuevoGastos = (cierre.gastos || 0) - gastosDiaEliminadosMonto;
+      const nuevoResultado = nuevoEfectivo + nuevoTransferencia - nuevoGastos + (cierre.ajuste_efectivo || 0) + (cierre.ajuste_transferencia || 0);
+      const patchCierre = { efectivo: nuevoEfectivo, transferencia: nuevoTransferencia, gastos: nuevoGastos, resultado: nuevoResultado };
+      try {
+        await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`, patchCierre);
+        Object.assign(cierre, patchCierre);
+        cierreAjustado = true;
+      } catch (e) {
+        console.error(e);
+        // Revertir los pedidos a como estaban antes de este intento
+        try {
+          for (const prev of anteriores) {
+            const { id, ...prevPatch } = prev;
+            await sbPatch('pedidos', `id=eq.${id}`, prevPatch);
+            const p = ST.pendientes.find(x => x.id === id) || ST.ingresos.find(x => x.id === id);
+            if (p) Object.assign(p, prevPatch);
+          }
+        } catch (e2) { console.error('Error al revertir pedidos tras fallo de cierre', e2); }
+        showToast('⚠ No se pudo ajustar el cierre — el descuento NO se aplicó (se revirtió)', 'warning');
+        if (btn) btn.disabled = false;
+        renderAll();
+        return;
+      }
+    }
+
+    // 3) Borrar los gastos "Otro" marcados — no bloquea si alguno falla
+    const gastosEliminadosDesc = [];
+    for (const g of gastosMarcados) {
+      try {
+        if (g.tipo === 'gasto_dia') {
+          await sbDelete('gastos_dia', `id=eq.${g.id}`);
+          ST.gastosDia = ST.gastosDia.filter(x => x.id !== g.id);
+        } else {
+          await sbDelete('egresos', `id=eq.${g.id}`);
+          ST.egresos = ST.egresos.filter(x => x.id !== g.id);
+        }
+        gastosEliminadosDesc.push(`Otro ${fmt(g.monto)}${g.nombre ? ' «' + g.nombre + '»' : ''}`);
+      } catch (e) {
+        console.error(e);
+        showToast(`⚠ No se pudo borrar un gasto marcado (${fmt(g.monto)}) — bórralo a mano`, 'warning');
+      }
+    }
+
+    // 4) Log de auditoría — si falla, solo avisa (no bloquea, como eliminarGrupoIngreso())
+    try {
+      const [row] = await sbInsert('pedidos_descuentos', {
+        grupo_pedido: primero.grupo_pedido || null,
+        pedido_ids: elegibles.map(p => p.id).join(','),
+        fecha, hora: primero.hora || '', turno,
+        estado_pedido: primero.estado,
+        valor_lista: valorListaTotal,
+        descuento_anterior: descuentoActual,
+        descuento_nuevo: D,
+        motivo: motivo || null,
+        ajuste_efectivo: cierreAjustado ? -deltaEfectivo : 0,
+        ajuste_transferencia: cierreAjustado ? -deltaTransferencia : 0,
+        cierre_ajustado: cierreAjustado,
+        gastos_eliminados: gastosEliminadosDesc.join('; ') || null
+      });
+      if (row && Array.isArray(ST.pedidosDescuentos)) ST.pedidosDescuentos.unshift(row);
+    } catch (e) {
+      console.error(e);
+      showToast('⚠ El descuento se aplicó, pero no quedó registrado en Auditoría (falta crear la tabla pedidos_descuentos en Supabase)', 'warning');
+    }
+
+    setSyncBadge('ok');
+    showToast(D > 0 ? `✅ Descuento de ${fmt(D)} aplicado` : '✅ Descuento quitado', 'ok');
+    cerrarModalDescuento();
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Error al aplicar el descuento: ' + (e.message||''), 'warning');
+    if (btn) btn.disabled = false;
+  }
+}
+
 // ── Render PENDIENTES ──────────────────────────────────────────────────
 function renderPendientes() {
   // Badge en nav — los fiados NO cuentan aquí, viven aparte en su propia
@@ -4313,6 +4911,7 @@ function renderPendientes() {
           style="${divididoPre ? 'display:none;' : (metodoInicial==='efectivo'?'':'display:none;')}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
         ${htmlPagoDividido(key, total, divididoPre)}
         <button class="btn btn-primary" onclick="marcarGrupoMesaPagado([${idsGrupo.join(',')}],${mn},'${key}')">✅ Marcar todo como pagado</button>
+        ${botonDescuentoHTML(idsGrupo)}
         <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${grupoPedidoVal}')">+ Agregar producto</button>
         <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${grupoPedidoVal}')">🍽 Agregar comida</button>
         <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Mueve este pedido completo a otra mesa, sin mesa o a fiado">🔄 Cambiar de mesa</button>
@@ -4381,6 +4980,7 @@ function renderPendientes() {
           ${htmlPagoDividido(key, total, divididoPre)}
           <button class="btn btn-primary" onclick="marcarGrupoDomicilioPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
           <span class="pending-dom-detail">🍽 ${fmt(montoAlmuerzoTotal)} + 🛵 ${fmt(montoDomicilioTotal)}</span>
+          ${botonDescuentoHTML(idsGrupo)}
           <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
           <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
           <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa, sin mesa o a fiado">🔄 Ubicar en mesa</button>
@@ -4450,6 +5050,7 @@ function renderPendientes() {
               style="${divididoPre ? 'display:none;' : (metodoInicial==='efectivo'?'':'display:none;')}" oninput="formatMilesInput(this); calcularVueltoPendiente('${key}',${total})">
             ${htmlPagoDividido(key, total, divididoPre)}
             <button class="btn btn-primary" onclick="marcarGrupoSinMesaPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
+            ${botonDescuentoHTML(idsGrupo)}
             <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
             <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
             <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa o a fiado">🔄 Ubicar en mesa</button>
@@ -4655,6 +5256,7 @@ function renderFiados() {
           <button class="btn btn-outline" onclick="asignarClienteAHuerfano([${idsGrupo.join(',')}],'${key}')">Asignar</button>
           <input type="text" id="huerfano-nuevo-${key}" placeholder="+ Cliente nuevo…" style="max-width:160px;">
           <button class="btn btn-outline" onclick="crearClienteYAsignarHuerfano([${idsGrupo.join(',')}],'${key}')">Crear y asignar</button>
+          ${botonDescuentoHTML(idsGrupo)}
           <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancelar este pedido">✕ Cancelar</button>
         </div>
       </div>`;
@@ -4683,7 +5285,10 @@ function renderFiados() {
             <td>${primero.fecha||'—'} ${primero.hora||''}</td>
             <td style="color:var(--text3);font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detalle||'—'}</td>
             <td class="amount-pos">${fmt(total)}</td>
-            <td><button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancelar este pedido fiado">✕</button></td>
+            <td style="display:flex;gap:4px;white-space:nowrap;">
+              ${botonDescuentoHTML(idsGrupo)}
+              <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancelar este pedido fiado">✕</button>
+            </td>
           </tr>`;
         }).join('')
       : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin pedidos pendientes — el saldo viene de un abono todavía sin aplicar del todo.</div></td></tr>`;
@@ -4936,6 +5541,7 @@ function renderIngresos() {
         const resumenDetalle = orders.map(o => o.detalle).filter(Boolean).join(' · ') || '—';
         const cantidadTotal = orders.reduce((a,o) => a + (o.cantidad||1), 0);
         const montoTotal    = orders.reduce((a,o) => a + (o.monto_total||0), 0);
+        const descuentoTotal = orders.reduce((a,o) => a + (o.descuento||0), 0);
         const editandoEsteGrupo = metodoEditGroupIds && metodoEditGroupIds.join('-') === groupKey;
         return `<tr>
         <td>${hora}</td>
@@ -4959,9 +5565,10 @@ function renderIngresos() {
               : `<span class="badge ${metC(primero.metodo)}" style="cursor:pointer;" onclick="editarMetodoIngreso([${idsGrupo.join(',')}])" title="Clic para cambiar el método de pago">${primero.metodo} ✏</span>`)
         }</td>
         <td>${cantidadTotal}</td>
-        <td class="amount-pos">${fmt(montoTotal)}</td>
+        <td class="amount-pos">${fmt(montoTotal)}${descuentoTotal > 0 ? `<br><span class="badge badge-orange" style="font-size:10px;" title="Descuento aplicado">🏷 −${fmt(descuentoTotal)}</span>` : ''}</td>
         <td style="display:flex;gap:4px;">
           <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetalleGrupoIngreso([${idsGrupo.join(',')}])">👁</button>
+          ${botonDescuentoHTML(idsGrupo)}
           <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="revertirPago([${idsGrupo.join(',')}])" title="Revertir a pendiente">↩</button>
           <button class="btn btn-danger" onclick="eliminarGrupoIngreso([${idsGrupo.join(',')}])">✕</button>
         </td>
@@ -6227,6 +6834,11 @@ let editarPedidoId = null;
 function abrirModalEditarPedido(id) {
   const p = ST.pendientes.find(x => x.id === id);
   if (!p) return;
+  // Si el grupo (pedido completo) ya tiene descuento aplicado, editar un plato
+  // suyo desde acá recalcularía el monto SIN tenerlo en cuenta — se bloquea.
+  const grupoKey = p.grupo_pedido || `legacy-${p.id}`;
+  const grupoTieneDescuento = ST.pendientes.some(x => (x.grupo_pedido || `legacy-${x.id}`) === grupoKey && (x.descuento || 0) > 0);
+  if (grupoTieneDescuento) { showToast('⚠ Quita primero el descuento (🏷) y luego edita', 'warning'); return; }
   editarPedidoId = id;
   document.getElementById('editar-ped-actual').textContent = `${LABELS[p.pedido] || p.pedido} · ${p.detalle || 'sin detalle'} · ${fmt(p.monto_total || 0)}`;
   rebuildEditarPedidoSelect(p.turno);
@@ -6911,6 +7523,12 @@ function renderTablero() {
   document.getElementById('rp-trans').textContent = fmt(totalTransferenciaCierres);
   document.getElementById('rp-tcr').textContent   = fmt(ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+(incluirGratisTablero ? (b.monto_total||0) : montoIngreso(b)),0));
   document.getElementById('rp-ting').textContent  = fmt(tIMostrado);
+  // Descuentos otorgados: informativo, nunca vuelve a restar de nada — tI ya
+  // es el ingreso real (neto), que es el que de verdad entró a caja.
+  const descuentosPeriodo = ings.reduce((a,b) => a + (b.descuento||0), 0);
+  const pedidosConDescuento = agruparPorPedido(ings.filter(i => (i.descuento||0) > 0)).length;
+  document.getElementById('rp-descuentos').textContent = `${fmt(descuentosPeriodo)}${pedidosConDescuento ? ` (${pedidosConDescuento} pedido${pedidosConDescuento>1?'s':''})` : ''}`;
+  document.getElementById('rp-ventas-lista').textContent = fmt(tIMostrado + descuentosPeriodo);
 
   document.getElementById('rp-nom').textContent   = fmt(egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
   document.getElementById('rp-prov').textContent  = fmt(egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
@@ -7058,6 +7676,7 @@ function renderHistorialPedidosIngresos() {
         const resumenDetalle = orders.map(o => o.detalle).filter(Boolean).join(' · ') || '—';
         const cantidadTotal = orders.reduce((a,o) => a + (o.cantidad||1), 0);
         const montoTotal    = orders.reduce((a,o) => a + (o.monto_total||0), 0);
+        const descuentoTotal = orders.reduce((a,o) => a + (o.descuento||0), 0);
         return `<tr>
         <td>${primero.fecha}</td>
         <td>${primero.hora||'—'}</td>
@@ -7067,8 +7686,11 @@ function renderHistorialPedidosIngresos() {
         <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resumenDetalle}</td>
         <td><span class="badge ${metC(primero.metodo)}" title="${metodoLabel(primero)}">${primero.metodo}</span></td>
         <td>${cantidadTotal}</td>
-        <td class="amount-pos">${fmt(montoTotal)}</td>
-        <td><button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetalleGrupoIngreso([${idsGrupo.join(',')}])">👁</button></td>
+        <td class="amount-pos">${fmt(montoTotal)}${descuentoTotal > 0 ? `<br><span class="badge badge-orange" style="font-size:10px;" title="Descuento aplicado">🏷 −${fmt(descuentoTotal)}</span>` : ''}</td>
+        <td style="display:flex;gap:4px;">
+          <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="verDetalleGrupoIngreso([${idsGrupo.join(',')}])">👁</button>
+          ${botonDescuentoHTML(idsGrupo)}
+        </td>
       </tr>`;
       }).join('')
     : `<tr><td colspan="10"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin pedidos en este filtro</div></div></td></tr>`;
@@ -8271,6 +8893,22 @@ function renderAuditoria() {
         </tr>`).join('')
       : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">Sin pedidos eliminados registrados</div></div></td></tr>`;
   }
+
+  const descBody = document.getElementById('auditoria-descuentos-body');
+  if (descBody) {
+    const descuentos = [...(ST.pedidosDescuentos || [])].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    descBody.innerHTML = descuentos.length
+      ? descuentos.map(d => `<tr>
+          <td>${new Date(d.created_at).toLocaleString('es-CO')}</td>
+          <td>${d.fecha||'—'}${d.hora ? ' · ' + d.hora : ''} <span class="badge ${d.turno==='cena'?'badge-purple':'badge-accent'}">${d.turno==='cena'?'🌙':'☀️'}</span></td>
+          <td>${fmt(d.valor_lista||0)}</td>
+          <td class="amount-neg">${d.descuento_nuevo > d.descuento_anterior ? '+' : (d.descuento_nuevo < d.descuento_anterior ? '−' : '')}${fmt(Math.abs((d.descuento_nuevo||0)-(d.descuento_anterior||0)))} <span style="color:var(--text3);font-size:11px;">(total ${fmt(d.descuento_nuevo||0)})</span></td>
+          <td style="color:var(--text2);">${d.motivo || '—'}</td>
+          <td style="color:var(--text2);">${d.cierre_ajustado ? `💵 ${fmtAjuste(d.ajuste_efectivo||0)} · 💳 ${fmtAjuste(d.ajuste_transferencia||0)}` : '—'}</td>
+          <td style="color:var(--text3);font-size:11px;">${d.gastos_eliminados || '—'}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🏷</div><div class="empty-text">Sin descuentos aplicados todavía</div></div></td></tr>`;
+  }
 }
 
 // ── Badge de notificación de Auditoría (numerito en la pestaña) ────────
@@ -8284,7 +8922,8 @@ function auditoriaEventosIds() {
     .filter(c => c.ajuste_manual)
     .map(c => `ajuste:${c.fecha}:${c.turno}`);
   const elimIds = ST.pedidosEliminados.map(e => `elim:${e.id}`);
-  return [...ajustesIds, ...elimIds];
+  const descIds = (ST.pedidosDescuentos || []).map(d => `desc:${d.id}`);
+  return [...ajustesIds, ...elimIds, ...descIds];
 }
 
 function auditoriaVistosGuardados() {
