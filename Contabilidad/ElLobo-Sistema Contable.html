@@ -15,6 +15,7 @@
     --green: #4caf7d; --red: #e05c5c; --blue: #5b9bd5;
     --orange: #e07c3a; --purple: #9b7fd4;
     --text: #f0ece0; --text2: #a09880; --text3: #6a6456;
+    --texto-claro: #ffffff; /* títulos de campos y botones outline en las zonas de captura de pedidos */
     --radius: 12px; --radius-sm: 8px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -100,6 +101,12 @@
 
   label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); font-family: 'Syne', sans-serif; font-weight: 600; }
   label .req { color: var(--red); margin-left: 2px; }
+  /* Solo en las zonas de captura de pedidos (formulario de Pedidos, Pendientes y
+     sus modales): títulos y botones outline en blanco para que se lean sobre el
+     fondo oscuro. El resto de pantallas conserva label/.btn-outline globales. */
+  .texto-claro label { color: var(--texto-claro); }
+  .texto-claro .btn-outline { color: var(--texto-claro); }
+  .texto-claro .modal-field-label { color: var(--texto-claro); }
 
   input, select {
     background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm);
@@ -563,7 +570,7 @@
 <!-- ===== PEDIDOS (antes Ingresos) — registro del día, sin historial de semana/mes ===== -->
 <section class="section active" id="tab-ingresos">
   <div class="two-col" style="margin-bottom:20px;">
-    <div class="panel">
+    <div class="panel texto-claro">
       <div class="panel-header"><div class="panel-title">Registrar pedido</div></div>
       <div class="panel-body">
 
@@ -854,7 +861,7 @@
 </section>
 
 <!-- ===== PENDIENTES ===== -->
-<section class="section" id="tab-pendientes">
+<section class="section texto-claro" id="tab-pendientes">
   <button class="btn btn-outline" onclick="abrirModalNotas()" style="margin-bottom:16px;">
     📝 Notas del día <span id="notas-badge" style="display:none;background:var(--accent);color:#0f0e0c;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span>
   </button>
@@ -1778,7 +1785,7 @@
 </div>
 
 <!-- Modal: Agregar producto a una mesa ya registrada -->
-<div id="modal-agregar-producto" class="modal-overlay" style="display:none;" onclick="cerrarModalAgregarProductoClick(event)">
+<div id="modal-agregar-producto" class="modal-overlay texto-claro" style="display:none;" onclick="cerrarModalAgregarProductoClick(event)">
   <div class="modal-box">
     <button class="modal-close" onclick="cerrarModalAgregarProducto()">✕</button>
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:16px;">+ Agregar producto <span id="extra-producto-mesa-label"></span></div>
@@ -1807,7 +1814,7 @@
 </div>
 
 <!-- Modal: Editar un pedido ya registrado en Pendientes -->
-<div id="modal-editar-pedido" class="modal-overlay" style="display:none;" onclick="cerrarModalEditarPedidoClick(event)">
+<div id="modal-editar-pedido" class="modal-overlay texto-claro" style="display:none;" onclick="cerrarModalEditarPedidoClick(event)">
   <div class="modal-box">
     <button class="modal-close" onclick="cerrarModalEditarPedido()">✕</button>
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:16px;">✏️ Editar pedido</div>
@@ -1877,7 +1884,7 @@
 <!-- Modal: Agregar una comida completa a un pedido ya existente en Pendientes
      (mesa, domicilio, sin mesa o fiado) — mismo catálogo que el registro
      normal, pero para sumarla a un pedido que ya está en curso. -->
-<div id="modal-agregar-comida" class="modal-overlay" style="display:none;" onclick="cerrarModalAgregarComidaClick(event)">
+<div id="modal-agregar-comida" class="modal-overlay texto-claro" style="display:none;" onclick="cerrarModalAgregarComidaClick(event)">
   <div class="modal-box">
     <button class="modal-close" onclick="cerrarModalAgregarComida()">✕</button>
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:8px;">🍽 Agregar comida</div>
