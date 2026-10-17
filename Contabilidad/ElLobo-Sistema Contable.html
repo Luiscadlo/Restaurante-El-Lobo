@@ -1335,7 +1335,7 @@
     </div>
   </div>
   <div class="kpi-grid">
-    <div class="kpi-card green"><div class="kpi-label">Total vendido</div><div class="kpi-value" id="dd-total">$0</div><div class="kpi-sub" id="dd-turno-label">Efectivo + Transferencia</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Total recibido</div><div class="kpi-value" id="dd-total">$0</div><div class="kpi-sub" id="dd-turno-label">Ventas del turno + Abonos de fiado</div></div>
     <div class="kpi-card blue"><div class="kpi-label">Efectivo</div><div class="kpi-value" id="dd-efectivo">$0</div><div class="kpi-sub">Dinero físico recibido</div></div>
     <div class="kpi-card accent"><div class="kpi-label">Transferencia</div><div class="kpi-value" id="dd-transferencia">$0</div><div class="kpi-sub">Pago digital recibido</div></div>
   </div>
@@ -1385,6 +1385,9 @@
         <div class="report-line" id="dd-res-desayuno-row"><span>Venta desayuno</span><strong id="dd-res-desayuno">$0</strong></div>
         <div class="report-line"><span>Efectivo recibido (pedidos)</span><strong class="amount-pos" id="dd-res-efectivo">$0</strong></div>
         <div class="report-line"><span>Transferencia recibida (pedidos)</span><strong class="amount-pos" id="dd-res-transferencia">$0</strong></div>
+        <div class="report-line"><span>Abonos de fiado recibidos — efectivo</span><strong class="amount-pos" id="dd-res-abonos-efectivo">$0</strong></div>
+        <div class="report-line"><span>Abonos de fiado recibidos — transferencia</span><strong class="amount-pos" id="dd-res-abonos-transferencia">$0</strong></div>
+        <div id="dd-abonos-detalle"></div>
         <div class="report-line"><span>Total gastos extra</span><strong class="amount-neg" id="dd-res-gastos">$0</strong></div>
         <div class="report-line" id="dd-res-ajuste-efectivo-row" style="display:none;"><span>Ajuste efectivo</span><strong id="dd-res-ajuste-efectivo">$0</strong></div>
         <div class="report-line" id="dd-res-ajuste-transferencia-row" style="display:none;"><span>Ajuste transferencia</span><strong id="dd-res-ajuste-transferencia">$0</strong></div>
@@ -1452,7 +1455,7 @@
         </div>
         <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th>Gastos</th><th title="Almuerzos que comió la familia sin pagar (solo cierres de almuerzo)">Familia</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th title="Abonos de fiado recibidos en ese turno — ya están dentro de Efectivo/Transf.">Abonos fiado</th><th>Gastos</th><th title="Almuerzos que comió la familia sin pagar (solo cierres de almuerzo)">Familia</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
     </div>
   </div>
 </section>
@@ -2428,6 +2431,40 @@ function turnoFromHora(h) {
   return (m >= 540 && m < 1020) ? 'almuerzo' : 'cena';
 }
 
+// Fecha y turno REALES en que se recibe plata fuera de un pedido (abonos de
+// fiado) — por la hora del dispositivo, nunca por turnoManual (que se queda
+// fijo desde que se cargó la página). Madrugada (00:00–08:59): el turno por
+// hora ya es "cena", y pertenece a la cena del día ANTERIOR — la de comidas
+// rápidas va de 5:00 pm a 2:00 am, y su cierre se guarda con la fecha en
+// que empezó. La app no tenía otra regla para esa franja: los pedidos toman
+// la fecha del formulario (fijada al cargar la página) y nunca se ha
+// registrado uno antes de las 9:00.
+function fechaTurnoDeCobro() {
+  const ahora = new Date();
+  const hora  = nowTime();
+  if (ahora.getHours() < 9) {
+    const ayer = new Date(ahora);
+    ayer.setDate(ayer.getDate() - 1);
+    return { fecha: toLocalDateStr(ayer), turno: 'cena' };
+  }
+  return { fecha: today(), turno: turnoFromHora(hora) };
+}
+
+// Fiado saldado con abonos NUEVOS (con fecha_pago): conserva fecha/turno de
+// consumo y su plata ya entró con cada abono. Los viejos (pagado_via_abono
+// sin fecha_pago) siguen calculándose como antes del cambio.
+const cobradoViaAbonos = p => p.pagado_via_abono === true && !!p.fecha_pago;
+const fechaCorta = f => f ? `${f.slice(8,10)}/${f.slice(5,7)}` : '—';
+function etiquetaCobroAbonos(p) {
+  return `<span class="badge badge-purple" title="Fiado consumido el ${fechaCorta(p.fecha)}; la plata entró con cada abono, en el cierre del día en que se recibió">📒 cobrado el ${fechaCorta(p.fecha_pago)} vía abonos</span>`;
+}
+
+// Abonos de fiado NUEVOS (con turno) recibidos en una fecha/turno — los que
+// suman plata al cierre. Los viejos (turno nulo) no se tocan.
+function abonosDeTurno(fecha, turno) {
+  return ST.abonosFiado.filter(a => a.turno && a.fecha === fecha && a.turno === turno);
+}
+
 const metC = m => m==='efectivo'?'badge-green':m==='dividido'?'badge-purple':m==='gratis'?'badge-gray':'badge-accent';
 // Color de cada categoría de egreso — "Otro" va en amarillo (accent) para que
 // no se confunda con Proveedores (rojo) y Desechables en verde, que es el único
@@ -2447,15 +2484,26 @@ const cuentaBadge = c => c === 'transf_almuerzos' ? 'badge-accent' : c === 'tran
 // correcta de saber cuánto efectivo/transferencia aportó un pedido — se usan
 // en TODOS los cálculos de caja, cierre y reportes para que un pago dividido
 // nunca se pierda ni se cuente en la columna equivocada.
+//
+// Un fiado saldado con abonos NUEVOS (fecha_pago no nula) no aporta plata
+// propia: cada abono ya entró al cierre del día/turno en que se recibió (ver
+// calcularVentasFijas). Por eso aquí vale 0 — así ningún cierre, KPI de
+// efectivo/transferencia ni total de Ingresos lo cuenta dos veces. Su VALOR
+// (monto_total) sí sigue contando como venta en su fecha/turno de consumo.
+// Los saldados con abonos VIEJOS (antes de fecha_pago) se calculan como
+// siempre: su plata entró como pedido pagado en el día de cobro.
 function efectivoDe(p) {
+  if (cobradoViaAbonos(p)) return 0;
   if (p.metodo === 'dividido') return p.monto_efectivo || 0;
   return p.metodo === 'efectivo' ? (p.monto_total || 0) : 0;
 }
 function transferenciaDe(p) {
+  if (cobradoViaAbonos(p)) return 0;
   if (p.metodo === 'dividido') return p.monto_transferencia || 0;
   return p.metodo === 'transferencia' ? (p.monto_total || 0) : 0;
 }
 function metodoLabel(p) {
+  if (cobradoViaAbonos(p)) return `cobrado el ${fechaCorta(p.fecha_pago)} vía abonos (la plata entró con cada abono)`;
   if (p.metodo === 'gratis') return 'gratis (no ingresa)';
   if (p.metodo !== 'dividido') return p.metodo;
   return `dividido (efvo ${fmt(p.monto_efectivo||0)} · transf ${fmt(p.monto_transferencia||0)})`;
@@ -5225,9 +5273,12 @@ function renderFiados() {
 
   // Solo clientes con saldo > 0 estorban la vista — los que ya quedaron en
   // $0 no se muestran (ni colapsados: simplemente no tienen nada pendiente).
+  // Excepción: si tienen pedidos pendientes cubiertos por saldo a favor (p.
+  // ej. tras revertir un pago vía abono, saldo = 0) sí se muestran, para
+  // poder usar "Aplicar saldo a favor".
   const clientesConSaldo = ST.clientesFiado
     .map(c => ({ cliente: c, ...calcularSaldoFiado(c.id) }))
-    .filter(x => x.saldo > 0.5)
+    .filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5)
     .sort((a,b) => b.saldo - a.saldo);
 
   // Huérfanos: fiados sin cliente_fiado_id, invisibles en cualquier otro
@@ -5290,7 +5341,7 @@ function renderFiados() {
     return;
   }
 
-  zone.innerHTML = htmlHuerfanos + clientesConSaldo.map(({ cliente, saldo }) => {
+  zone.innerHTML = htmlHuerfanos + clientesConSaldo.map(({ cliente, saldo, sobrante }) => {
     const grupos = gruposFiadoDeCliente(cliente.id);
     const abonos = ST.abonosFiado.filter(a => a.cliente_fiado_id === cliente.id)
       .sort((a,b) => b.fecha.localeCompare(a.fecha));
@@ -5316,7 +5367,7 @@ function renderFiados() {
 
     const filasAbonos = abonos.length
       ? abonos.map(a => `<tr>
-          <td>${a.fecha}</td>
+          <td>${a.fecha}${a.turno ? ` · ${a.turno === 'cena' ? '🌙' : '☀️'}` : ''}</td>
           <td class="amount-pos">${fmt(a.monto)}</td>
           <td><span class="badge ${a.cuenta==='efectivo'?'badge-green':'badge-blue'}">${a.cuenta==='efectivo'?'💵 Efectivo':'📲 Transferencia'}</span></td>
           <td style="color:var(--text3);font-size:11px;">${a.nota||'—'}</td>
@@ -5332,8 +5383,8 @@ function renderFiados() {
 
     const filasPagados = pagadosViaAbono.length
       ? pagadosViaAbono.map(p => `<tr>
-          <td>${p.fecha_original || p.fecha || '—'}</td>
-          <td>${p.fecha || '—'}</td>
+          <td>${cobradoViaAbonos(p) ? p.fecha : (p.fecha_original || p.fecha || '—')}</td>
+          <td>${p.fecha_pago || p.fecha || '—'}</td>
           <td style="color:var(--text3);font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${LABELS[p.pedido]||p.pedido}${p.detalle ? ': ' + p.detalle : ''}</td>
           <td class="amount-pos">${fmt(p.monto_total||0)}</td>
         </tr>`).join('')
@@ -5344,7 +5395,7 @@ function renderFiados() {
       <div class="pending-group-hdr" style="cursor:pointer;" onclick="toggleFiadoCliente(${cliente.id})">
         <div>
           <div class="pending-group-title" style="color:var(--purple);">📒 ${cliente.nombre}</div>
-          <div class="pending-group-sub">${grupos.length} pedido(s) pendiente(s) · ${abonos.length} abono(s) — ${abierto ? 'clic para colapsar' : 'clic para ver detalle'}</div>
+          <div class="pending-group-sub">${grupos.length} pedido(s) pendiente(s) · ${abonos.length} abono(s)${sobrante > 0.5 ? ` · saldo a favor ${fmt(sobrante)}` : ''} — ${abierto ? 'clic para colapsar' : 'clic para ver detalle'}</div>
         </div>
         <div class="pending-group-total">${fmt(saldo)}</div>
       </div>
@@ -5375,6 +5426,7 @@ function renderFiados() {
           </select>
           <input type="text" id="abono-nota-${cliente.id}" placeholder="Nota (opcional)" style="max-width:220px;">
           <button class="btn btn-primary" onclick="registrarAbonoFiado(${cliente.id})">+ Registrar abono</button>
+          ${gruposQueCubreSaldoAFavor(cliente.id).length ? `<button class="btn btn-outline" onclick="aplicarSaldoAFavor(${cliente.id})" title="Salda pedidos completos con lo que ya abonó y sobró — no entra plata nueva">✔ Aplicar saldo a favor (${fmt(sobrante)})</button>` : ''}
         </div>
       </div>
     </div>`;
@@ -5428,10 +5480,72 @@ async function crearClienteYAsignarHuerfano(idsGrupo, key) {
   }
 }
 
+// Grupos de fiado (grupo_pedido completo, del más viejo al más nuevo) que
+// alcanza a cubrir el saldo a favor del cliente, sin partir ninguno. Solo
+// calcula — no escribe nada.
+function gruposQueCubreSaldoAFavor(clienteId) {
+  let disponible = calcularSaldoFiado(clienteId).sobrante;
+  const cubiertos = [];
+  for (const grupo of gruposFiadoDeCliente(clienteId)) {
+    const total = grupo.orders.reduce((a,p) => a + (p.monto_total||0), 0);
+    if (disponible + 0.01 < total) break; // no alcanza este grupo completo — para aquí
+    cubiertos.push({ grupo, total });
+    disponible -= total;
+  }
+  return cubiertos;
+}
+
+// Salda (marca pagados) los grupos que cubre el saldo a favor del cliente.
+// NO toca fecha ni turno del consumo: guarda cuándo se cobró en fecha_pago/
+// turno_pago y deja monto_efectivo/monto_transferencia en 0 — su plata ya
+// entró al cierre con cada abono (efectivoDe/transferenciaDe dan 0 para
+// estos pedidos), así que saldar nunca suma plata otra vez.
+// Si fecha_pago/turno_pago todavía no existen en Supabase, no salda nada (y
+// avisa): sería repetir el error de sobreescribir la fecha del consumo. El
+// saldo a favor queda intacto para aplicarlo cuando corra la migración.
+async function saldarFiadosConSaldoAFavor(clienteId, metodo, fechaPago, turnoPago) {
+  const pagados = [];
+  for (const { grupo } of gruposQueCubreSaldoAFavor(clienteId)) {
+    for (const p of grupo.orders) {
+      const patch = {
+        estado: 'pagado', metodo, monto_efectivo: 0, monto_transferencia: 0,
+        pagado_via_abono: true, fecha_pago: fechaPago, turno_pago: turnoPago
+      };
+      try {
+        await sbPatch('pedidos', `id=eq.${p.id}`, patch);
+      } catch (e) {
+        const msg = e.message || '';
+        if (msg.includes('fecha_pago') || msg.includes('turno_pago')) {
+          showToast('⚠ No se saldó ningún pedido: falta correr migracion_supabase_abonos_turno.sql en Supabase. La plata quedó como saldo a favor del cliente.', 'warning');
+          return pagados;
+        }
+        throw e;
+      }
+      Object.assign(p, patch);
+    }
+    ST.ingresos = [...grupo.orders, ...ST.ingresos];
+    ST.pendientes = ST.pendientes.filter(p => !grupo.orders.some(o => o.id === p.id));
+    pagados.push(grupo);
+  }
+  return pagados;
+}
+
+// Lleva a "Corregir cierre" de una fecha/turno ya guardado (para que incluya
+// un abono recibido después de cerrarlo). Mismas reglas que el botón del
+// banner: el de hoy se corrige libre; el de otro día pide la contraseña.
+function abrirCorreccionCierre(fecha, turno) {
+  document.getElementById('dd-fecha').value = fecha;
+  ddTurno = turno;
+  corregirCierreActual();
+}
+
 // Registra un abono y lo reparte automáticamente contra los pedidos fiados
 // pendientes del cliente, del más viejo al más nuevo, un grupo_pedido
 // completo a la vez (nunca se parte una visita a la mitad) — ver la
 // migración y los comentarios de calcularSaldoFiado() para la fórmula.
+// La PLATA del abono entra al cierre del día/turno REAL en que se recibe
+// (fechaTurnoDeCobro, por la hora — no turnoManual), en la columna de su
+// cuenta. Ya no se crea ningún "aporte" en Caja: Caja la recibe vía cierre.
 async function registrarAbonoFiado(clienteId) {
   const cliente = ST.clientesFiado.find(c => c.id === clienteId);
   if (!cliente) return;
@@ -5442,69 +5556,31 @@ async function registrarAbonoFiado(clienteId) {
   const nota   = notaEl ? notaEl.value.trim() : '';
   if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
 
+  const { fecha, turno } = fechaTurnoDeCobro();
+  const nombreTurno = turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas';
+  // Turno ya cerrado: el cierre guardado es una foto y no se recalcula solo —
+  // si se guardara en silencio, el abono nunca llegaría a Caja.
+  const cierre = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
+  if (cierre && !confirm(
+    `El cierre de ${nombreTurno} del ${fechaCorta(fecha)} ya está guardado.\n\n` +
+    `El abono de ${fmt(monto)} pertenece a ese turno, pero el cierre guardado no lo incluye todavía. ` +
+    `Si continúas, se registra el abono y se abre "Corregir cierre" para volver a guardarlo con el abono incluido.\n\n¿Continuar?`
+  )) return;
+
   try {
     const [abonoRow] = await sbInsertConCuenta('abonos_fiado', {
-      cliente_fiado_id: clienteId, fecha: today(), monto, cuenta, nota: nota || null
+      cliente_fiado_id: clienteId, fecha, turno, monto, cuenta, nota: nota || null
     });
     ST.abonosFiado.unshift(abonoRow);
 
-    // "disponible" = este abono + lo que sobraba de abonos anteriores sin
-    // aplicar — calcularSaldoFiado().sobrante ya lo suma todo (incluido el
-    // que se acaba de insertar), así que es exactamente lo que hay para
-    // repartir ahora.
-    let disponible = calcularSaldoFiado(clienteId).sobrante;
-
-    const grupos = gruposFiadoDeCliente(clienteId);
-    const gruposPagados = [];
-    let idx = 0;
-    for (; idx < grupos.length; idx++) {
-      const grupo = grupos[idx];
-      const totalGrupo = grupo.orders.reduce((a,p) => a + (p.monto_total||0), 0);
-      if (disponible + 0.01 < totalGrupo) break; // no alcanza este grupo completo — para aquí
-      for (const p of grupo.orders) {
-        const patchFull = armarPatchPago(cuenta, null, false, {
-          fecha: today(), fecha_original: p.fecha, turno: turnoManual, pagado_via_abono: true
-        });
-        let patchData = patchFull;
-        try {
-          await sbPatch('pedidos', `id=eq.${p.id}`, patchFull);
-        } catch (e) {
-          const msg = e.message || '';
-          if (msg.includes('fecha_original') || msg.includes('pagado_via_abono') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia')) {
-            const { fecha_original, pagado_via_abono, monto_efectivo, monto_transferencia, ...base } = patchFull;
-            patchData = base;
-            await sbPatch('pedidos', `id=eq.${p.id}`, patchData);
-          } else { throw e; }
-        }
-        Object.assign(p, patchData);
-      }
-      ST.ingresos = [...grupo.orders, ...ST.ingresos];
-      ST.pendientes = ST.pendientes.filter(p => !grupo.orders.some(o => o.id === p.id));
-      disponible -= totalGrupo;
-      gruposPagados.push(grupo);
-    }
-    const siguienteGrupo = grupos[idx]; // el primero que no alcanzó a cubrirse (o undefined)
-
-    // Lo que sobra (no alcanzó para el siguiente pedido completo) entra a
-    // Caja HOY igual — la plata ya llegó, aunque ningún pedido se haya
-    // terminado de marcar pagado. "aporte" es el único tipo de movimiento
-    // de Caja que solo suma y nunca se valida contra dejar la cuenta en
-    // negativo — correcto para un ingreso real como este.
-    if (disponible > 0.5) {
-      const turnoRef = siguienteGrupo?.orders[0]?.turno
-        || gruposPagados[gruposPagados.length - 1]?.orders[0]?.turno
-        || 'almuerzo';
-      const cuentaCaja = cuenta === 'efectivo' ? 'efectivo' : (turnoRef === 'almuerzo' ? 'transf_almuerzos' : 'transf_rapidas');
-      try {
-        const [movRow] = await sbInsertConCuenta('movimientos_caja', {
-          fecha: today(), tipo: 'aporte', cuenta: cuentaCaja, monto: disponible,
-          descripcion: `Abono fiado — ${cliente.nombre}`
-        });
-        ST.movimientosCaja.unshift(movRow);
-      } catch (e) {
-        console.error(e);
-        showToast('⚠ El abono se guardó pero el sobrante no se pudo registrar en Caja — revísalo a mano', 'warning');
-      }
+    // Sin la columna turno el abono quedaría como uno "viejo" (fuera de todo
+    // cierre); en ese caso no se salda nada, para no marcar pagado un pedido
+    // cuya plata no entró a ningún cierre.
+    let pagados = [];
+    if (!abonoRow.turno) {
+      showToast('⚠ El abono se guardó SIN turno — no aparecerá en el cierre hasta correr migracion_supabase_abonos_turno.sql. No se saldó ningún pedido.', 'warning');
+    } else {
+      pagados = await saldarFiadosConSaldoAFavor(clienteId, cuenta, fecha, turno);
     }
 
     setSyncBadge('ok');
@@ -5516,13 +5592,53 @@ async function registrarAbonoFiado(clienteId) {
     showToast(
       saldoFinal <= 0.5
         ? `✅ Fiado de ${cliente.nombre} saldado por completo`
-        : `✅ Abono de ${fmt(monto)} registrado — ${cliente.nombre} debe ${fmt(saldoFinal)}`,
+        : `✅ Abono de ${fmt(monto)} registrado${pagados.length ? ` (${pagados.length} pedido(s) saldado(s))` : ''} — ${cliente.nombre} debe ${fmt(saldoFinal)}`,
       'ok'
     );
     renderAll();
+    if (cierre && abonoRow.turno) abrirCorreccionCierre(fecha, turno);
   } catch (e) {
     console.error(e);
     showToast(`⚠ Error al registrar el abono: ${(e.message||'').slice(0,160)}`, 'warning');
+  }
+}
+
+// "Aplicar saldo a favor": salda pedidos completos con lo que el cliente ya
+// abonó y sobró (p. ej. tras revertir un pago vía abono). No entra plata
+// nueva — esa plata ya entró con los abonos —, así que no toca ningún cierre.
+async function aplicarSaldoAFavor(clienteId) {
+  const cliente = ST.clientesFiado.find(c => c.id === clienteId);
+  if (!cliente) return;
+  const { sobrante } = calcularSaldoFiado(clienteId);
+  const cubiertos = gruposQueCubreSaldoAFavor(clienteId);
+  if (!cubiertos.length) {
+    const siguiente = gruposFiadoDeCliente(clienteId)[0];
+    const totalSig = siguiente ? siguiente.orders.reduce((a,p) => a + (p.monto_total||0), 0) : 0;
+    showToast(siguiente
+      ? `⚠ El saldo a favor (${fmt(sobrante)}) no alcanza para el siguiente pedido completo (${fmt(totalSig)})`
+      : '⚠ No hay pedidos pendientes para aplicar el saldo a favor', 'warning');
+    return;
+  }
+  const totalCubierto = cubiertos.reduce((a,c) => a + c.total, 0);
+  if (!confirm(
+    `Aplicar saldo a favor de ${cliente.nombre}: ${fmt(sobrante)}.\n\n` +
+    `Se saldarán ${cubiertos.length} pedido(s) completo(s) por ${fmt(totalCubierto)} ` +
+    `(${cubiertos.map(c => `${fechaCorta(c.grupo.orders[0].fecha)}: ${fmt(c.total)}`).join(', ')}).\n` +
+    `No entra plata nueva a caja: ya entró con los abonos.\n\n¿Continuar?`
+  )) return;
+
+  // Método: la cuenta del abono más reciente (solo informativo — no suma plata).
+  const ultimoAbono = ST.abonosFiado.filter(a => a.cliente_fiado_id === clienteId)
+    .sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''))[0];
+  const { fecha, turno } = fechaTurnoDeCobro();
+  try {
+    const pagados = await saldarFiadosConSaldoAFavor(clienteId, ultimoAbono?.cuenta || 'efectivo', fecha, turno);
+    setSyncBadge('ok');
+    if (pagados.length) showToast(`✅ ${pagados.length} pedido(s) de ${cliente.nombre} saldado(s) con su saldo a favor`, 'ok');
+    renderAll();
+  } catch (e) {
+    console.error(e);
+    showToast(`⚠ Error al aplicar el saldo a favor: ${(e.message||'').slice(0,160)}`, 'warning');
   }
 }
 
@@ -5579,7 +5695,9 @@ function renderIngresos() {
             <button class="btn btn-primary" style="padding:4px 8px;font-size:11px;" onclick="guardarMetodoIngreso([${idsGrupo.join(',')}])">✓</button>
             <button class="btn btn-danger" style="padding:4px 8px;font-size:11px;" onclick="cancelarEdicionMetodo()">✕</button>
           </div>`
-          : (primero.metodo === 'dividido'
+          : (cobradoViaAbonos(primero)
+              ? etiquetaCobroAbonos(primero)
+              : primero.metodo === 'dividido'
               ? `<span class="badge ${metC(primero.metodo)}" title="${metodoLabel(primero)} — no editable acá, revierte el pago si necesitas corregirlo">💳 dividido</span>`
               : primero.metodo === 'gratis'
               ? `<span class="badge ${metC(primero.metodo)}" title="No genera ingreso — no editable acá">🎁 gratis</span>`
@@ -6234,20 +6352,31 @@ async function revertirPago(ids) {
   const objetos = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
   if (!objetos.length) return;
 
+  // Un fiado saldado con abonos vuelve a pendiente y su abono vuelve a quedar
+  // como saldo a favor del cliente: calcularSaldoFiado() deja de restarlo en
+  // totalPagadoViaAbono, así que el sobrante sube y el saldo sigue cuadrando.
+  const habiaViaAbono = objetos.some(p => p.pagado_via_abono === true);
+
   try {
     for (const p of objetos) {
       const patch = { estado: 'pendiente' };
       if (p.fecha_original) { patch.fecha = p.fecha_original; patch.fecha_original = null; }
+      if (p.pagado_via_abono === true) {
+        patch.pagado_via_abono = false;
+        if (p.fecha_pago) { patch.fecha_pago = null; patch.turno_pago = null; }
+      }
       try {
         await sbPatch('pedidos', `id=eq.${p.id}`, patch);
       } catch (e) {
-        if ((e.message || '').includes('fecha_original')) {
-          delete patch.fecha_original;
+        const msg = e.message || '';
+        if (['fecha_original', 'fecha_pago', 'turno_pago'].some(c => msg.includes(c))) {
+          delete patch.fecha_original; delete patch.fecha_pago; delete patch.turno_pago;
           await sbPatch('pedidos', `id=eq.${p.id}`, patch);
         } else { throw e; }
       }
       Object.assign(p, patch);
       if (patch.fecha_original === null) delete p.fecha_original;
+      if (patch.fecha_pago === null) { delete p.fecha_pago; delete p.turno_pago; }
     }
 
     idArr.forEach(id => {
@@ -6266,7 +6395,9 @@ async function revertirPago(ids) {
     }
 
     setSyncBadge('ok');
-    showToast(`↩ ${idArr.length > 1 ? 'Pagos revertidos' : 'Pago revertido'} — vuelve${idArr.length > 1 ? 'n' : ''} a pendientes`, 'info');
+    showToast(habiaViaAbono
+      ? '↩ Fiado devuelto a pendiente — el abono queda como saldo a favor del cliente (usa "Aplicar saldo a favor" en Fiados)'
+      : `↩ ${idArr.length > 1 ? 'Pagos revertidos' : 'Pago revertido'} — vuelve${idArr.length > 1 ? 'n' : ''} a pendientes`, 'info');
     renderAll();
   } catch (e) {
     console.error(e);
@@ -7705,7 +7836,7 @@ function renderHistorialPedidosIngresos() {
         <td style="font-size:11px;color:var(--text3);">${primero.es_gratis?'🎁 Gratis':primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
         <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${resumenPedido}">${resumenPedido}</td>
         <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resumenDetalle}</td>
-        <td><span class="badge ${metC(primero.metodo)}" title="${metodoLabel(primero)}">${primero.metodo}</span></td>
+        <td>${cobradoViaAbonos(primero) ? etiquetaCobroAbonos(primero) : `<span class="badge ${metC(primero.metodo)}" title="${metodoLabel(primero)}">${primero.metodo}</span>`}</td>
         <td>${cantidadTotal}</td>
         <td class="amount-pos">${fmt(montoTotal)}${descuentoTotal > 0 ? `<br><span class="badge badge-orange" style="font-size:10px;" title="Descuento aplicado">🏷 −${fmt(descuentoTotal)}</span>` : ''}</td>
         <td style="display:flex;gap:4px;">
@@ -7866,7 +7997,7 @@ function renderIngresosFinanciero() {
       return {
         fecha: c.fecha, turno: c.turno,
         origen: `🧾 Cierre ${c.turno==='cena'?'Comida rápida':'Almuerzo'}`,
-        detalle: textoAjusteCierre(c) || '—',
+        detalle: [abonosDeCierre(c) ? `Incluye abonos de fiado: ${fmt(abonosDeCierre(c))}` : '', textoAjusteCierre(c)].filter(Boolean).join(' · ') || '—',
         cuenta: null, efectivo: ef, transferencia: tr, monto: ef + tr,
         id: c.id, tipo: 'cierre'
       };
@@ -8062,6 +8193,13 @@ function actualizarCamposFamiliaCierre() {
 // efectivo). Esta función centraliza esa lectura para que Cierre, Caja,
 // Auditoría e Ingresos lo interpreten todos igual, incluidos los cierres
 // viejos que solo tienen el campo original.
+// Abonos de fiado que un cierre guardado trae DENTRO de su efectivo/
+// transferencia (columnas abonos_efectivo/abonos_transferencia). Cierres
+// anteriores al cambio, o sin esas columnas: 0.
+function abonosDeCierre(c) {
+  return (c.abonos_efectivo || 0) + (c.abonos_transferencia || 0);
+}
+
 function ajustesDeCierre(c) {
   const efectivo      = c.ajuste_efectivo != null ? (c.ajuste_efectivo || 0) : (c.ajuste_manual || 0);
   const transferencia = c.ajuste_transferencia || 0;
@@ -8087,14 +8225,22 @@ function calcularVentasFijas(fecha, turno) {
   const ventaDesayunoEfectivo      = (turno === 'almuerzo' && apertura) ? (apertura.venta_desayuno || 0) : 0;
   const ventaDesayunoTransferencia = (turno === 'almuerzo' && apertura) ? (apertura.venta_desayuno_transferencia || 0) : 0;
   const ventaDesayuno = ventaDesayunoEfectivo + ventaDesayunoTransferencia;
+  // efectivoDe/transferenciaDe ya dan 0 para los fiados saldados con abonos
+  // nuevos: su plata entra abajo, con cada abono, no aquí.
   const ings = ST.ingresos.filter(i => i.fecha === fecha && i.turno === turno);
   const efectivoPedidos      = ings.reduce((a,b)=>a+efectivoDe(b),0);
   const transferenciaPedidos = ings.reduce((a,b)=>a+transferenciaDe(b),0);
+  // Abonos de fiado recibidos en este turno (por la hora real del abono),
+  // cada uno a la columna de su cuenta.
+  const abonos = abonosDeTurno(fecha, turno);
+  const abonosEfectivo      = abonos.filter(a => a.cuenta === 'efectivo').reduce((s,a) => s + (a.monto||0), 0);
+  const abonosTransferencia = abonos.filter(a => a.cuenta !== 'efectivo').reduce((s,a) => s + (a.monto||0), 0);
   return {
-    efectivo: efectivoPedidos + ventaDesayunoEfectivo,
-    transferencia: transferenciaPedidos + ventaDesayunoTransferencia,
+    efectivo: efectivoPedidos + ventaDesayunoEfectivo + abonosEfectivo,
+    transferencia: transferenciaPedidos + ventaDesayunoTransferencia + abonosTransferencia,
     cajaInicial: apertura ? (apertura.caja_inicial||0) : 0,
     ventaDesayuno, ventaDesayunoEfectivo, ventaDesayunoTransferencia,
+    abonos, abonosEfectivo, abonosTransferencia,
     tieneApertura: !!apertura
   };
 }
@@ -8117,8 +8263,9 @@ function calcularGastosTurno(fecha, turno) {
 // (efectivo y/o transferencia, por separado) es editable.
 function recalcularResultadoCierre() {
   const fecha = document.getElementById('dd-fecha').value || today();
-  const { efectivo, transferencia, cajaInicial, ventaDesayuno, ventaDesayunoEfectivo, ventaDesayunoTransferencia, tieneApertura } = calcularVentasFijas(fecha, ddTurno);
+  const { efectivo, transferencia, cajaInicial, ventaDesayuno, ventaDesayunoEfectivo, ventaDesayunoTransferencia, abonos, abonosEfectivo, abonosTransferencia, tieneApertura } = calcularVentasFijas(fecha, ddTurno);
   const total = efectivo + transferencia;
+  const totalAbonos = abonosEfectivo + abonosTransferencia;
 
   const { reales: gastos, conPrestamos: gastosConPrestamos } = calcularGastosTurno(fecha, ddTurno);
   const ajusteEfectivo      = valMilesConSigno('dd-ajuste-efectivo-monto');
@@ -8138,19 +8285,23 @@ function recalcularResultadoCierre() {
     : `$0 <span style="color:var(--text3);font-weight:400;">(sin abrir turno)</span>`;
   document.getElementById('dd-res-desayuno-row').style.display = ddTurno === 'almuerzo' ? 'flex' : 'none';
   document.getElementById('dd-res-desayuno').textContent = fmt(ventaDesayuno);
-  document.getElementById('dd-res-efectivo').textContent = fmt(efectivo - ventaDesayunoEfectivo);
-  document.getElementById('dd-res-transferencia').textContent = fmt(transferencia - ventaDesayunoTransferencia);
+  document.getElementById('dd-res-efectivo').textContent = fmt(efectivo - ventaDesayunoEfectivo - abonosEfectivo);
+  document.getElementById('dd-res-transferencia').textContent = fmt(transferencia - ventaDesayunoTransferencia - abonosTransferencia);
+  document.getElementById('dd-res-abonos-efectivo').textContent      = fmt(abonosEfectivo);
+  document.getElementById('dd-res-abonos-transferencia').textContent = fmt(abonosTransferencia);
+  renderDetalleAbonosCierre(fecha, ddTurno, abonos);
 
-  // "Total vendido" (KPI de arriba) y "Total del turno" (cuadro de abajo) son
-  // el mismo número e incluyen el ajuste cuando lo hay, para que no escondan
-  // plata que en realidad debería estar en caja. Cuando está ajustado, los
-  // dos lo marcan con la misma etiqueta para que no se confunda con la venta
-  // "cruda" de pedidos.
+  // "Total recibido" (KPI de arriba) y "Total del turno" (cuadro de abajo)
+  // son el mismo número: TODA la plata que entró en el turno — ventas del
+  // turno + abonos de fiado recibidos — e incluyen el ajuste cuando lo hay,
+  // para que no escondan plata que en realidad debería estar en caja. No es
+  // "lo vendido": un abono es una deuda cobrada, no una venta de este turno.
   const tagAjustado = ' <span style="color:var(--accent);">· incluye ajuste</span>';
   document.getElementById('dd-total').textContent         = fmt(totalAjustado);
   document.getElementById('dd-efectivo').textContent      = fmt(efectivo);
   document.getElementById('dd-transferencia').textContent = fmt(transferencia);
-  document.getElementById('dd-turno-label').innerHTML = (ddTurno==='almuerzo' ? 'Efectivo + Transferencia almuerzo (incl. desayuno)' : 'Efectivo + Transferencia comida rápida') + (ajustado ? tagAjustado : '');
+  document.getElementById('dd-turno-label').innerHTML =
+    `Ventas del turno ${fmt(total - totalAbonos)}${ddTurno==='almuerzo' ? ' (incl. desayuno)' : ''} + Abonos de fiado ${fmt(totalAbonos)}` + (ajustado ? tagAjustado : '');
 
   document.getElementById('dd-res-gastos').textContent  = fmt(gastos);
   document.getElementById('dd-total-turno').textContent = fmt(totalAjustado);
@@ -8179,9 +8330,39 @@ function recalcularResultadoCierre() {
   }
 }
 
+// Detalle informativo bajo el desglose del cierre — nada de esto cambia los
+// totales (ya los calculó calcularVentasFijas):
+//  · los abonos de fiado recibidos en este turno (la plata que sí suman),
+//  · los fiados que esos abonos terminaron de saldar (no suman plata aquí:
+//    son ventas de su propio día/turno de consumo),
+//  · los fiados CONSUMIDOS en este turno y cobrados después — suben las
+//    ventas de este turno, pero su plata entró en el cierre del día de cada
+//    abono, así que el cierre guardado de este turno no cambia.
+function renderDetalleAbonosCierre(fecha, turno, abonos) {
+  const el = document.getElementById('dd-abonos-detalle');
+  if (!el) return;
+  const nombreCliente = id => (ST.clientesFiado.find(c => c.id === id) || {}).nombre || 'Cliente';
+  const saldadosAqui = ST.ingresos.filter(p => cobradoViaAbonos(p) && p.fecha_pago === fecha && p.turno_pago === turno);
+  const cobradosDespues = ST.ingresos.filter(p => cobradoViaAbonos(p) && p.fecha === fecha && p.turno === turno);
+  const partes = [];
+  if (abonos.length) {
+    partes.push(`<div style="font-size:11px;color:var(--text2);margin:4px 0 6px;">${abonos.map(a =>
+      `📒 ${nombreCliente(a.cliente_fiado_id)} · ${a.cuenta === 'efectivo' ? '💵' : '📲'} ${fmt(a.monto)}${a.nota ? ` · ${a.nota}` : ''}`).join('<br>')}</div>`);
+  }
+  if (saldadosAqui.length) {
+    const total = saldadosAqui.reduce((s,p) => s + (p.monto_total||0), 0);
+    partes.push(`<div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Fiados saldados en este turno: ${saldadosAqui.length} pedido(s) por ${fmt(total)} — no suman plata aquí (ya entró con los abonos); cuentan como venta en su día de consumo (${[...new Set(saldadosAqui.map(p => fechaCorta(p.fecha)))].join(', ')}).</div>`);
+  }
+  if (cobradosDespues.length) {
+    const total = cobradosDespues.reduce((s,p) => s + (p.monto_total||0), 0);
+    partes.push(`<div style="font-size:11px;color:var(--accent);margin-bottom:6px;">Las ventas de este turno incluyen ${fmt(total)} de fiados cobrados después (${[...new Set(cobradosDespues.map(p => fechaCorta(p.fecha_pago)))].join(', ')}). Su plata entró en el cierre de cada abono, por eso este cierre no cambia.</div>`);
+  }
+  el.innerHTML = partes.join('');
+}
+
 async function guardarCierre() {
   const fecha = document.getElementById('dd-fecha').value || today();
-  const { efectivo, transferencia } = calcularVentasFijas(fecha, ddTurno);
+  const { efectivo, transferencia, abonosEfectivo, abonosTransferencia } = calcularVentasFijas(fecha, ddTurno);
   const { reales: gastos } = calcularGastosTurno(fecha, ddTurno);
 
   const ajusteEfectivo      = valMilesConSigno('dd-ajuste-efectivo-monto');
@@ -8226,7 +8407,10 @@ async function guardarCierre() {
     efectivo, transferencia, gastos, resultado,
     ajuste_efectivo: ajusteEfectivo, ajuste_transferencia: ajusteTransferencia,
     ajuste_manual_nota: hayAjuste ? ajusteNota : '',
-    platos_familia: platosFamilia
+    platos_familia: platosFamilia,
+    // Parte de efectivo/transferencia que vino de abonos de fiado (ya está
+    // DENTRO de esos dos totales — solo se guarda aparte para el desglose).
+    abonos_efectivo: abonosEfectivo, abonos_transferencia: abonosTransferencia
   };
 
   try {
@@ -8248,14 +8432,17 @@ async function guardarCierre() {
         break;
       } catch (e) {
         const msg = e.message || '';
-        const columnaFaltante = ['ajuste_efectivo', 'ajuste_transferencia', 'ajuste_manual_nota', 'platos_familia'].find(c => c in payload && msg.includes(c));
+        const columnaFaltante = ['ajuste_efectivo', 'ajuste_transferencia', 'ajuste_manual_nota', 'platos_familia', 'abonos_efectivo', 'abonos_transferencia'].find(c => c in payload && msg.includes(c));
         if (!columnaFaltante) throw e;
         const valorOmitido = payload[columnaFaltante];
         const { [columnaFaltante]: _omit, ...resto } = payload;
         payload = resto;
         // platos_familia en NULL (comida rápida, o un dato que no se escribió)
-        // no se pierde nada al omitirlo — no hace falta alarmar con un aviso.
-        if (!(columnaFaltante === 'platos_familia' && valorOmitido == null)) {
+        // o abonos en 0 — no se pierde nada al omitirlo, no hace falta alarmar.
+        // (Los abonos siguen sumados en efectivo/transferencia igual.)
+        const sinDato = (columnaFaltante === 'platos_familia' && valorOmitido == null)
+          || (columnaFaltante.startsWith('abonos_') && !valorOmitido);
+        if (!sinDato) {
           showToast(`⚠ "${columnaFaltante}" no se guardó — falta agregar esa columna en Supabase (ver script SQL)`, 'warning');
         }
       }
@@ -8393,6 +8580,7 @@ function renderHistorialCierres() {
         <td><span class="badge ${c.turno==='cena'?'badge-purple':'badge-accent'}">${c.turno==='cena'?'🌙 Cena':'☀️ Almuerzo'}</span>${c.manual ? ' <span class="badge badge-orange" title="Cargado a mano">✍️ Manual</span>' : ''}</td>
         <td class="amount-pos">${fmt(c.efectivo)}</td>
         <td class="amount-pos">${fmt(c.transferencia)}</td>
+        <td title="Ya incluidos en Efectivo/Transf.">${abonosDeCierre(c) ? fmt(abonosDeCierre(c)) : '—'}</td>
         <td class="amount-neg">${fmt(c.gastos)}</td>
         <td>${c.turno === 'almuerzo' && c.platos_familia != null ? c.platos_familia : '—'}</td>
         <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}${ajustesDeCierre(c).total ? ` <span title="${textoAjusteCierre(c)}">*</span>` : ''}</td>
@@ -8401,7 +8589,7 @@ function renderHistorialCierres() {
           <button class="btn btn-danger" style="padding:5px 10px;font-size:11px;" onclick="eliminarCierre('${c.fecha}','${c.turno}')">🗑</button>
         </td>
       </tr>`).join('')
-    : `<tr><td colspan="8" style="color:var(--text3);text-align:center;padding:20px;">Aún no hay cierres guardados</td></tr>`;
+    : `<tr><td colspan="9" style="color:var(--text3);text-align:center;padding:20px;">Aún no hay cierres guardados</td></tr>`;
 }
 
 function renderDiaADia() {
