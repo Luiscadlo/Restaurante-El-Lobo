@@ -4092,8 +4092,19 @@ function cerrarModalDetalle(e) {
 // Antes de borrar de verdad, deja rastro en pedidos_eliminados (Auditoría)
 // con la hora exacta de eliminación. Si ese registro falla (ej. la tabla
 // todavía no existe en Supabase), NO bloquea la eliminación real — solo avisa.
+// Un fiado saldado con abonos nuevos no se borra ni se le cambia el monto:
+// su plata ya entró a los cierres con cada abono y su monto es lo que
+// calcularSaldoFiado() descuenta de esos abonos — tocarlo dejaría plata en
+// Caja sin pedido y descuadraría el saldo del cliente. Revertir (↩) sí se
+// puede: devuelve el pedido a pendiente y el abono a saldo a favor.
+function avisoBloqueoCobradoViaAbonos(p, accion) {
+  showToast(`🔒 No se puede ${accion}: este fiado se saldó con abonos (cobrado el ${fechaCorta(p.fecha_pago)}). Su plata ya entró a los cierres con cada abono y cambiarlo descuadraría el saldo del cliente. Si hay un error, usa ↩ para devolverlo a pendiente.`, 'warning');
+}
+
 async function eliminarGrupoIngreso(ids) {
   const idArr = Array.isArray(ids) ? ids : [ids];
+  const saldadoConAbonos = idArr.map(id => ST.ingresos.find(i => i.id === id)).find(p => p && cobradoViaAbonos(p));
+  if (saldadoConAbonos) { avisoBloqueoCobradoViaAbonos(saldadoConAbonos, 'eliminar este pedido'); return; }
   if (!confirm(idArr.length > 1 ? '¿Eliminar este pedido completo (todos sus ítems)?' : '¿Eliminar este ingreso?')) return;
   try {
     const objetos = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
@@ -4511,6 +4522,8 @@ function abrirModalDescuento(ids) {
   const idArr = Array.isArray(ids) ? ids : [ids];
   const { todas } = filasDescontablesDeIds(idArr);
   if (!todas.length) return;
+  const saldadoConAbonos = todas.find(cobradoViaAbonos);
+  if (saldadoConAbonos) { avisoBloqueoCobradoViaAbonos(saldadoConAbonos, 'cambiar su monto'); return; }
   const primero = todas[0];
   // Mismo candado que corregirCierreActual(): un pedido YA PAGADO de otro
   // día solo se puede tocar con la contraseña de administrador — cambiar su
@@ -7705,9 +7718,21 @@ function renderTablero() {
   // Descuentos otorgados: informativo, nunca vuelve a restar de nada — tI ya
   // es el ingreso real (neto), que es el que de verdad entró a caja.
   const descuentosPeriodo = ings.reduce((a,b) => a + (b.descuento||0), 0);
+  // Ventas del período (misma base que los indicadores de ventas de abajo):
+  // pedidos de turnos cerrados por su fecha/turno de CONSUMO, más la venta de
+  // desayuno de esos turnos (no vive en pedidos, sino en la apertura).
+  const ventasPedidosPeriodo = ings.reduce((a,b) => a + (incluirGratisTablero ? (b.monto_total||0) : montoIngreso(b)), 0);
+  const desayunoVentasPeriodo = ST.aperturasTurno
+    .filter(a => a.turno === 'almuerzo' && inPTablero(a.fecha) && cerrados.has(`${a.fecha}::almuerzo`))
+    .reduce((s,a) => s + (a.venta_desayuno||0) + (a.venta_desayuno_transferencia||0), 0);
+  const ventasPeriodo = ventasPedidosPeriodo + desayunoVentasPeriodo;
   const pedidosConDescuento = agruparPorPedido(ings.filter(i => (i.descuento||0) > 0)).length;
   document.getElementById('rp-descuentos').textContent = `${fmt(descuentosPeriodo)}${pedidosConDescuento ? ` (${pedidosConDescuento} pedido${pedidosConDescuento>1?'s':''})` : ''}`;
-  document.getElementById('rp-ventas-lista').textContent = fmt(tIMostrado + descuentosPeriodo);
+  // Ventas a precio de lista: VENTAS (pedidos por su fecha de consumo + venta
+  // de desayuno de esos turnos) + sus descuentos — no los ingresos de los
+  // cierres, que traen plata recibida (incluidos abonos de fiado de pedidos
+  // de otros días) y no lo vendido en el período.
+  document.getElementById('rp-ventas-lista').textContent = fmt(ventasPeriodo + descuentosPeriodo);
 
   document.getElementById('rp-nom').textContent   = fmt(egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
   document.getElementById('rp-prov').textContent  = fmt(egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
@@ -7791,8 +7816,12 @@ function renderTablero() {
     const gastoProv = egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0);
     if (gastoProv/tI > 0.35) drivers.push({tp:'negative',ti:'🍗 Costo de proveedores alto',bo:'Proveedores >35% de ingresos. Negocia precios o revisa porciones.'});
 
+    // % de comidas rápidas: ventas de cena / ventas totales, las dos por
+    // fecha de consumo (no contra los ingresos de los cierres, que mezclan
+    // abonos de fiado cobrados de otros días).
     const crT = ings.filter(i=>i.turno==='cena').reduce((a,b)=>a+montoIngreso(b),0);
-    if (tI > 0 && crT/tI < 0.2 && crT > 0) drivers.push({tp:'neutral',ti:'🌙 Potencial en comidas rápidas',bo:`Turno nocturno solo representa el ${((crT/tI)*100).toFixed(0)}% de los ingresos.`});
+    const ventasTotales = ings.reduce((a,b)=>a+montoIngreso(b),0) + desayunoVentasPeriodo;
+    if (ventasTotales > 0 && crT/ventasTotales < 0.2 && crT > 0) drivers.push({tp:'neutral',ti:'🌙 Potencial en comidas rápidas',bo:`Turno nocturno solo representa el ${((crT/ventasTotales)*100).toFixed(0)}% de las ventas.`});
 
     const bajS = ST.inventario.filter(p=>p.stock<=p.minimo);
     if (bajS.length > 0) drivers.push({tp:'negative',ti:'📦 Riesgo de quiebre de stock',bo:`${bajS.length} producto(s) bajo stock mínimo: ${bajS.map(p=>p.nombre).join(', ')}.`});
