@@ -9,12 +9,20 @@ sobre pedidos — el resto del sistema se documenta a medida que haga falta.
 
 ## Migraciones de Supabase
 
-Antes de usar una función nueva, correr su script en Supabase → SQL Editor:
+Todas las migraciones y correcciones ya se corrieron en Supabase (hasta el
+16-oct-2026) y sus `.sql` se quitaron de la carpeta; siguen en el historial de
+git si hace falta consultarlos:
 
 - `migracion_supabase_platos_familia.sql`
 - `migracion_supabase_auditoria_cancelaciones.sql`
 - `migracion_supabase_descuentos.sql` — columnas `descuento`/`motivo_descuento`
   en `pedidos` + tabla `pedidos_descuentos` (log de auditoría).
+- `migracion_supabase_abonos_turno.sql` — `abonos_fiado.turno`,
+  `pedidos.fecha_pago`/`turno_pago`, `cierres_dia.abonos_efectivo`/`abonos_transferencia`.
+- `correcciones_octubre_fiados.sql` y `unir_clientes_maria.sql` — correcciones
+  de datos de una sola vez.
+
+Para una función nueva, su script va en un `.sql` nuevo en esta carpeta.
 
 Si una migración no se ha corrido, el sistema lo detecta solo (`descuentosDisponibles()`)
 y deshabilita los botones correspondientes con un mensaje claro, en vez de fallar
