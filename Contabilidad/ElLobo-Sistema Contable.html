@@ -3598,19 +3598,31 @@ document.addEventListener('click', e => {
   if (lc && !lc.contains(e.target) && e.target.id !== 'ing-cliente-fiado') lc.style.display = 'none';
 });
 
+// Nombre de cliente fiado comparable: sin tildes (también ñ→n: "Peña" y
+// "Pena" cuentan como el mismo), sin mayúsculas y sin espacios repetidos.
+// Así "María", "maria" y " MARIA " son el mismo cliente y no se duplica.
+function normalizarNombre(nombre) {
+  return (nombre || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().trim().replace(/\s+/g, ' ');
+}
+function clienteFiadoPorNombre(nombre) {
+  const n = normalizarNombre(nombre);
+  return n ? ST.clientesFiado.find(c => normalizarNombre(c.nombre) === n) || null : null;
+}
+
 // ── Autocomplete de cliente fiado (lista dinámica, no un catálogo fijo
 // como PL — por eso va aparte del resto de autocompletes de arriba) ────
 function doACCliente() {
   const input = document.getElementById('ing-cliente-fiado');
   const list  = document.getElementById('ac-cliente-fiado');
   if (!input || !list) return;
-  const q = input.value.toLowerCase().trim();
-  const filtered = q ? ST.clientesFiado.filter(c => c.nombre.toLowerCase().includes(q)) : ST.clientesFiado;
+  const q = normalizarNombre(input.value);
+  const filtered = q ? ST.clientesFiado.filter(c => normalizarNombre(c.nombre).includes(q)) : ST.clientesFiado;
   clientesFiadoAcIdx = -1;
   let html = filtered.slice(0, 8).map(c =>
     `<div class="autocomplete-item" data-id="${c.id}" onmousedown="pickACCliente(event,${c.id},'${c.nombre.replace(/'/g,"\\'")}')"><span>${c.nombre}</span>${c.telefono ? `<span class="item-code">${c.telefono}</span>` : ''}</div>`
   ).join('');
-  const yaExiste = q && ST.clientesFiado.some(c => c.nombre.toLowerCase() === q);
+  const yaExiste = q && !!clienteFiadoPorNombre(q);
   if (q && !yaExiste) {
     html += `<div class="autocomplete-item" style="color:var(--accent);" onmousedown="crearYSeleccionarClienteFiado(event,'${input.value.trim().replace(/'/g,"\\'")}')">+ Crear cliente nuevo: "${input.value.trim()}"</div>`;
   }
@@ -3630,8 +3642,14 @@ function pickACCliente(e, id, nombre) {
 
 async function crearYSeleccionarClienteFiado(e, nombre) {
   e.preventDefault();
-  nombre = (nombre||'').trim();
+  nombre = (nombre||'').trim().replace(/\s+/g, ' ');
   if (!nombre) return;
+  const existente = clienteFiadoPorNombre(nombre);
+  if (existente) {
+    pickACCliente(e, existente.id, existente.nombre);
+    showToast(`ℹ Ya existe el cliente "${existente.nombre}" — quedó seleccionado (no se creó otro)`, 'info');
+    return;
+  }
   try {
     const [row] = await sbInsert('clientes_fiado', { nombre });
     ST.clientesFiado.push(row);
@@ -5460,8 +5478,17 @@ async function asignarClienteAHuerfano(idsGrupo, key) {
 // formulario "+ Cliente nuevo" y de una vez le asigna el pedido huérfano.
 async function crearClienteYAsignarHuerfano(idsGrupo, key) {
   const input = document.getElementById(`huerfano-nuevo-${key}`);
-  const nombre = input ? input.value.trim() : '';
+  const nombre = input ? input.value.trim().replace(/\s+/g, ' ') : '';
   if (!nombre) { showToast('⚠ Escribe el nombre del cliente nuevo', 'warning'); return; }
+  // Si ya existe (aunque cambien tildes/mayúsculas/espacios), no se crea otro:
+  // se avisa y se deja elegido en la lista para asignarlo con un clic.
+  const existente = clienteFiadoPorNombre(nombre);
+  if (existente) {
+    const sel = document.getElementById(`huerfano-cliente-${key}`);
+    if (sel) sel.value = String(existente.id);
+    showToast(`ℹ Ya existe el cliente "${existente.nombre}" — elígelo en la lista y pulsa Asignar (no se creó otro)`, 'warning');
+    return;
+  }
   try {
     const [row] = await sbInsert('clientes_fiado', { nombre });
     ST.clientesFiado.push(row);
@@ -6578,7 +6605,7 @@ async function moverPedidoAFiado() {
   const nombreIngresado = (prompt('¿A nombre de quién queda este fiado? (nombre del cliente)') || '').trim();
   let clienteId = null;
   if (nombreIngresado) {
-    const existente = ST.clientesFiado.find(c => c.nombre.toLowerCase() === nombreIngresado.toLowerCase());
+    const existente = clienteFiadoPorNombre(nombreIngresado);
     if (existente) {
       clienteId = existente.id;
     } else {
