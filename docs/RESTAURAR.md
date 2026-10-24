@@ -18,7 +18,7 @@ Leyenda: 🗄 Supabase · 💬 el chat con Claude · 🖥 tu computador
 
 Los cuatro tienen pruebas automáticas (`npm run test:motor`) hechas contra un Postgres real y un Supabase falso.
 
-## Paso 0 — Una sola vez: sacar la estructura de la base  *(estado: pendiente de que corras la consulta)*
+## Paso 0 — Una sola vez: sacar la estructura de la base  *(estado: hecho el 2026-10-24; pendiente repetirlo cuando exista la tabla `config`)*
 
 1. 🗄 Supabase (el proyecto **de producción**) → **SQL Editor → New query**.
 2. Pega todo `sql/consulta_esquema.sql` y pulsa **Run**. Es de solo lectura: no cambia nada y no trae datos.

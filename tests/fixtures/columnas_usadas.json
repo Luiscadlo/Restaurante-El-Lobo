@@ -192,19 +192,12 @@
   ]
  },
  "solo_en_pruebas": {
-  "mesas": [
-   "id"
-  ],
   "clientes_fiado": [
    "created_at"
   ],
   "abonos_fiado": [
    "created_at",
    "id"
-  ],
-  "pedidos_descuentos": [
-   "descuento",
-   "pedido_id"
   ],
   "aperturas_turno": [
    "id"

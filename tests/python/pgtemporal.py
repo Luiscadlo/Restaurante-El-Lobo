@@ -83,7 +83,7 @@ class ClusterTemporal:
 
     def archivo(self, db, ruta):
         """Corre un archivo .sql completo y devuelve la salida."""
-        return self.psql_ok(db, open(ruta, encoding="utf-8").read())
+        return self.psql_ok(db, Path(ruta).read_text(encoding="utf-8"))
 
     def base_nueva(self, nombre, plantilla=None):
         extra = f" template {plantilla}" if plantilla else ""

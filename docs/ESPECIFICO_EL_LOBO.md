@@ -240,7 +240,7 @@ No hay otras librerías ni frameworks. El generador de menú es autosuficiente: 
 7. **Reintentos "sin la columna que falta"** repetidos 8 veces (pedidos, extras, apertura de turno, cierres, gastos…): código duplicado y difícil de seguir; hay que quitarlos al fijar un esquema único.
 8. **Reglas implícitas en comentarios:** la mayor parte de las reglas de negocio (fiados se pagan en el mes, pendientes se cierran el mismo día, Tablero = Σ cierres, descuentos informativos) solo están en comentarios y en `Contabilidad/README.md`.
 9. **Restricciones de "días anteriores" solo de pantalla** (ver `docs/MATRIZ_PERMISOS.md`, decisión 3).
-10. **Sin control de versiones del esquema:** las migraciones `.sql` ya corridas se quitaron de la carpeta (siguen en el historial) y no hay `esquema_completo.sql`; con H existen las herramientas para reconstruirla (`sql/consulta_esquema.sql` + `herramientas/esquema_a_sql.py`), pero `sql/esquema_completo.sql` se genera solo cuando se corra la consulta en Supabase; hasta entonces, reconstruir la base desde cero no es posible.
+10. **Control de versiones del esquema:** las migraciones `.sql` ya corridas se quitaron de la carpeta (siguen en el historial). Con H la estructura quedó escrita en `sql/esquema_completo.sql` (sacada con `sql/consulta_esquema.sql` el 2026-10-24 y convertida con `herramientas/esquema_a_sql.py`); su tabla `config` es PROVISIONAL hasta volver a correr la consulta después de `sql/migracion_supabase_config.sql`. Cada vez que se agregue una tabla o columna en Supabase hay que regenerarlo.
 11. **`confirm()`/`alert()`/`prompt()` en 16 sitios:** bloquean el hilo y se ven distinto en cada navegador/celular.
 12. **El contrato con el motor Python es un Excel** con nombres de hoja y de columna fijos (sección 3) sin prueba que lo proteja.
 13. **Hora del dispositivo:** si un equipo tiene mal el reloj o la zona horaria, los pedidos quedan con la fecha/turno equivocados.
@@ -268,7 +268,15 @@ Hay 119 pruebas web (humo, reglas de plata, respaldo, seguridad, flujos del most
 
 **El contrato entre el sistema y el motor** (nombres de hojas y columnas del Excel) tampoco tiene prueba.
 
-**Verificación contra `sql/esquema_completo.sql`:** ese archivo **todavía no existe** (se genera a partir del esquema real de Supabase, `docs/RESTAURAR.md` Paso 0). La comparación ya está automatizada: `tests/python/test_cobertura_esquema.py` exige las 16 tablas y todas las columnas marcadas L, E, M o C (`tests/fixtures/columnas_usadas.json`), y avisa de las † (opcionales con respaldo) que falten; las heredadas (`ajuste_manual`) cuentan como requeridas porque el código las lee.
+**Verificación contra `sql/esquema_completo.sql`:** el archivo existe desde el 2026-10-24 (sacado de la base real). `tests/python/test_cobertura_esquema.py` exige las 16 tablas y todas las columnas marcadas L, E, M o C (`tests/fixtures/columnas_usadas.json`), y avisa de las † (opcionales con respaldo) que falten; las heredadas (`ajuste_manual`) cuentan como requeridas porque el código las lee. Resultado con la base real: **todas las columnas que el código necesita existen**; la única tabla que faltaba era `config` (la crea `sql/migracion_supabase_config.sql`).
+
+**Hallazgos del esquema real (2026-10-24):**
+- **Seguridad hoy:** 11 de las 16 tablas tienen RLS APAGADO y el rol `anon` (la llave pública que viaja en el HTML) tiene todos los permisos sobre las 16 tablas; las 5 que tienen RLS traen una regla «allow all». Es lo que cierra `sql/rls_seguridad.sql`.
+- **Tabla vieja `el_lobo_data`** (`id`, `data`, `updated_at`): el sistema ya no la usa y no entra en los respaldos. Conviene mirar si tiene filas antes de dar por cerrado el respaldo (`select id, updated_at, pg_column_size(data) from public.el_lobo_data;`).
+- **12 tablas usan `identity ALWAYS`** (no deja insertar con un `id` propio): `esquema_completo.sql` las crea «BY DEFAULT» para poder restaurar con los mismos `id`.
+- **Columnas que existen y el código no usa:** `abonos_fiado.id/created_at`, `aperturas_turno.id`, `cierres_dia.created_at`, `clientes_fiado.telefono/created_at`, `consumos.id/created_at`, `gastos_dia.created_at`, `ingresos_extra.created_at`, `mesas.updated_at`, `pedidos.es_para_llevar/entrega_sopa/entrega_plato`. No estorban; los respaldos las conservan.
+- **Restricciones de valores (CHECK) que la base hace cumplir:** `abonos_fiado.cuenta` ∈ {efectivo, transferencia}; `pedidos_eliminados.motivo` ∈ {eliminado, cancelado}; `egresos/ingresos_extra/movimientos_caja.cuenta` ∈ {efectivo, transf_rapidas, transf_almuerzos}; `turno` ∈ {almuerzo, cena}; `mesas.numero` 1–15. El ensayo `test_ensayo_esquema_real.py` descubrió que los datos de ejemplo de las pruebas rompían dos de ellas (corregido; el sistema en sí las respeta).
+- `mesas` no tiene columna `id` (la llave es `numero`) y `pedidos_descuentos` guarda `pedido_ids` como texto, no `pedido_id`.
 
 ---
 

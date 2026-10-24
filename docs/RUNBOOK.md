@@ -115,6 +115,6 @@ Todo en verde antes de fusionar. Si algo falla, copia el mensaje completo y pás
 
 ## Lo que está pendiente (fuera de este manual)
 
-- Ensayo de restauración en un proyecto aparte: la guía y las herramientas ya existen (`docs/RESTAURAR.md`); falta correr la consulta de esquema en Supabase (Paso 0) y hacer el ensayo.
+- Ensayo de restauración en un proyecto aparte: la guía y las herramientas ya existen (`docs/RESTAURAR.md`); la consulta de esquema ya se corrió (2026-10-24) y el ensayo sobre ese esquema real, con datos de ejemplo, pasa en un Postgres de prueba (`tests/python/test_ensayo_esquema_real.py`); falta volver a correr la consulta cuando exista la tabla `config` y hacer el ensayo en un proyecto de Supabase aparte con un respaldo real.
 - Confirmación del contador sobre impuestos y facturación electrónica.
 - Activar la tarea de respaldo con el usuario `respaldo` (al desplegar la seguridad).
