@@ -3004,7 +3004,10 @@ function descuentosDisponibles() {
 // El plan gratis de Supabase no trae copias automáticas: este respaldo es la red de
 // seguridad. Baja TODAS las tablas, verifica que no falte ninguna fila y registra la
 // fecha en config.ultimo_respaldo (de ahí sale el aviso de la pantalla).
-const RESPALDO_AVISO_DIAS = 7;   // más de esta cantidad de días sin respaldo → aviso ámbar
+// El respaldo es SEMANAL y a mano (Exportar, solo administrador): el aviso sale desde cada DOMINGO y
+// sigue saliendo hasta que haya un respaldo completo hecho desde ese domingo (el que registra
+// config.ultimo_respaldo, que solo se guarda si el respaldo terminó bien). Se pone rojo si pasan
+// RESPALDO_ROJO_DIAS días sin respaldo.
 const RESPALDO_ROJO_DIAS  = 10;  // desde esta cantidad de días → aviso rojo
 
 // TODAS las tablas que usa el código con sbGet/sbGetAll/sbInsert/sbPatch/sbDelete
@@ -3143,11 +3146,18 @@ function diasDesdeFecha(fechaStr, hoyStr = today()) {
   const aMs = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
   return Math.round((aMs(hoyStr) - aMs(fechaStr)) / 86400000);
 }
+// Día de la semana de una fecha AAAA-MM-DD: 0 = domingo … 6 = sábado (sin depender de la zona horaria).
+function diaDeLaSemana(fechaStr = today()) {
+  const [y, m, d] = String(fechaStr).slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
 // null = sin aviso; 'ambar' o 'rojo'. dias null/NaN = nunca se ha hecho un respaldo.
-function nivelAvisoRespaldo(dias) {
+// `diaSemana` = día de la semana de HOY (0 = domingo): el domingo más reciente cae `diaSemana` días
+// atrás, así que un respaldo de hace MÁS días que esos es anterior a ese domingo → toca hacer otro.
+function nivelAvisoRespaldo(dias, diaSemana = diaDeLaSemana()) {
   if (dias === null || dias === undefined || Number.isNaN(dias)) return 'ambar';
   if (dias >= RESPALDO_ROJO_DIAS) return 'rojo';
-  if (dias > RESPALDO_AVISO_DIAS) return 'ambar';
+  if (dias > diaSemana) return 'ambar';
   return null;
 }
 function renderAvisoRespaldo() {
@@ -3168,7 +3178,9 @@ function renderAvisoRespaldo() {
   if (!nivel) { el.style.display = 'none'; el.innerHTML = ''; return; }
   const texto = (dias === null || Number.isNaN(dias))
     ? 'Todavía no se ha hecho ningún respaldo completo.'
-    : `Hace ${dias} días no se hace respaldo completo.`;
+    : nivel === 'rojo'
+      ? `Hace ${dias} días no se hace respaldo completo.`
+      : `Toca el respaldo semanal — el último fue hace ${dias} día${dias === 1 ? '' : 's'}.`;
   el.innerHTML = `<div class="alert ${nivel === 'rojo' ? 'warning' : 'info'}">
     <div style="flex:1;">${nivel === 'rojo' ? '🚨' : '⚠️'} ${texto}</div>
     <button class="btn btn-outline" style="font-size:11px;" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo ahora</button>
