@@ -40,7 +40,7 @@ Cada vez que se agregue una tabla o columna nueva a Supabase, se repite este pas
 
 ## Paso 3 — Cargar el respaldo
 
-Usa el JSON del botón **Exportar** (o el de la tarea semanal). Debe estar **fuera del repositorio**.
+Usa el JSON de la pestaña **Datos → 💾 Respaldo completo** (el que haces cada semana). Debe estar **fuera del repositorio**.
 
 ### Opción A — Sin llaves (recomendada para una emergencia real)
 1. 💬 Dile a Claude: «genera los SQL de restauración» y pásale el respaldo. Claude corre `herramientas/respaldo_a_sql.py` y te entrega 1–3 archivos `ElLobo_restaurar_01_de_0N.sql`.
@@ -74,7 +74,7 @@ El programa se niega, sin tocar nada, si: la llave es la pública, es del proyec
 1. 🗄 Crea un proyecto **nuevo** (el nombre y la dirección serán distintos).
 2. Pasos 2 y 3 de arriba en el proyecto nuevo, con el **último respaldo** que tengas.
 3. 🗄 Corre `sql/rls_seguridad.sql` y recrea los usuarios (`admin` de cada dueño, `caja`, `respaldo`) con `docs/DESPLIEGUE_SEGURIDAD.md`. **Los usuarios y contraseñas NO están en el respaldo**: hay que crearlos de nuevo.
-4. 💬 Claude actualiza la dirección y la llave **pública** en el sistema (`SB_URL`, `SB_KEY`) con un pull request, y el enlace permanente vuelve a funcionar. También actualiza la tarea de respaldo semanal y la constante `REF_PRODUCCION` de `herramientas/restaurar_respaldo.py`.
+4. 💬 Claude actualiza la dirección y la llave **pública** en el sistema (`SB_URL`, `SB_KEY`) con un pull request, y el enlace permanente vuelve a funcionar. También actualiza la constante `REF_PRODUCCION` de `herramientas/restaurar_respaldo.py`.
 5. Se pierde lo ocurrido **después del último respaldo**: por eso el aviso en pantalla insiste en respaldar cada semana.
 
 ## Si algo sale mal
@@ -85,7 +85,7 @@ El programa se niega, sin tocar nada, si: la llave es la pública, es del proyec
 | `le faltan columnas que trae el respaldo` | La estructura cambió después de generar `esquema_completo.sql`. | Repite el Paso 0 (Claude regenera el archivo). |
 | `El destino NO está vacío` | Ya hay datos. Nunca se mezcla ni se borra. | Usa un proyecto nuevo, o (solo si es de **pruebas**) vacíalo con el SQL `truncate…` que imprime el programa. |
 | `Esa es la llave PÚBLICA` / `Ese es el proyecto de PRODUCCIÓN` | Protecciones. | Usa la llave `service_role` del proyecto **de pruebas**. |
-| `El respaldo se hizo INCOMPLETO` / `declara N filas…` | El archivo está dañado o la tarea de respaldo falló. | No restaures ese archivo: haz un respaldo nuevo con **Exportar**. |
+| `El respaldo se hizo INCOMPLETO` / `declara N filas…` | El archivo está dañado o el respaldo falló a medias. | No restaures ese archivo: haz un respaldo nuevo desde **Datos → Respaldo completo**. |
 | `LA VERIFICACIÓN FALLÓ` / `DIFERENTE` | Algo no quedó idéntico. | **No uses ese proyecto.** Vacíalo, repite, y pásale la salida completa a Claude. |
 | `violates foreign key` | Orden de carga o respaldo con datos huérfanos. | Pásale el mensaje a Claude (se puede dar el esquema con `--esquema` para ordenar por llaves). |
 
@@ -93,7 +93,7 @@ El programa se niega, sin tocar nada, si: la llave es la pública, es del proyec
 
 - **Usuarios y contraseñas de Supabase Auth** (se recrean).
 - Reglas de acceso viejas: a propósito. Las reglas las pone `sql/rls_seguridad.sql`.
-- Tablas que el respaldo no trae (la tarea semanal antigua omitía `pedidos_descuentos` y `pedidos_eliminados`; el programa avisa cuáles faltan).
+- Tablas que el respaldo no trae (los respaldos antiguos omitían `pedidos_descuentos` y `pedidos_eliminados`; el programa avisa cuáles faltan).
 - Lo que pasó después del último respaldo.
 
 ## Para quien mantiene el sistema

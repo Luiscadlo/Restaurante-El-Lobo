@@ -147,7 +147,7 @@ def principal(argv=None, salida=None):
     salida = salida or sys.stdout
     imprimir = lambda *a: print(*a, file=salida)  # noqa: E731
     ap = argparse.ArgumentParser(description="Convierte un respaldo de El Lobo en archivos SQL para el SQL Editor de Supabase (sin llaves).")
-    ap.add_argument("respaldo", help="Archivo JSON del respaldo (botón Exportar o tarea semanal)")
+    ap.add_argument("respaldo", help="Archivo JSON del respaldo (el de Datos → Respaldo completo; también se aceptan los formatos antiguos)")
     ap.add_argument("-o", "--carpeta", required=True, help="Carpeta donde dejar los .sql (FUERA del repositorio)")
     ap.add_argument("--esquema", help="Resultado de sql/consulta_esquema.sql (opcional)")
     ap.add_argument("--max-kb", type=int, default=900, help="Tamaño máximo de cada archivo en KB (por defecto 900)")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Restaura un respaldo de El Lobo (el JSON del botón Exportar o de la tarea semanal) en un proyecto de Supabase.
+"""Restaura un respaldo de El Lobo (el JSON de Datos → Respaldo completo, o los formatos antiguos del botón Exportar y de la tarea semanal) en un proyecto de Supabase.
 
 Está pensado para UN caso: un proyecto NUEVO y VACÍO (el de pruebas, o el de reemplazo si el original se
 pierde). Antes de usarlo, ese proyecto debe tener las tablas: corre ahí sql/esquema_completo.sql.
@@ -100,7 +100,7 @@ class Respaldo:
 
 
 def leer_respaldo(ruta, tablas_validas=None):
-    """Lee y valida el archivo. Acepta el formato del botón Exportar (v1) y el de la tarea semanal."""
+    """Lee y valida el archivo. Acepta el formato actual (Datos → Respaldo completo, v1, el mismo del antiguo botón Exportar) y el de la tarea semanal antigua."""
     tablas_validas = set(tablas_validas or TABLAS_CONOCIDAS)
     try:
         with open(ruta, encoding="utf-8-sig") as f:
@@ -368,7 +368,7 @@ def principal(argv=None, salida=None):
     ap = argparse.ArgumentParser(
         description="Restaura un respaldo de El Lobo en un proyecto de Supabase NUEVO y VACÍO. Sin --ejecutar solo simula.",
         epilog=f"La llave de servicio va en la variable de entorno {VARIABLE_LLAVE}. La dirección, en --url o {VARIABLE_URL}.")
-    ap.add_argument("respaldo", help="Archivo JSON del respaldo (botón Exportar o tarea semanal)")
+    ap.add_argument("respaldo", help="Archivo JSON del respaldo (el de Datos → Respaldo completo; también se aceptan los formatos antiguos)")
     ap.add_argument("--url", default=os.environ.get(VARIABLE_URL), help="Dirección del proyecto de destino: https://xxxx.supabase.co")
     ap.add_argument("--ejecutar", action="store_true", help="Cargar de verdad. Sin esto, solo se revisa (simulacro).")
     ap.add_argument("--esquema", help="Resultado de sql/consulta_esquema.sql (opcional: calcula el orden con las llaves foráneas)")
