@@ -69,6 +69,10 @@ manual pide confirmación aparte antes de tocarlo.
 
 - Pestaña Auditoría: tabla "Descuentos aplicados" (de dónde sale cada ajuste a
   un cierre y qué gastos se borraron con él).
+- Auditoría tiene filtro por día: Hoy / Ayer / Semana / Mes / Todo, o «desde – hasta»
+  (elegir solo una fecha muestra solo ese día). Los ajustes se ubican por la fecha del
+  cierre; los pedidos eliminados y los descuentos, por el día (hora local) en que se
+  hicieron. El numerito de la pestaña no cuenta como visto lo que el filtro esconde.
 - Tablero: "Descuentos otorgados" y "Ventas a precio de lista" son solo
   informativos — nunca se restan dos veces del ingreso real (que ya es neto).
 - `exportarExcelCompleto()`: `Pedidos_Pagados`/`Pedidos_Pendientes` llevan

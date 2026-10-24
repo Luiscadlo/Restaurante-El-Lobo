@@ -9,7 +9,7 @@ Para quien opera el sistema, no para quien programa. Cada sección es independie
 | La pantalla (el sistema) | GitHub Pages, desde la rama `main` del repositorio | Los dueños, vía pull request |
 | Los datos y los usuarios | Supabase (proyecto del restaurante) | Los dueños |
 | El código y la historia de cambios | https://github.com/Luiscadlo/Restaurante-El-Lobo (público) | Los dueños |
-| Respaldo semanal automático | Tarea programada "Respaldo semanal El Lobo" (domingos 10:53 p. m., hora de Bogotá): baja las tablas y **entrega el JSON como archivo en el chat** | Claude / los dueños |
+| Respaldo semanal (manual) | Pestaña **Datos → 💾 Respaldo completo**: cada domingo un administrador descarga el JSON de todas las tablas. El sistema avisa si toca | Los dueños |
 
 Si Supabase se cae, el sistema no abre (muestra el error de conexión). Si GitHub Pages se cae, el enlace no carga. Ambos son servicios externos; no hay nada que reiniciar de nuestro lado.
 
@@ -19,7 +19,7 @@ Si Supabase se cae, el sistema no abre (muestra el error de conexión). Si GitHu
 |---|---|---|
 | `admin` | Cada dueño/familiar, con su **propio** correo | Todo. Entrando directo o autorizando desde caja. |
 | `caja` | Un usuario compartido, el del mostrador | Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario, Menú. Lo demás pide autorización de un dueño. |
-| `respaldo` | Solo el respaldo automático | Leer todo. No entra a la pantalla ni escribe. |
+| `respaldo` | Reservado por si algún día el respaldo se automatiza (hoy no hay ninguno activo) | Leer todo. No entra a la pantalla ni escribe. |
 
 Tabla completa de permisos: `docs/MATRIZ_PERMISOS.md`. **El rol vive en `app_metadata.rol` del usuario** (lo asigna un dueño en Supabase; el usuario no puede cambiarlo).
 
@@ -51,13 +51,14 @@ Contraseñas: siempre en un gestor de contraseñas; nunca en el chat, en el cód
 
 ## Respaldos
 
-**Hay tres capas** (ninguna reemplaza a las otras):
+**Hay dos capas** (ninguna reemplaza a la otra) y un Excel aparte:
 
-1. **Botón Exportar** (encabezado, pide acceso de administrador): descarga un JSON con **todas** las tablas. Al terminar, apaga el aviso de respaldo. Guárdalo **fuera del repositorio** (carpeta privada, nube personal).
-2. **Aviso en pantalla:** si pasan más de 7 días sin respaldo se pone ámbar; desde 10 días, rojo.
-3. **Respaldo semanal automático** (domingos de noche): llega como archivo al chat. Tras activar la seguridad (RLS), esta tarea debe entrar con el usuario `respaldo`; mientras no se actualice, **falla** y el respaldo debe hacerse a mano con el botón Exportar.
+1. **Datos → 💾 Respaldo completo** (solo administrador): descarga un JSON con **todas** las tablas, comprueba que cada una trae todas sus filas y solo entonces anota la fecha del respaldo. Hazlo **cada domingo** y guarda el archivo **fuera del repositorio** (carpeta privada, nube personal).
+2. **Aviso en pantalla** (solo administrador): desde cada domingo aparece en ámbar si todavía no hay un respaldo de esa semana, y se pone rojo a los 10 días. Se apaga solo al terminar bien un respaldo completo.
 
-Además, **Datos → Exportar datos a Excel** genera el Excel para el modelo financiero (no es un respaldo completo de la base).
+No hay respaldo automático: el que había se eliminó cuando se activó la seguridad (RLS), porque ya no podía leer con la llave pública. Detalle en `docs/DESPLIEGUE_SEGURIDAD.md` (Paso 8).
+
+**Datos → Exportar datos a Excel** es otra cosa: genera el Excel para analizar o alimentar el modelo financiero. **No es un respaldo** y no sirve para restaurar la base.
 
 > El plan gratuito de Supabase **no** incluye copias diarias propias. Un respaldo cuenta como *verificado* solo después de restaurarlo en un proyecto de pruebas (guía de restauración: se escribe con el Prompt H; hasta entonces, la restauración no está probada).
 
@@ -107,7 +108,7 @@ Todo en verde antes de fusionar. Si algo falla, copia el mensaje completo y pás
 | El enlace viejo (`Contabildad`) muestra "Este enlace cambió" | Normal: guardar el enlace nuevo de la raíz y borrar el viejo de favoritos. |
 | Pantalla de entrada no deja pasar a nadie | ¿Se activó RLS sin crear usuarios con rol? Revisa el `select email, raw_app_meta_data ->> 'rol' from auth.users`. Último recurso: `sql/rollback_rls.sql`. |
 | La caja no puede cobrar tras un cambio | Puede ser un permiso faltante. Abre la consola (F12) y busca peticiones con error 403; pásaselas a Claude. Reversa: arriba. |
-| El respaldo semanal no llegó | Revisa la tarea programada; si falló por permisos, hacer Exportar a mano y avisar a Claude para actualizarla. |
+| El aviso de respaldo sigue en pantalla | Entra como administrador → **Datos → Respaldo completo**. El aviso solo se apaga cuando bajaron **todas** las filas de todas las tablas; si sale un error de conteo, ese archivo no sirve: repite el respaldo y, si vuelve a fallar, pásale el mensaje a Claude. |
 | Un número del Tablero no cuadra | No lo corrijas a mano: compáralo contra los cierres del día; pásale a Claude el día, el turno y la cifra esperada. |
 | Se subió por error un archivo con datos o una clave | **Avisa de inmediato**: se debe cambiar la clave, y quitar el archivo del historial (no basta borrarlo). |
 
@@ -115,4 +116,4 @@ Todo en verde antes de fusionar. Si algo falla, copia el mensaje completo y pás
 
 - Guía de restauración de respaldos y su prueba en un proyecto aparte (Prompt H).
 - Confirmación del contador sobre impuestos y facturación electrónica.
-- Activar la tarea de respaldo con el usuario `respaldo` (al desplegar la seguridad).
+- Decidir si algún día se automatiza el respaldo (hoy es manual cada domingo; el usuario `respaldo` de solo lectura ya está previsto para eso).

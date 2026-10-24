@@ -424,8 +424,6 @@
   <div class="header-right">
     <div id="syncBadge" style="border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid rgba(232,184,75,0.4);background:rgba(232,184,75,0.1);color:var(--accent);">🔄 Sincronizando…</div>
     <button class="btn-abrir-turno" id="btn-abrir-turno-header" onclick="abrirModalTurno()" title="Registrar caja inicial del turno">🔓 Abrir turno</button>
-    <button class="btn btn-outline" onclick="pedirRespaldoCompleto()" style="font-size:11px;padding:6px 12px;" title="Respaldo completo de todas las tablas (pide acceso de administrador)">⬇ <span class="btn-label">Exportar</span></button>
-    <label id="btn-importar" class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;display:none;" title="Importar (solo administrador; limitado: ingresos, egresos, inventario y gastos del día)">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
     <div id="rolBadge" style="display:none;border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);" title="Usuario con el que se inició sesión"></div>
     <button class="btn btn-outline" id="btn-salir" onclick="salirDelSistema()" style="font-size:11px;padding:6px 12px;display:none;" title="Cerrar la sesión de este equipo">🚪 <span class="btn-label">Salir</span></button>
     <div class="turno-badge turno-almuerzo" id="turnoBadge">☀️ Almuerzo</div>
@@ -441,16 +439,16 @@
   <div class="tab" onclick="showTab('diaadia',this)">Cierre</div>
   <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
   <div class="tab" onclick="showTab('menu',this)">Menú</div>
-  <!-- Administrativas — solo rol admin (en caja piden autorización de un administrador) -->
-  <div class="tab" onclick="showTab('dashboard',this)">🔒 Tablero</div>
-  <div class="tab" onclick="showTab('ingfin',this)">🔒 Ingresos</div>
-  <div class="tab" onclick="showTab('egresos',this)">🔒 Egresos</div>
-  <div class="tab" onclick="showTab('caja',this)">🔒 Caja</div>
-  <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
-  <div class="tab" onclick="showTab('datos',this)">🔒 Datos</div>
+  <!-- Administrativas — solo rol admin: con caja NO aparecen (sincronizarSesion() las muestra u oculta). Para verlas: Salir y entrar como administrador. -->
+  <div class="tab tab-admin" id="tab-nav-dashboard" style="display:none;" onclick="showTab('dashboard',this)">Tablero</div>
+  <div class="tab tab-admin" id="tab-nav-ingfin" style="display:none;" onclick="showTab('ingfin',this)">Ingresos</div>
+  <div class="tab tab-admin" id="tab-nav-egresos" style="display:none;" onclick="showTab('egresos',this)">Egresos</div>
+  <div class="tab tab-admin" id="tab-nav-caja" style="display:none;" onclick="showTab('caja',this)">Caja</div>
+  <div class="tab tab-admin" id="tab-nav-auditoria" style="display:none;" onclick="showTab('auditoria',this)">Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
+  <div class="tab tab-admin" id="tab-nav-datos" style="display:none;" onclick="showTab('datos',this)">Datos</div>
 </nav>
 
-<!-- Aviso de respaldo (se llena con renderAvisoRespaldo; visible para todos) -->
+<!-- Aviso de respaldo (se llena con renderAvisoRespaldo; solo lo ve el administrador) -->
 <div id="aviso-respaldo" style="display:none;padding:12px 24px 0;"></div>
 
 <main>
@@ -1351,7 +1349,7 @@
   <div class="panel" style="margin-bottom:20px;">
     <div class="panel-header">
       <div class="panel-title">Cierre del día</div>
-      <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="abrirModalCierreManual()">✍️ Cierre manual</button>
+      <button type="button" class="btn btn-outline" id="btn-cierre-manual" data-solo-admin style="padding:6px 12px;font-size:12px;display:none;" onclick="abrirModalCierreManual()">✍️ Cierre manual</button>
     </div>
     <div class="panel-body">
       <div class="form-row">
@@ -1471,7 +1469,8 @@
       </div>
     </div>
   </div>
-  <div class="panel">
+  <!-- Historial completo de cierres — solo administrador: con caja ni se dibuja (sincronizarSesion() lo muestra u oculta). -->
+  <div class="panel" id="dd-historial-panel" data-solo-admin style="display:none;">
     <div class="panel-header"><div class="panel-title">🔒 Historial completo de cierres</div></div>
     <div class="panel-body" id="dd-historial-login">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Para ver o corregir cierres de otros días necesitas autorización de un administrador (usuario y contraseña).</div>
@@ -1604,6 +1603,33 @@
   </div>
 
   <div id="auditoria-contenido" style="display:none;">
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-body">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;">
+          <div>
+            <div class="filtro-label">Período</div>
+            <div class="filter-bar" id="auditoria-periodo" style="margin-bottom:0;">
+              <button class="filter-btn" data-periodo="hoy" onclick="setFAuditoria('hoy')">Hoy</button>
+              <button class="filter-btn" id="auditoria-btn-ayer" title="Ver solo lo de ayer" onclick="setFAuditoriaAyer()">Ayer</button>
+              <button class="filter-btn" data-periodo="semana" onclick="setFAuditoria('semana')">Semana</button>
+              <button class="filter-btn" data-periodo="mes" onclick="setFAuditoria('mes')">Mes</button>
+              <button class="filter-btn active" data-periodo="todo" onclick="setFAuditoria('todo')">Todo</button>
+            </div>
+          </div>
+          <div>
+            <div class="filtro-label">Un día o un rango <span style="text-transform:none;">(desde – hasta)</span></div>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
+              <input type="date" id="auditoria-desde" style="padding:8px 10px;" title="Desde (si eliges solo este, ves solo ese día)" onchange="setFAuditoriaRango('desde')">
+              <span style="color:var(--text3);font-size:11px;">–</span>
+              <input type="date" id="auditoria-hasta" style="padding:8px 10px;" title="Hasta" onchange="setFAuditoriaRango('hasta')">
+              <button class="filter-btn" title="Quitar el filtro y ver todo" onclick="setFAuditoria('todo')">✕</button>
+            </div>
+          </div>
+        </div>
+        <div id="auditoria-filtro-resumen" style="font-size:12px;color:var(--text2);margin-top:12px;"></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Los ajustes se filtran por la fecha del cierre; los pedidos eliminados y los descuentos, por el día en que se hicieron.</div>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">📋 Ajustes manuales registrados en cierres</div>
@@ -1663,10 +1689,18 @@
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
       <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
     </div>
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-header"><div class="panel-title">💾 Respaldo completo (copia de seguridad)</div></div>
+      <div class="panel-body">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Descarga un archivo <b>.json</b> con TODAS las tablas del sistema, completas (pedidos, egresos, cierres, caja, fiados, inventario, auditoría…). Es la copia que sirve para recuperar el sistema si algo falla (se restaura con <code>docs/RESTAURAR.md</code>). Hazlo <b>cada domingo</b> y guarda el archivo <b>fuera del repositorio</b> (que es público). Solo se registra como hecho si bajaron todas las filas.</div>
+        <div id="datos-respaldo-estado" style="font-size:12px;color:var(--text2);margin-bottom:14px;"></div>
+        <button class="btn btn-primary" id="btn-respaldo-completo" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo completo (.json)</button>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-header"><div class="panel-title">📊 Exportar datos a Excel</div></div>
       <div class="panel-body">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Genera un Excel (.xlsx) con una hoja por cada tabla del sistema (pedidos, egresos, cierres, caja, inventario, etc.) — pensado para análisis externo en Excel o Python (es el archivo que lee el modelo financiero), no para reimportar. Para respaldo/reimportación, usa el botón "Exportar" (JSON) del encabezado.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Para análisis (no es una copia de seguridad). Genera un Excel (.xlsx) con una hoja por cada tabla del sistema (pedidos, egresos, cierres, caja, inventario, etc.) — pensado para análisis externo en Excel o Python (es el archivo que lee el modelo financiero). No se puede restaurar desde aquí: para la copia de seguridad usa la tarjeta «Respaldo completo» de arriba.</div>
 
         <div class="filtro-label">Período de los datos históricos a descargar</div>
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:6px;">
@@ -1733,29 +1767,6 @@
     </div>
 
     <button class="btn btn-success" id="apertura-btn-guardar" style="width:100%;" onclick="guardarAperturaTurno()">✅ Abrir turno</button>
-  </div>
-</div>
-
-<!-- Modal: Respaldo completo (pide acceso de administrador) -->
-<div id="modal-respaldo" class="modal-overlay" style="display:none;" onclick="cerrarModalRespaldoClick(event)">
-  <div class="modal-box">
-    <button class="modal-close" onclick="cerrarModalRespaldo()">✕</button>
-    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:18px;">💾 Respaldo completo</div>
-
-    <div id="respaldo-login">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Descargar el respaldo completo de todas las tablas requiere autorización de un administrador (usuario y contraseña).</div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <input type="text" id="respaldo-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario de administrador" onkeydown="if(event.key==='Enter')document.getElementById('respaldo-password').focus()">
-        <div style="display:flex;gap:8px;">
-          <input type="password" id="respaldo-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoRespaldo()">
-          <button class="btn btn-primary" onclick="intentarAccesoRespaldo()">Entrar</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="respaldo-contenido" style="display:none;">
-      <div style="font-size:12px;color:var(--text3);">Acceso concedido. Preparando el respaldo…</div>
-    </div>
   </div>
 </div>
 
@@ -2426,17 +2437,37 @@ async function salirDelSistema() {
   location.reload();
 }
 
-// Rol efectivo → bandera que usa la pantalla (adminAutenticado) + encabezado.
+// Secciones solo para administradores: con caja no aparecen en la barra (orden de la barra).
+const TABS_ADMIN = ['dashboard', 'ingfin', 'egresos', 'caja', 'auditoria', 'datos'];
+
+// Rol efectivo → bandera que usa la pantalla (adminAutenticado) + encabezado + barra de secciones.
+// OJO: ocultar secciones es solo comodidad; lo que protege los datos son las reglas de la base (sql/).
 function sincronizarSesion() {
   adminAutenticado = esAdminActivo();
+  TABS_ADMIN.forEach(id => {
+    const t = document.getElementById('tab-nav-' + id);
+    if (t) t.style.display = adminAutenticado ? '' : 'none';
+  });
+  if (!adminAutenticado) {
+    // Si estaba mirando una sección de administrador y ya no lo es, vuelve a Pedidos.
+    const abierta = document.querySelector('.section.active');
+    if (abierta && TABS_ADMIN.some(id => abierta.id === 'tab-' + id)) {
+      showTab('ingresos', document.querySelector(`.tab[onclick*="showTab('ingresos'"]`));
+    }
+  }
   const badge = document.getElementById('rolBadge');
   const salir = document.getElementById('btn-salir');
-  const importar = document.getElementById('btn-importar');
-  if (importar) importar.style.display = adminAutenticado ? '' : 'none';
+  // Funciones de administrador dentro de las pestañas que caja sí ve (Cierre manual,
+  // Historial de cierres…): marcadas con data-solo-admin, con caja ni se dibujan.
+  document.querySelectorAll('[data-solo-admin]').forEach(el => { el.style.display = adminAutenticado ? '' : 'none'; });
   if (!badge || !salir) return;
   if (!sesionBase) { badge.style.display = 'none'; salir.style.display = 'none'; return; }
   let texto;
-  if (sesionBase.rol === 'admin') texto = `👑 Admin · ${nombreDeUsuario(sesionBase.email)}`;
+  if (sesionBase.rol === 'admin') {
+    // «👑 Admin» a secas cuando el usuario se llama «admin» (si no, «👑 Admin · nombre», p. ej. «👑 Admin · luisca»).
+    const quien = nombreDeUsuario(sesionBase.email);
+    texto = quien.toLowerCase() === 'admin' ? '👑 Admin' : `👑 Admin · ${quien}`;
+  }
   else if (sesionAdmin) texto = `👤 Caja · 🔓 ${nombreDeUsuario(sesionAdmin.email)}`;
   else texto = '👤 Caja';
   badge.textContent = texto;
@@ -3010,7 +3041,10 @@ function descuentosDisponibles() {
 // El plan gratis de Supabase no trae copias automáticas: este respaldo es la red de
 // seguridad. Baja TODAS las tablas, verifica que no falte ninguna fila y registra la
 // fecha en config.ultimo_respaldo (de ahí sale el aviso de la pantalla).
-const RESPALDO_AVISO_DIAS = 7;   // más de esta cantidad de días sin respaldo → aviso ámbar
+// El respaldo es SEMANAL y a mano (pestaña Datos → Respaldo completo, solo administrador): el aviso sale desde cada DOMINGO y
+// sigue saliendo hasta que haya un respaldo completo hecho desde ese domingo (el que registra
+// config.ultimo_respaldo, que solo se guarda si el respaldo terminó bien). Se pone rojo si pasan
+// RESPALDO_ROJO_DIAS días sin respaldo.
 const RESPALDO_ROJO_DIAS  = 10;  // desde esta cantidad de días → aviso rojo
 
 // TODAS las tablas que usa el código con sbGet/sbGetAll/sbInsert/sbPatch/sbDelete
@@ -3126,6 +3160,7 @@ async function respaldoCompleto() {
     showToast(`✅ Respaldo completo descargado (${lista.length} tablas, ${filasTotal} filas)`, 'ok');
     if (!guardado) showToast('⚠ El archivo se descargó, pero no quedó registrado el respaldo (falta la tabla config en Supabase): el aviso seguirá activo', 'warning');
     renderAvisoRespaldo();
+    renderDatosRespaldo();
   } catch (e) {
     console.error(e);
     progresoRespaldo(null);
@@ -3135,51 +3170,36 @@ async function respaldoCompleto() {
   }
 }
 
-// El botón "Exportar" del encabezado: el respaldo completo siempre pasa por el acceso de
-// administrador (aplicarGateAdmin/intentarAccesoAdmin, igual que el cierre manual).
-let respaldoPendiente = false;
+// El botón «Respaldo completo» de la pestaña Datos y el del aviso de respaldo: son solo del administrador
+// (con caja ni se dibujan). Si alguien lo llama a mano con caja, se niega — no hay ventana de contraseña.
 function pedirRespaldoCompleto() {
-  if (adminAutenticado) { respaldoCompleto(); return; }
-  respaldoPendiente = true;
-  document.getElementById('respaldo-password').value = '';
-  document.getElementById('modal-respaldo').style.display = 'flex';
-  aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal);
-}
-function iniciarRespaldoDesdeModal() {
-  if (!respaldoPendiente) return;
-  respaldoPendiente = false;
-  cerrarModalRespaldo();
+  if (!adminAutenticado) { showToast('🔒 El respaldo completo es solo para administradores', 'warning'); return; }
   respaldoCompleto();
 }
-async function intentarAccesoRespaldo() {
-  await intentarAccesoAdmin('respaldo-password');
-  aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal);
-}
-function cerrarModalRespaldo() {
-  respaldoPendiente = false;
-  document.getElementById('modal-respaldo').style.display = 'none';
-}
-function cerrarModalRespaldoClick(e) {
-  if (e.target.id === 'modal-respaldo') cerrarModalRespaldo();
-}
-// Nombre anterior (sigue existiendo por si algo lo llama).
-function exportarDatos() { pedirRespaldoCompleto(); }
-
 // Días calendario entre dos fechas AAAA-MM-DD (sin depender de la zona horaria).
 function diasDesdeFecha(fechaStr, hoyStr = today()) {
   const aMs = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
   return Math.round((aMs(hoyStr) - aMs(fechaStr)) / 86400000);
 }
+// Día de la semana de una fecha AAAA-MM-DD: 0 = domingo … 6 = sábado (sin depender de la zona horaria).
+function diaDeLaSemana(fechaStr = today()) {
+  const [y, m, d] = String(fechaStr).slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
 // null = sin aviso; 'ambar' o 'rojo'. dias null/NaN = nunca se ha hecho un respaldo.
-function nivelAvisoRespaldo(dias) {
+// `diaSemana` = día de la semana de HOY (0 = domingo): el domingo más reciente cae `diaSemana` días
+// atrás, así que un respaldo de hace MÁS días que esos es anterior a ese domingo → toca hacer otro.
+function nivelAvisoRespaldo(dias, diaSemana = diaDeLaSemana()) {
   if (dias === null || dias === undefined || Number.isNaN(dias)) return 'ambar';
   if (dias >= RESPALDO_ROJO_DIAS) return 'rojo';
-  if (dias > RESPALDO_AVISO_DIAS) return 'ambar';
+  if (dias > diaSemana) return 'ambar';
   return null;
 }
 function renderAvisoRespaldo() {
   const el = document.getElementById('aviso-respaldo');
   if (!el) return;
+  // Hacer el respaldo es del administrador: con caja el aviso ni aparece (no puede hacer nada con él).
+  if (!adminAutenticado) { el.style.display = 'none'; el.innerHTML = ''; return; }
   if (ST.config === undefined) { el.style.display = 'none'; el.innerHTML = ''; return; } // aún no cargó
   if (ST.config === null) {
     el.innerHTML = `<div class="alert info"><div style="flex:1;">ℹ️ El aviso de respaldo está desactivado: falta crear la tabla <b>config</b> en Supabase (archivo sql/migracion_supabase_config.sql).</div></div>`;
@@ -3193,7 +3213,9 @@ function renderAvisoRespaldo() {
   if (!nivel) { el.style.display = 'none'; el.innerHTML = ''; return; }
   const texto = (dias === null || Number.isNaN(dias))
     ? 'Todavía no se ha hecho ningún respaldo completo.'
-    : `Hace ${dias} días no se hace respaldo completo.`;
+    : nivel === 'rojo'
+      ? `Hace ${dias} días no se hace respaldo completo.`
+      : `Toca el respaldo semanal — el último fue hace ${dias} día${dias === 1 ? '' : 's'}.`;
   el.innerHTML = `<div class="alert ${nivel === 'rojo' ? 'warning' : 'info'}">
     <div style="flex:1;">${nivel === 'rojo' ? '🚨' : '⚠️'} ${texto}</div>
     <button class="btn btn-outline" style="font-size:11px;" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo ahora</button>
@@ -3265,7 +3287,23 @@ function datosParaExportar() {
   };
 }
 
+// Línea de estado de la tarjeta «Respaldo completo» (pestaña Datos): fecha del último respaldo registrado.
+function renderDatosRespaldo() {
+  const el = document.getElementById('datos-respaldo-estado');
+  if (!el) return;
+  if (ST.config === undefined) { el.textContent = ''; return; }
+  if (ST.config === null) { el.innerHTML = 'ℹ️ No se puede registrar el último respaldo: falta crear la tabla <b>config</b> en Supabase (sql/migracion_supabase_config.sql). El respaldo igual se descarga.'; return; }
+  const fila = ST.config.find(c => c.clave === 'ultimo_respaldo');
+  const fecha = fila && fila.valor ? (fila.valor.fecha || String(fila.valor.generado_en || '').slice(0, 10)) : '';
+  if (!fecha) { el.innerHTML = '⚠️ <b>Todavía no se ha hecho ningún respaldo completo.</b>'; return; }
+  const dias = diasDesdeFecha(fecha);
+  const nivel = nivelAvisoRespaldo(dias);
+  const cuando = dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`;
+  el.innerHTML = `Último respaldo completo: <b>${fecha}</b> (${cuando}). ` + (nivel ? '<b>Toca hacer uno.</b>' : '✅ Al día esta semana.');
+}
+
 function renderDatosExport() {
+  renderDatosRespaldo();
   document.querySelectorAll('#datos-presets .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.preset === fDatos.preset));
   const el = document.getElementById('datos-resumen');
   if (!el) return;
@@ -3279,8 +3317,8 @@ function renderDatosExport() {
 }
 
 // Exporta lo que hay en memoria a un Excel con una hoja por tabla — para
-// análisis externo (Excel/Python), no para reimportar (eso lo cubre
-// exportarDatos()/importarDatos(), el respaldo JSON de arriba). El período
+// análisis externo (Excel/Python), NO es una copia de seguridad (eso es el
+// Respaldo completo .json de esta misma pestaña, que se restaura con docs/RESTAURAR.md). El período
 // elegido en la pestaña Datos recorta las hojas de movimientos por fecha; las
 // que son estado actual (inventario, fiados pendientes, clientes, abonos y
 // movimientos de caja) van siempre completas.
@@ -3331,62 +3369,6 @@ function exportarExcelCompleto() {
   const sufijo = (fDatos.desde || fDatos.hasta) ? `_${fDatos.desde || 'inicio'}_a_${fDatos.hasta || 'hoy'}` : '';
   XLSX.writeFile(wb, `ElLobo_datos_${today()}${sufijo}.xlsx`);
   showToast(`✅ Excel exportado (${d.cierres.length} cierres, ${d.pagados.length} pedidos pagados)`, 'ok');
-}
-
-async function importarDatos(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  // Solo administrador (el botón ya está oculto para caja; esto es un segundo seguro en pantalla —
-  // el servidor igualmente no deja a caja escribir en egresos).
-  if (!adminAutenticado) { e.target.value = ''; showToast('🔒 Importar datos es solo para administradores', 'warning'); return; }
-  try {
-    const datos = JSON.parse(await file.text());
-    if (!datos.ingresos && !datos.egresos) {
-      alert('El archivo no parece ser un respaldo válido de El Lobo.'); return;
-    }
-    if (!confirm(`¿Importar datos de ${file.name}? Esto AÑADIRÁ los registros a Supabase.`)) return;
-
-    setSyncBadge('syncing');
-    const inserts = [];
-
-    // Ingresos del backup (formato viejo: monto → monto_total)
-    (datos.ingresos || []).forEach(i => {
-      inserts.push(sbInsert('pedidos', {
-        fecha: i.fecha, hora: i.hora, turno: i.turno, pedido: i.pedido,
-        sopa: i.sopa||'', arroz: i.arroz||'', proteina: i.proteina||'',
-        acomp: i.acomp||'', detalle: i.detalle||'',
-        metodo: i.metodo, cantidad: i.cantidad||1,
-        monto_almuerzo: i.monto || i.montoUnit || 0,
-        monto_domicilio: 0,
-        monto_total: i.monto || i.montoUnit || 0,
-        estado: 'pagado', es_domicilio: false, mesa: null, para_llevar: false
-      }).catch(() => {}));
-    });
-    (datos.egresos || []).forEach(eg => {
-      // "description" (en inglés) es el nombre real de esa columna en la
-      // tabla "egresos" de Supabase — ver la nota en agregarEgreso().
-      inserts.push(sbInsert('egresos', {
-        fecha: eg.fecha, cat: eg.cat, monto: eg.monto, description: eg.description || eg.desc || eg.descripcion || ''
-      }).catch(() => {}));
-    });
-    (datos.inventario || []).forEach(inv => {
-      inserts.push(sbInsert('inventario', {
-        nombre: inv.nombre, unidad: inv.unidad, stock: inv.stock, minimo: inv.minimo, costo: inv.costo
-      }).catch(() => {}));
-    });
-    (datos.gastosDia || []).forEach(g => {
-      inserts.push(sbInsert('gastos_dia', {
-        fecha: g.fecha, turno: g.turno, nombre: g.nombre, monto: g.monto
-      }).catch(() => {}));
-    });
-
-    await Promise.all(inserts);
-    await loadState();
-    showToast('✅ Datos importados correctamente', 'ok');
-  } catch (err) {
-    showToast('⚠ Error al importar: ' + err.message, 'warning');
-  }
-  e.target.value = '';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
@@ -5138,7 +5120,7 @@ function abrirModalDescuento(ids) {
   // día solo se puede tocar con la contraseña de administrador — cambiar su
   // monto equivale a corregir un cierre de otro día.
   if (primero.estado === 'pagado' && primero.fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, autorízate como administrador en Auditoría o en el historial de cierres', 'warning');
+    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, sal e ingresa como administrador', 'warning');
     return;
   }
   descuentoModalIds = idArr;
@@ -5913,13 +5895,21 @@ function renderFiados() {
 
   // Solo clientes con saldo > 0 estorban la vista — los que ya quedaron en
   // $0 no se muestran (ni colapsados: simplemente no tienen nada pendiente).
-  // Excepción: si tienen pedidos pendientes cubiertos por saldo a favor (p.
-  // ej. tras revertir un pago vía abono, saldo = 0) sí se muestran, para
-  // poder usar "Aplicar saldo a favor".
-  const clientesConSaldo = ST.clientesFiado
+  // Excepciones, que SÍ se muestran:
+  //  · pedidos pendientes cubiertos por saldo a favor (p. ej. tras revertir un
+  //    pago vía abono, saldo = 0), para poder usar "Aplicar saldo a favor";
+  //  · saldo a favor sin ningún pedido pendiente (abonó de más, o se canceló
+  //    el pedido que había abonado): esa plata ya entró al cierre, así que no
+  //    puede quedar invisible — y es desde aquí que un administrador puede
+  //    eliminar un abono hecho por error.
+  const todosConSaldo = ST.clientesFiado
     .map(c => ({ cliente: c, ...calcularSaldoFiado(c.id) }))
-    .filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5)
+    .filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5 || x.sobrante > 0.5)
     .sort((a,b) => b.saldo - a.saldo);
+  // Los que solo tienen saldo a favor no deben contarse en la insignia de
+  // "fiados por cobrar" de la pestaña.
+  const clientesConSaldo = todosConSaldo;
+  const porCobrar = todosConSaldo.filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5);
 
   // Huérfanos: fiados sin cliente_fiado_id, invisibles en cualquier otro
   // lado (ni Pendientes ni el listado por cliente de arriba los agarra).
@@ -5929,7 +5919,7 @@ function renderFiados() {
 
   const badge = document.getElementById('fiados-badge');
   if (badge) {
-    const total = clientesConSaldo.length + huerfanos.length;
+    const total = porCobrar.length + huerfanos.length;
     badge.textContent = total;
     badge.style.display = total > 0 ? 'inline' : 'none';
     badge.style.background = huerfanos.length > 0 ? 'var(--red, #e05c5c)' : 'var(--orange)';
@@ -6005,14 +5995,18 @@ function renderFiados() {
         }).join('')
       : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin pedidos pendientes — el saldo viene de un abono todavía sin aplicar del todo.</div></td></tr>`;
 
+    // Eliminar un abono (por error o de prueba) es solo de administrador:
+    // la plata ya entró al cierre de su día, así que corregirlo no es cosa
+    // del mostrador. Con caja la columna ni se dibuja.
     const filasAbonos = abonos.length
       ? abonos.map(a => `<tr>
           <td>${a.fecha}${a.turno ? ` · ${a.turno === 'cena' ? '🌙' : '☀️'}` : ''}</td>
           <td class="amount-pos">${fmt(a.monto)}</td>
           <td><span class="badge ${a.cuenta==='efectivo'?'badge-green':'badge-blue'}">${a.cuenta==='efectivo'?'💵 Efectivo':'📲 Transferencia'}</span></td>
           <td style="color:var(--text3);font-size:11px;">${a.nota||'—'}</td>
+          ${adminAutenticado ? `<td><button class="btn btn-danger" onclick="eliminarAbonoFiado(${a.id})" title="Eliminar este abono (solo administrador)">🗑</button></td>` : ''}
         </tr>`).join('')
-      : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin abonos registrados todavía.</div></td></tr>`;
+      : `<tr><td colspan="${adminAutenticado ? 5 : 4}"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin abonos registrados todavía.</div></td></tr>`;
 
     // Pedidos de este cliente ya saldados vía abono — mismo filtro que usa
     // calcularSaldoFiado() para totalPagadoViaAbono. Vive en ST.ingresos
@@ -6037,7 +6031,9 @@ function renderFiados() {
           <div class="pending-group-title" style="color:var(--purple);">📒 ${cliente.nombre}</div>
           <div class="pending-group-sub">${grupos.length} pedido(s) pendiente(s) · ${abonos.length} abono(s)${sobrante > 0.5 ? ` · saldo a favor ${fmt(sobrante)}` : ''} — ${abierto ? 'clic para colapsar' : 'clic para ver detalle'}</div>
         </div>
-        <div class="pending-group-total">${fmt(saldo)}</div>
+        ${saldo < -0.5
+          ? `<div class="pending-group-total" style="color:var(--green);" title="Abonó más de lo que debe: esa plata ya entró al cierre">a favor ${fmt(-saldo)}</div>`
+          : `<div class="pending-group-total">${fmt(saldo)}</div>`}
       </div>
       <div style="${abierto ? '' : 'display:none;'}">
         <div class="table-wrap">
@@ -6048,7 +6044,7 @@ function renderFiados() {
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Abono</th><th>Monto</th><th>Cuenta</th><th>Nota</th></tr></thead>
+            <thead><tr><th>Abono</th><th>Monto</th><th>Cuenta</th><th>Nota</th>${adminAutenticado ? '<th></th>' : ''}</tr></thead>
             <tbody>${filasAbonos}</tbody>
           </table>
         </div>
@@ -6181,7 +6177,7 @@ async function saldarFiadosConSaldoAFavor(clienteId, metodo, fechaPago, turnoPag
 
 // Lleva a "Corregir cierre" de una fecha/turno ya guardado (para que incluya
 // un abono recibido después de cerrarlo). Mismas reglas que el botón del
-// banner: el de hoy se corrige libre; el de otro día pide la contraseña.
+// banner: el de hoy se corrige libre; el de otro día pide ser administrador.
 function abrirCorreccionCierre(fecha, turno) {
   document.getElementById('dd-fecha').value = fecha;
   ddTurno = turno;
@@ -6249,6 +6245,47 @@ async function registrarAbonoFiado(clienteId) {
   } catch (e) {
     console.error(e);
     showToast(`⚠ Error al registrar el abono: ${(e.message||'').slice(0,160)}`, 'warning');
+  }
+}
+
+// Elimina UN abono (registrado por error, o de prueba). Solo administrador:
+// la plata del abono ya entró al cierre de su día/turno, y ese cierre —si ya
+// se guardó— es una foto que no se recalcula sola.
+// Regla de saldo (la misma que protege eliminarGrupoIngreso): lo abonado tiene
+// que seguir cubriendo los pedidos que ya se saldaron con abonos. Si no los
+// cubre, se avisa qué hacer (↩ devolver esos pedidos a pendiente) en vez de
+// dejar el saldo del cliente descuadrado.
+async function eliminarAbonoFiado(abonoId) {
+  if (!adminAutenticado) { showToast('🔒 Eliminar un abono es solo para administradores', 'warning'); return; }
+  const abono = ST.abonosFiado.find(a => a.id === abonoId);
+  if (!abono) return;
+  const cliente = ST.clientesFiado.find(c => c.id === abono.cliente_fiado_id);
+  const nombre = cliente ? cliente.nombre : 'el cliente';
+
+  const { totalAbonos, totalPagadoViaAbono } = calcularSaldoFiado(abono.cliente_fiado_id);
+  if (totalAbonos - (abono.monto || 0) + 0.01 < totalPagadoViaAbono) {
+    showToast(`🔒 No se puede eliminar este abono: con él se saldaron pedidos de ${nombre} por ${fmt(totalPagadoViaAbono)} y sin él el saldo quedaría descuadrado. Primero devuelve esos pedidos a pendiente con ↩ (Ingresos) y luego elimina el abono.`, 'warning');
+    return;
+  }
+
+  const cierre = abono.turno ? ST.cierresDia.find(c => c.fecha === abono.fecha && c.turno === abono.turno) : null;
+  const nombreTurno = abono.turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas';
+  if (!confirm(
+    `¿Eliminar el abono de ${nombre} por ${fmt(abono.monto)} (${abono.fecha}${abono.turno ? ', ' + nombreTurno : ''})?\n\n` +
+    `Deja de contarse como plata recibida en ese cierre y se resta de lo que ${nombre} tiene abonado.` +
+    (cierre ? `\n\nEl cierre de ${nombreTurno} del ${fechaCorta(abono.fecha)} ya está guardado y lo incluye: se abrirá "Corregir cierre" para volver a guardarlo sin este abono.` : '')
+  )) return;
+
+  try {
+    await sbDelete('abonos_fiado', `id=eq.${abonoId}`);
+    ST.abonosFiado = ST.abonosFiado.filter(a => a.id !== abonoId);
+    setSyncBadge('ok');
+    showToast(`🗑 Abono de ${fmt(abono.monto)} eliminado`, 'info');
+    renderAll();
+    if (cierre) abrirCorreccionCierre(abono.fecha, abono.turno);
+  } catch (e) {
+    console.error(e);
+    showToast(`⚠ Error al eliminar el abono: ${(e.message||'').slice(0,160)}`, 'warning');
   }
 }
 
@@ -6439,6 +6476,14 @@ function cerrarModalTurnoClick(e) {
   if (e.target.id === 'modal-turno') cerrarModalTurno();
 }
 
+// Funciones solo de administrador: con caja los botones ni se dibujan; esto es el segundo seguro si
+// alguien las llama a mano. Devuelve true si hay administrador activo; si no, avisa y devuelve false.
+function avisarSiNoEsAdmin(que) {
+  if (adminAutenticado) return true;
+  showToast(`🔒 ${que} es solo para administradores — sal e ingresa como administrador`, 'warning');
+  return false;
+}
+
 // ── Cierre manual: respaldo por si el sistema no se pudo usar ese día y las
 // cuentas se llevaron aparte. Solo administrador. ──
 let cierreManualTurno = 'almuerzo';
@@ -6456,6 +6501,7 @@ let cierreManualEditando = null;
 let cierreManualPendiente = null;
 
 function abrirModalCierreManual() {
+  if (!avisarSiNoEsAdmin('Cargar un cierre a mano')) return;
   cierreManualPendiente = null;
   document.getElementById('modal-cierre-manual').style.display = 'flex';
   document.getElementById('cierremanual-password').value = '';
@@ -6467,6 +6513,7 @@ function abrirModalCierreManual() {
 // el botón "Editar" del historial y desde "Corregir cierre" cuando el cierre
 // del turno actual es manual.
 function editarCierreManual(fecha, turno) {
+  if (!avisarSiNoEsAdmin('Corregir un cierre cargado a mano')) return;
   cierreManualPendiente = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno) || null;
   document.getElementById('modal-cierre-manual').style.display = 'flex';
   document.getElementById('cierremanual-password').value = '';
@@ -9278,14 +9325,14 @@ function renderDiaADia() {
     document.getElementById('dd-transferencia').textContent = '$0';
 
     // Solo se puede corregir libremente el cierre de HOY. Para uno de otro
-    // día hace falta la contraseña (misma del historial completo, abajo).
+    // día hace falta ser administrador (con caja: Salir e ingresar como administrador).
     const puedeCorregir = fecha === today() || adminAutenticado;
     const msgEl = document.getElementById('dd-cerrado-mensaje');
     const btnCorregir = document.getElementById('btn-corregir-cierre');
     if (btnCorregir) btnCorregir.style.display = puedeCorregir ? '' : 'none';
     if (msgEl) msgEl.textContent = puedeCorregir
       ? '🔒 Este turno ya está cerrado. Los valores quedaron guardados.'
-      : '🔒 Este cierre es de otro día — autorízate como administrador en "Historial completo de cierres" (más abajo) para verlo o corregirlo.';
+      : '🔒 Este cierre es de otro día — para verlo o corregirlo, sal e ingresa como administrador.';
 
     renderNotasCierre(fecha);
     aplicarGateAdmin('dd-historial', renderHistorialCierres);
@@ -9371,11 +9418,11 @@ function irADiaADia(fecha, turno) {
 // Botón "Corregir cierre" del banner de turno cerrado — reabre en modo edición
 // el cierre del turno/fecha que se está viendo ahora mismo (sin contraseña,
 // es parte del flujo normal del día). Para ver/editar OTROS días hace falta
-// la contraseña del historial completo, más abajo en esta misma pestaña.
+// sesión de administrador (el Historial completo de cierres solo se dibuja para él).
 function corregirCierreActual() {
   const fecha = document.getElementById('dd-fecha').value || today();
   if (fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para corregir un cierre de otro día, autorízate como administrador en "Historial completo de cierres"', 'warning');
+    showToast('🔒 Para corregir un cierre de otro día, sal e ingresa como administrador', 'warning');
     return;
   }
   // Un cierre manual no tiene pedidos reales detrás — corregirlo por la vía
@@ -9746,10 +9793,66 @@ function aplicarGateAdmin(prefix, renderFn) {
   }
 }
 
+// ── Filtro por día de Auditoría ───────────────────────────────────────
+// Mismo filtro de fechas que Egresos/Ingresos (enFiltroFecha): un período rápido
+// (hoy/semana/mes/todo) o un rango «desde – hasta» (un solo día = la misma fecha).
+// Los ajustes se ubican por la fecha de su CIERRE; los pedidos eliminados y los
+// descuentos, por el día (hora local) en que se hicieron (created_at), que es lo
+// que dice su primera columna. Si un registro no trae created_at, vale su fecha.
+const fAuditoria = { periodo: 'todo', desde: '', hasta: '' };
+
+function diaDeEventoAuditoria(r) {
+  const d = r.created_at ? new Date(r.created_at) : null;
+  return d && !Number.isNaN(d.getTime()) ? toLocalDateStr(d) : (r.fecha || '');
+}
+const auditoriaVisibleCierre = c => enFiltroFecha(c.fecha, fAuditoria);
+const auditoriaVisibleEvento = r => enFiltroFecha(diaDeEventoAuditoria(r), fAuditoria);
+function auditoriaFiltroActivo() { return fAuditoria.periodo !== 'todo' || !!(fAuditoria.desde || fAuditoria.hasta); }
+
+function textoFiltroAuditoria() {
+  const { desde, hasta, periodo } = fAuditoria;
+  if (desde || hasta) {
+    if (desde && hasta) return desde === hasta ? `el ${desde}` : `del ${desde} al ${hasta}`;
+    return desde ? `desde el ${desde}` : `hasta el ${hasta}`;
+  }
+  return { hoy: 'hoy', semana: 'esta semana', mes: 'este mes' }[periodo] || 'todo';
+}
+
+// Período rápido: quita el rango escrito y marca el botón.
+function setFAuditoria(periodo) {
+  limpiarRangoFiltro(fAuditoria, 'auditoria-desde', 'auditoria-hasta');
+  fAuditoria.periodo = periodo;
+  document.querySelectorAll('#auditoria-periodo .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.periodo === periodo));
+  renderAuditoria();
+}
+
+// Rango escrito a mano. Si solo eliges un extremo, el otro se pone igual: ves solo ese día
+// (para un rango, cambia el otro extremo; para «desde ese día en adelante», borra «hasta»).
+function setFAuditoriaRango(cambio) {
+  const d = document.getElementById('auditoria-desde'), h = document.getElementById('auditoria-hasta');
+  if (d && h) {
+    if (cambio === 'desde' && d.value && !h.value) h.value = d.value;
+    else if (cambio === 'hasta' && h.value && !d.value) d.value = h.value;
+  }
+  aplicarRangoFiltro(fAuditoria, 'auditoria-desde', 'auditoria-hasta', '#auditoria-periodo', cambio);
+  renderAuditoria();
+}
+
+function setFAuditoriaAyer() {
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  const ayer = toLocalDateStr(d);
+  document.getElementById('auditoria-desde').value = ayer;
+  document.getElementById('auditoria-hasta').value = ayer;
+  setFAuditoriaRango('desde');
+}
+
 function renderAuditoria() {
   const body = document.getElementById('auditoria-body');
   if (!body) return;
-  const ajustes = ST.cierresDia.filter(c => ajustesDeCierre(c).total !== 0).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const filtrando = auditoriaFiltroActivo();
+  const todosAjustes = ST.cierresDia.filter(c => ajustesDeCierre(c).total !== 0);
+  const ajustes = todosAjustes.filter(auditoriaVisibleCierre).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const vacio = (hayDatos, sinNada, sinEnPeriodo) => (filtrando && hayDatos) ? sinEnPeriodo : sinNada;
   body.innerHTML = ajustes.length
     ? ajustes.map(c => {
         const aj = ajustesDeCierre(c);
@@ -9761,11 +9864,11 @@ function renderAuditoria() {
         <td style="color:var(--text2);">${c.ajuste_manual_nota || '—'}</td>
       </tr>`;
       }).join('')
-    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ajustes manuales registrados</div></div></td></tr>`;
+    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">${vacio(todosAjustes.length, 'Sin ajustes manuales registrados', 'Sin ajustes manuales en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
 
   const elimBody = document.getElementById('auditoria-eliminados-body');
   if (elimBody) {
-    const eliminados = [...ST.pedidosEliminados].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    const eliminados = ST.pedidosEliminados.filter(auditoriaVisibleEvento).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     elimBody.innerHTML = eliminados.length
       ? eliminados.map(e => `<tr>
           <td>${new Date(e.created_at).toLocaleString('es-CO')}</td>
@@ -9775,12 +9878,12 @@ function renderAuditoria() {
           <td style="color:var(--text2);">${LABELS[e.pedido]||e.pedido}${e.detalle ? ' — ' + e.detalle : ''}</td>
           <td class="amount-neg">${fmt(e.monto_total||0)}</td>
         </tr>`).join('')
-      : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">Sin pedidos eliminados registrados</div></div></td></tr>`;
+      : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">${vacio(ST.pedidosEliminados.length, 'Sin pedidos eliminados registrados', 'Sin pedidos eliminados en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
   }
 
   const descBody = document.getElementById('auditoria-descuentos-body');
   if (descBody) {
-    const descuentos = [...(ST.pedidosDescuentos || [])].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    const descuentos = (ST.pedidosDescuentos || []).filter(auditoriaVisibleEvento).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     descBody.innerHTML = descuentos.length
       ? descuentos.map(d => `<tr>
           <td>${new Date(d.created_at).toLocaleString('es-CO')}</td>
@@ -9791,7 +9894,18 @@ function renderAuditoria() {
           <td style="color:var(--text2);">${d.cierre_ajustado ? `💵 ${fmtAjuste(d.ajuste_efectivo||0)} · 💳 ${fmtAjuste(d.ajuste_transferencia||0)}` : '—'}</td>
           <td style="color:var(--text3);font-size:11px;">${d.gastos_eliminados || '—'}</td>
         </tr>`).join('')
-      : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🏷</div><div class="empty-text">Sin descuentos aplicados todavía</div></div></td></tr>`;
+      : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🏷</div><div class="empty-text">${vacio((ST.pedidosDescuentos || []).length, 'Sin descuentos aplicados todavía', 'Sin descuentos en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
+  }
+
+  // Resumen del filtro: qué se está viendo y cuántos registros quedan de cuántos hay.
+  const resumen = document.getElementById('auditoria-filtro-resumen');
+  if (resumen) {
+    const totE = ST.pedidosEliminados.length, totD = (ST.pedidosDescuentos || []).length;
+    const verE = ST.pedidosEliminados.filter(auditoriaVisibleEvento).length;
+    const verD = (ST.pedidosDescuentos || []).filter(auditoriaVisibleEvento).length;
+    resumen.innerHTML = filtrando
+      ? `Mostrando <b>${textoFiltroAuditoria()}</b>: ajustes <b>${ajustes.length}</b> de ${todosAjustes.length} · eliminados <b>${verE}</b> de ${totE} · descuentos <b>${verD}</b> de ${totD}`
+      : `Mostrando todo: ajustes <b>${todosAjustes.length}</b> · eliminados <b>${totE}</b> · descuentos <b>${totD}</b>`;
   }
 }
 
@@ -9801,12 +9915,13 @@ function renderAuditoria() {
 // badge muestra cuántos son nuevos y desaparece al entrar a la pestaña.
 const AUDITORIA_VISTOS_KEY = 'elLobo_auditoria_vistos';
 
-function auditoriaEventosIds() {
+// soloVisibles = true: solo los que el filtro de día de Auditoría deja ver ahora.
+function auditoriaEventosIds(soloVisibles = false) {
   const ajustesIds = ST.cierresDia
-    .filter(c => c.ajuste_manual)
+    .filter(c => c.ajuste_manual && (!soloVisibles || auditoriaVisibleCierre(c)))
     .map(c => `ajuste:${c.fecha}:${c.turno}`);
-  const elimIds = ST.pedidosEliminados.map(e => `elim:${e.id}`);
-  const descIds = (ST.pedidosDescuentos || []).map(d => `desc:${d.id}`);
+  const elimIds = ST.pedidosEliminados.filter(e => !soloVisibles || auditoriaVisibleEvento(e)).map(e => `elim:${e.id}`);
+  const descIds = (ST.pedidosDescuentos || []).filter(d => !soloVisibles || auditoriaVisibleEvento(d)).map(d => `desc:${d.id}`);
   return [...ajustesIds, ...elimIds, ...descIds];
 }
 
@@ -9829,7 +9944,12 @@ function actualizarBadgeAuditoria() {
 
 function marcarAuditoriaVista() {
   if (!adminAutenticado) return;   // con caja no se ve la pestaña: no se pisa lo que ya vio un administrador
-  try { localStorage.setItem(AUDITORIA_VISTOS_KEY, JSON.stringify(auditoriaEventosIds())); } catch(e) {}
+  // Se marcan como vistos los que se ven ahora; lo que un filtro de día deje escondido sigue
+  // contando como novedad en el numerito (sin filtro, esto equivale a marcar todo).
+  const vistos = auditoriaVistosGuardados();
+  const visibles = new Set(auditoriaEventosIds(true));
+  const guardar = auditoriaEventosIds().filter(id => vistos.has(id) || visibles.has(id));
+  try { localStorage.setItem(AUDITORIA_VISTOS_KEY, JSON.stringify(guardar)); } catch(e) {}
   actualizarBadgeAuditoria();
 }
 
