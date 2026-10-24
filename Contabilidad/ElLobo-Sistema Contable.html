@@ -252,6 +252,9 @@
   .mesa-btn.ocupada { border-color: var(--red); color: var(--red); cursor: not-allowed; opacity: 0.7; }
   .mesa-btn.pendiente { border-color: var(--orange); color: var(--orange); cursor: pointer; }
   .mesa-btn.pendiente:hover { background: rgba(224,124,58,0.12); }
+  /* Mesa con pedidos de días anteriores (debían cerrarse el mismo día) */
+  .mesa-btn.pendiente.vieja { border-color: var(--red); color: var(--red); }
+  .mesa-btn.pendiente.vieja:hover { background: rgba(224,92,92,0.12); }
   .mesa-btn.selected { border-color: var(--accent) !important; color: var(--accent) !important; background: rgba(232,184,75,0.15) !important; box-shadow: 0 0 0 2px rgba(232,184,75,0.3); }
   .mesa-lock { position: absolute; top: 4px; right: 5px; font-size: 9px; }
 
@@ -877,6 +880,7 @@
       <div class="salon-legend" style="margin-top:12px;">
         <div class="salon-legend-item"><div class="salon-legend-dot" style="background:var(--green);"></div> Libre</div>
         <div class="salon-legend-item"><div class="salon-legend-dot" style="background:var(--orange);"></div> Con pedidos pendientes</div>
+        <div class="salon-legend-item"><div class="salon-legend-dot" style="background:var(--red);"></div> Con pedidos de días anteriores</div>
       </div>
     </div>
   </div>
@@ -2067,6 +2071,114 @@ function aplicarCatalogoExtra() {
   if (!p) return;
   document.getElementById('extra-producto-desc').value = p.n;
   document.getElementById('extra-producto-valor').value = p.precio.toLocaleString('es-CO');
+}
+
+// ── Antigüedad de fiados y pendientes ─────────────────────────────────────
+// Regla del negocio: los fiados se pagan en semanas, pero SIEMPRE dentro del mismo
+// mes; los pendientes (mesas, domicilios, sin mesa) deben cerrarse el mismo día.
+// Los umbrales son "desde X días" (el día X ya cuenta en ese color) y se ajustan aquí.
+const FIADO_AMARILLO_DIAS = 8;
+const FIADO_NARANJA_DIAS  = 15;
+const FIADO_ROJO_DIAS     = 25;
+
+// Días calendario entre `fecha` (AAAA-MM-DD) y `hoy` (por defecto, el día de hoy en
+// hora local). Se calcula con las partes de la fecha en UTC, así el cambio de hora o
+// la zona horaria no mueven el resultado. Devuelve null si alguna fecha está vacía,
+// mal escrita o no existe (p. ej. 2026-02-31). Fecha futura → número negativo.
+function antiguedadDias(fecha, hoy = today()) {
+  const partes = txt => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof txt === 'string' ? txt : '');
+    if (!m) return null;
+    const t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+    const d = new Date(t);
+    return (d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3]) ? t : null;
+  };
+  const f = partes(fecha), h = partes(hoy);
+  if (f === null || h === null) return null;
+  return Math.round((h - f) / 86400000);
+}
+
+// Color de un fiado según sus días: reciente (verde) → amarillo → naranja → rojo.
+// Devuelve null si los días no son un número válido (no se pinta nada).
+function clasePorAntiguedad(dias) {
+  if (!Number.isFinite(dias)) return null;
+  if (dias >= FIADO_ROJO_DIAS)     return 'rojo';
+  if (dias >= FIADO_NARANJA_DIAS)  return 'naranja';
+  if (dias >= FIADO_AMARILLO_DIAS) return 'amarillo';
+  return 'reciente';
+}
+
+// Un fiado de un MES ANTERIOR al actual rompe la regla "se paga dentro del mes":
+// va en rojo sin importar cuántos días lleve (p. ej. del 30-sep visto el 1-oct).
+function esDeMesAnterior(fecha, hoy = today()) {
+  return antiguedadDias(fecha, hoy) !== null && fecha.slice(0, 7) < hoy.slice(0, 7);
+}
+function claseFiado(fecha, hoy = today()) {
+  const dias = antiguedadDias(fecha, hoy);
+  if (dias === null) return null;
+  return esDeMesAnterior(fecha, hoy) ? 'rojo' : clasePorAntiguedad(dias);
+}
+
+const BADGE_ANTIGUEDAD = { reciente: 'badge-green', amarillo: 'badge-accent', naranja: 'badge-orange', rojo: 'badge-red' };
+
+// Chip de un fiado: "⏱ hace 12 días" (+ "· mes anterior" si cruzó de mes).
+function chipFiadoHTML(fecha, hoy = today()) {
+  const clase = claseFiado(fecha, hoy);
+  if (!clase) return '';
+  const dias = antiguedadDias(fecha, hoy);
+  const texto = dias <= 0 ? 'de hoy' : dias === 1 ? 'de ayer' : `hace ${dias} días`;
+  const mes = esDeMesAnterior(fecha, hoy) ? ' · mes anterior' : '';
+  return `<span class="badge ${BADGE_ANTIGUEDAD[clase]}" data-antiguedad="${clase}" title="Fiado del ${fecha}">⏱ ${texto}${mes}</span>`;
+}
+
+// Minutos que lleva abierto un pedido de HOY: de su hora (HH:MM) a la hora actual.
+// null si alguna hora no es válida; nunca negativo.
+function minutosAbierto(hora, ahora = nowTime()) {
+  const m1 = /^(\d{1,2}):(\d{2})$/.exec(typeof hora === 'string' ? hora : '');
+  const m2 = /^(\d{1,2}):(\d{2})$/.exec(typeof ahora === 'string' ? ahora : '');
+  if (!m1 || !m2) return null;
+  return Math.max((+m2[1] * 60 + +m2[2]) - (+m1[1] * 60 + +m1[2]), 0);
+}
+function textoTiempoAbierto(min) {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60), r = min % 60;
+  return r ? `${h} h ${r} min` : `${h} h`;
+}
+
+// Chip de un grupo de Pendientes (mesa, domicilio, sin mesa o gratis).
+//   - de un día anterior → rojo: "de ayer" o "de DD-MM" (debió cerrarse el mismo día)
+//   - de hoy → gris: el tiempo que lleva abierto desde la hora del pedido
+function chipPendienteHTML(orders, hoy = today(), ahora = nowTime()) {
+  const validas = orders.map(o => o.fecha).filter(f => antiguedadDias(f, hoy) !== null).sort();
+  if (!validas.length) return '';
+  const fecha = validas[0];
+  const dias = antiguedadDias(fecha, hoy);
+  if (dias > 0) {
+    const etiqueta = dias === 1 ? 'de ayer' : `de ${fecha.slice(8, 10)}-${fecha.slice(5, 7)}`;
+    return `<span class="badge badge-red" data-antiguedad="vieja" title="Pendiente del ${fecha}: debía cerrarse el mismo día">⚠ ${etiqueta}</span>`;
+  }
+  if (dias === 0) {
+    const horas = orders.filter(o => o.fecha === fecha).map(o => o.hora).filter(h => minutosAbierto(h, ahora) !== null).sort();
+    if (!horas.length) return '';
+    return `<span class="badge badge-gray" data-antiguedad="hoy" title="Abierto desde las ${horas[0]}">⏱ ${textoTiempoAbierto(minutosAbierto(horas[0], ahora))}</span>`;
+  }
+  return '';
+}
+
+// Fiados pendientes (con o sin cliente) cuyo pedido más viejo tiene `minDias` o más.
+// Cuenta un fiado por visita (grupo_pedido), igual que las tarjetas de la pestaña Fiados.
+function fiadosConAntiguedad(minDias, hoy = today()) {
+  const porGrupo = {};
+  ST.pendientes.filter(p => p.es_fiar === true).forEach(p => {
+    const k = p.grupo_pedido || `legacy-${p.id}`;
+    (porGrupo[k] = porGrupo[k] || []).push(p);
+  });
+  let n = 0, monto = 0;
+  Object.values(porGrupo).forEach(orders => {
+    const dias = Math.max(...orders.map(o => antiguedadDias(o.fecha, hoy)).filter(d => d !== null), -Infinity);
+    if (dias >= minDias) { n += 1; monto += orders.reduce((a, o) => a + (o.monto_total || 0), 0); }
+  });
+  return { n, monto };
 }
 
 // Número de mesas del salón (ajusta aquí si cambia el número real de mesas)
@@ -4174,14 +4286,17 @@ function renderSalonMap(containerId, clickable = false) {
     const estado  = mesa ? mesa.estado : 'libre';
     const pendCnt = ST.pendientes.filter(p => p.mesa === i).length;
     let cls = pendCnt > 0 ? 'pendiente' : (estado === 'ocupada' ? 'ocupada' : 'libre');
+    // Pedidos de días anteriores en esta mesa (debían cerrarse el mismo día) → borde rojo
+    const hayViejos = pendCnt > 0 && ST.pendientes.some(p => p.mesa === i && antiguedadDias(p.fecha) > 0);
+    if (hayViejos) cls += ' vieja';
 
     const click = clickable && pendCnt > 0
       ? `onclick="irAPendientesConMesa(${i})" style="cursor:pointer;"`
       : clickable ? `onclick="irAPendientesConMesa(${i})"` : '';
 
-    html += `<div class="mesa-btn ${cls}" ${click}>
+    html += `<div class="mesa-btn ${cls}" ${click}${hayViejos ? ' title="Tiene pedidos de días anteriores sin cerrar"' : ''}>
       <span class="mesa-num">Mesa ${i}</span>
-      ${pendCnt > 0 ? `<span class="mesa-cnt">${pendCnt} pedido(s)</span>` : ''}
+      ${pendCnt > 0 ? `<span class="mesa-cnt">${pendCnt} pedido(s)${hayViejos ? ' · ⚠ anterior' : ''}</span>` : ''}
     </div>`;
   }
   container.innerHTML = html;
@@ -4975,7 +5090,7 @@ function renderPendientes() {
     <div class="pending-group" id="mesa-group-${mn}-${numeroPedido}">
       <div class="pending-group-hdr">
         <div>
-          <div class="pending-group-title">${tituloMesa}</div>
+          <div class="pending-group-title">${tituloMesa} ${chipPendienteHTML(orders)}</div>
           <div class="pending-group-sub">${orders.length} pedido(s)${varios ? ' · esta mesa tiene más de un pedido' : ''}</div>
         </div>
         <div class="pending-group-total">${fmt(total)}</div>
@@ -5045,7 +5160,7 @@ function renderPendientes() {
       <div class="pending-group">
         <div class="pending-group-hdr">
           <div>
-            <div class="pending-group-title">Domicilio — ${primero.hora||'—'}</div>
+            <div class="pending-group-title">Domicilio — ${primero.hora||'—'} ${chipPendienteHTML(orders)}</div>
             <div class="pending-group-sub">${orders.length} pedido(s)</div>
             ${primero.direccion ? `<div style="font-size:11px;color:var(--blue);margin-top:2px;">📍 ${primero.direccion}</div>` : ''}
           </div>
@@ -5115,7 +5230,7 @@ function renderPendientes() {
         <div class="pending-group">
           <div class="pending-group-hdr">
             <div>
-              <div class="pending-group-title" style="color:var(--text);">Sin mesa — ${primero.hora||'—'}</div>
+              <div class="pending-group-title" style="color:var(--text);">Sin mesa — ${primero.hora||'—'} ${chipPendienteHTML(orders)}</div>
               <div class="pending-group-sub">${orders.length} pedido(s)</div>
             </div>
             <div class="pending-group-total">${fmt(total)}</div>
@@ -5184,7 +5299,7 @@ function renderPendientes() {
         <div class="pending-group">
           <div class="pending-group-hdr">
             <div>
-              <div class="pending-group-title" style="color:var(--orange);">🎁 Gratis — ${primero.hora||'—'}</div>
+              <div class="pending-group-title" style="color:var(--orange);">🎁 Gratis — ${primero.hora||'—'} ${chipPendienteHTML(orders)}</div>
               <div class="pending-group-sub">${orders.length} pedido(s) · no suma a los ingresos</div>
             </div>
             <div class="pending-group-total">${fmt(total)}</div>
@@ -5346,7 +5461,7 @@ function renderFiados() {
       <div class="report-block" style="padding:12px;">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
           <div>
-            <div style="font-size:12px;color:var(--text);">${primero.fecha||'—'} ${primero.hora||''}</div>
+            <div style="font-size:12px;color:var(--text);">${primero.fecha||'—'} ${primero.hora||''} ${chipFiadoHTML(primero.fecha)}</div>
             <div style="font-size:11px;color:var(--text3);max-width:340px;">${detalle||'—'}</div>
           </div>
           <div class="amount-pos" style="font-family:'Syne',sans-serif;font-weight:700;">${fmt(total)}</div>
@@ -5385,7 +5500,7 @@ function renderFiados() {
           const idsGrupo = g.orders.map(o => o.id);
           const primero = g.orders[0];
           return `<tr>
-            <td>${primero.fecha||'—'} ${primero.hora||''}</td>
+            <td>${primero.fecha||'—'} ${primero.hora||''} ${chipFiadoHTML(primero.fecha)}</td>
             <td style="color:var(--text3);font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detalle||'—'}</td>
             <td class="amount-pos">${fmt(total)}</td>
             <td style="display:flex;gap:4px;white-space:nowrap;">
@@ -5428,7 +5543,10 @@ function renderFiados() {
           <div class="pending-group-title" style="color:var(--purple);">📒 ${cliente.nombre}</div>
           <div class="pending-group-sub">${grupos.length} pedido(s) pendiente(s) · ${abonos.length} abono(s)${sobrante > 0.5 ? ` · saldo a favor ${fmt(sobrante)}` : ''} — ${abierto ? 'clic para colapsar' : 'clic para ver detalle'}</div>
         </div>
-        <div class="pending-group-total">${fmt(saldo)}</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${grupos.length ? chipFiadoHTML(grupos[0].orders[0].fecha) : ''}
+          <div class="pending-group-total">${fmt(saldo)}</div>
+        </div>
       </div>
       <div style="${abierto ? '' : 'display:none;'}">
         <div class="table-wrap">
@@ -7689,6 +7807,11 @@ function renderTablero() {
       ? ` (incluye ${fmt(totalFiadoHuerfanos)} sin cliente asignado)`
       : '';
     al.push({t:'info', m:`💰 ${fmt(totalFiados)} en fiados por cobrar${notaHuerfanos}`});
+  }
+  // Fiados que ya pasaron el umbral naranja (regla: se pagan dentro del mes). Solo si hay.
+  const fiadosViejos = fiadosConAntiguedad(FIADO_NARANJA_DIAS);
+  if (fiadosViejos.n > 0) {
+    al.push({t:'warning', m:`⏱ ${fiadosViejos.n} fiado(s) con ${FIADO_NARANJA_DIAS} días o más sin pagar · ${fmt(fiadosViejos.monto)}`});
   }
 
   if (tE > tI && tI > 0) al.push({t:'warning', m:`⚠ Gastos mayores a ingresos en este período. Egresos: ${fmt(tE)}`});
