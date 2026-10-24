@@ -35,6 +35,7 @@ Si todo está bien verás `passed` en verde. Si algo falla, copia el mensaje y p
 | `tests/humo.spec.js` | El sistema abre; pide exactamente las 15 tablas de siempre; las 12 pestañas abren sin errores; las pestañas con candado muestran su login sin sesión y su contenido con sesión de admin; abrir el sistema no escribe nada. |
 | `tests/reglas.spec.js` | Las reglas de plata: reparto de descuentos, cuánto aporta cada pedido a efectivo y transferencia, saldo de fiados, ajustes y abonos de los cierres, ventas fijas de cada turno, fechas y formato de pesos. Los valores esperados están calculados a mano y comentados. |
 | `tests/python/test_motor.py` | El motor del modelo financiero corre en modo demo sin errores, genera el Excel esperado y no deja archivos dentro del repo. |
+| `tests/python/test_motor_funciones.py` | Descuentos y abonos de fiado en el motor, con datos inventados y cuentas a mano: ingreso por cierre (sin contar los abonos dos veces), desglose de ingresos sin pedido, fiados saldados con abonos, descuentos informativos, cuentas por cobrar, un Excel exportado de mentira de punta a punta y el libro generado (si hay LibreOffice, también recalcula las fórmulas). |
 
 Ayudas (no son pruebas): `tests/helpers/backend-falso.js` (el Supabase falso),
 `tests/helpers/sesion.js` (cómo se simula el acceso de administrador: **un solo lugar** que se cambia
