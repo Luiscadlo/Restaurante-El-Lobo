@@ -1,0 +1,6 @@
+# Solo para correr las pruebas del motor Python (no hace falta para usar el sistema).
+# Instalar una vez: pip install -r requirements-dev.txt
+pytest
+openpyxl
+pandas
+numpy

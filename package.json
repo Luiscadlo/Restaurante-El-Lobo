@@ -1,0 +1,13 @@
+{
+  "name": "el-lobo-pruebas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pruebas automáticas de El Lobo. No se despliega: GitHub Pages sigue sirviendo solo el sistema.",
+  "scripts": {
+    "test": "playwright test",
+    "test:motor": "python -m pytest tests/python -q"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.0"
+  }
+}
