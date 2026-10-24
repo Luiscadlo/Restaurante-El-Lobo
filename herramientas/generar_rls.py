@@ -62,6 +62,8 @@ def generar_aplicar(tablas, roles):
     w("--      cambiarlo; user_metadata sí podría, por eso NO se usa).")
     w("--   2. Activa RLS en TODAS las tablas de 'public': sin política = cerrado.")
     w("--   3. Le quita a la llave pública (anon) todo acceso a las tablas.")
+    w("--   3b. Retira las reglas viejas que dejaban pasar a todos (p. ej. «allow all …»): se SUMAN a las")
+    w("--      nuevas y las anularían. Las guarda en seguridad.politicas_previas para poder deshacer.")
     w("--   4. Crea las políticas por tabla y operación (admin / caja / respaldo).")
     w("--")
     w("-- Seguro de volver a correr (idempotente).")
@@ -80,6 +82,16 @@ def generar_aplicar(tablas, roles):
     w("from pg_class c join pg_namespace n on n.oid = c.relnamespace")
     w("where n.nspname = 'public' and c.relkind in ('r', 'p')")
     w("on conflict (tabla) do nothing;")
+    w("create table if not exists seguridad.politicas_previas (")
+    w("  tabla text not null,")
+    w("  nombre text not null,")
+    w("  comando text not null,")
+    w("  roles text[] not null,")
+    w("  usando text,")
+    w("  con_chequeo text,")
+    w("  guardado_en timestamptz not null default now(),")
+    w("  primary key (tabla, nombre)")
+    w(");")
     w("")
     w("-- 1. Rol del usuario, leído de su token firmado")
     w("create or replace function seguridad.rol_app() returns text")
@@ -128,6 +140,26 @@ def generar_aplicar(tablas, roles):
     w("grant select, insert, update, delete on all tables in schema public to authenticated;")
     w("grant usage, select on all sequences in schema public to authenticated;")
     w("")
+    w("-- 3b. Reglas viejas PERMISIVAS que no son de lobo_*: en Postgres las reglas permisivas se suman")
+    w("--     (basta con que UNA deje pasar), así que una «allow all» vieja anularía las nuevas para caja o")
+    w("--     cualquier usuario con sesión. Se guardan (solo la primera vez) y se retiran. Las RESTRICTIVAS")
+    w("--     solo recortan permisos: se dejan como están.")
+    w("insert into seguridad.politicas_previas (tabla, nombre, comando, roles, usando, con_chequeo)")
+    w("select tablename, policyname, cmd, roles::text[], qual, with_check")
+    w("from pg_policies")
+    w("where schemaname = 'public' and permissive = 'PERMISSIVE' and policyname not like 'lobo\\_%'")
+    w("on conflict (tabla, nombre) do nothing;")
+    w("do $$")
+    w("declare p record;")
+    w("begin")
+    w("  for p in")
+    w("    select tablename, policyname from pg_policies")
+    w("    where schemaname = 'public' and permissive = 'PERMISSIVE' and policyname not like 'lobo\\_%'")
+    w("  loop")
+    w("    execute format('drop policy %I on public.%I', p.policyname, p.tablename);")
+    w("  end loop;")
+    w("end $$;")
+    w("")
     w("-- 4. Políticas (una por tabla y operación). Nombre: lobo_<tabla>_<operación>")
     for tabla in tablas:
         w(f"-- {tabla}")
@@ -150,7 +182,7 @@ def generar_aplicar(tablas, roles):
     w("commit;")
     w("")
     w("-- Verificación (el editor de Supabase muestra este resultado). Lo esperado:")
-    w("--   tablas_sin_rls = 0 · vistas_sin_proteger = 0 · anon_con_permisos = 0 · politicas = %d" % total_politicas(tablas, roles))
+    w("--   tablas_sin_rls = 0 · vistas_sin_proteger = 0 · anon_con_permisos = 0 · politicas = %d · reglas_ajenas_abiertas = 0" % total_politicas(tablas, roles))
     w("select")
     w("  (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace")
     w("     where n.nspname = 'public' and c.relkind in ('r', 'p') and not c.relrowsecurity) as tablas_sin_rls,")
@@ -160,7 +192,8 @@ def generar_aplicar(tablas, roles):
     w("  (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace")
     w("     where n.nspname = 'public' and c.relkind in ('r', 'p', 'v')")
     w("       and has_table_privilege('anon', c.oid, 'select,insert,update,delete')) as anon_con_permisos,")
-    w("  (select count(*) from pg_policies where schemaname = 'public' and policyname like 'lobo\\_%') as politicas;")
+    w("  (select count(*) from pg_policies where schemaname = 'public' and policyname like 'lobo\\_%') as politicas,")
+    w("  (select count(*) from pg_policies where schemaname = 'public' and permissive = 'PERMISSIVE' and policyname not like 'lobo\\_%') as reglas_ajenas_abiertas;")
     return "\n".join(L) + "\n"
 
 
@@ -172,6 +205,7 @@ def generar_revertir():
 -- al estado anterior (la llave pública vuelve a abrir las tablas: es lo que había antes).
 --
 -- · Borra las políticas "lobo_*".
+-- · Vuelve a crear las reglas viejas que el SQL de seguridad retiró (seguridad.politicas_previas).
 -- · Deja RLS de cada tabla como estaba (según seguridad.estado_previo) y devuelve a anon
 --   el acceso en las tablas que lo tenían.
 -- · Las tablas creadas DESPUÉS de aplicar la seguridad se quedan con RLS activo (más seguro).
@@ -186,6 +220,27 @@ begin
     where schemaname = 'public' and policyname like 'lobo\\_%'
   loop
     execute format('drop policy %I on %I.%I', p.policyname, p.schemaname, p.tablename);
+  end loop;
+end $$;
+
+do $$
+declare p record;
+begin
+  for p in select * from seguridad.politicas_previas loop
+    if exists (
+      select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relname = p.tabla and c.relkind in ('r', 'p')
+    ) and not exists (
+      select 1 from pg_policies where schemaname = 'public' and tablename = p.tabla and policyname = p.nombre
+    ) then
+      execute format(
+        'create policy %I on public.%I as permissive for %s to %s%s%s',
+        p.nombre, p.tabla, p.comando,
+        (select string_agg(case when r = 'public' then 'public' else quote_ident(r) end, ', ') from unnest(p.roles) r),
+        case when p.usando is not null then format(' using (%s)', p.usando) else '' end,
+        case when p.con_chequeo is not null then format(' with check (%s)', p.con_chequeo) else '' end
+      );
+    end if;
   end loop;
 end $$;
 

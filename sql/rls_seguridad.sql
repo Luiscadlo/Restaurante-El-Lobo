@@ -11,6 +11,8 @@
 --      cambiarlo; user_metadata sí podría, por eso NO se usa).
 --   2. Activa RLS en TODAS las tablas de 'public': sin política = cerrado.
 --   3. Le quita a la llave pública (anon) todo acceso a las tablas.
+--   3b. Retira las reglas viejas que dejaban pasar a todos (p. ej. «allow all …»): se SUMAN a las
+--      nuevas y las anularían. Las guarda en seguridad.politicas_previas para poder deshacer.
 --   4. Crea las políticas por tabla y operación (admin / caja / respaldo).
 --
 -- Seguro de volver a correr (idempotente).
@@ -29,6 +31,16 @@ select c.relname, c.relrowsecurity, has_table_privilege('anon', c.oid, 'select')
 from pg_class c join pg_namespace n on n.oid = c.relnamespace
 where n.nspname = 'public' and c.relkind in ('r', 'p')
 on conflict (tabla) do nothing;
+create table if not exists seguridad.politicas_previas (
+  tabla text not null,
+  nombre text not null,
+  comando text not null,
+  roles text[] not null,
+  usando text,
+  con_chequeo text,
+  guardado_en timestamptz not null default now(),
+  primary key (tabla, nombre)
+);
 
 -- 1. Rol del usuario, leído de su token firmado
 create or replace function seguridad.rol_app() returns text
@@ -76,6 +88,26 @@ alter default privileges in schema public revoke all on sequences from anon;
 -- las políticas de abajo (sin política que los deje pasar, no ven ni tocan nada).
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant usage, select on all sequences in schema public to authenticated;
+
+-- 3b. Reglas viejas PERMISIVAS que no son de lobo_*: en Postgres las reglas permisivas se suman
+--     (basta con que UNA deje pasar), así que una «allow all» vieja anularía las nuevas para caja o
+--     cualquier usuario con sesión. Se guardan (solo la primera vez) y se retiran. Las RESTRICTIVAS
+--     solo recortan permisos: se dejan como están.
+insert into seguridad.politicas_previas (tabla, nombre, comando, roles, usando, con_chequeo)
+select tablename, policyname, cmd, roles::text[], qual, with_check
+from pg_policies
+where schemaname = 'public' and permissive = 'PERMISSIVE' and policyname not like 'lobo\_%'
+on conflict (tabla, nombre) do nothing;
+do $$
+declare p record;
+begin
+  for p in
+    select tablename, policyname from pg_policies
+    where schemaname = 'public' and permissive = 'PERMISSIVE' and policyname not like 'lobo\_%'
+  loop
+    execute format('drop policy %I on public.%I', p.policyname, p.tablename);
+  end loop;
+end $$;
 
 -- 4. Políticas (una por tabla y operación). Nombre: lobo_<tabla>_<operación>
 -- pedidos
@@ -226,7 +258,7 @@ create policy "lobo_ingresos_extra_delete" on public.ingresos_extra for delete t
 commit;
 
 -- Verificación (el editor de Supabase muestra este resultado). Lo esperado:
---   tablas_sin_rls = 0 · vistas_sin_proteger = 0 · anon_con_permisos = 0 · politicas = 64
+--   tablas_sin_rls = 0 · vistas_sin_proteger = 0 · anon_con_permisos = 0 · politicas = 64 · reglas_ajenas_abiertas = 0
 select
   (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and c.relkind in ('r', 'p') and not c.relrowsecurity) as tablas_sin_rls,
@@ -236,4 +268,5 @@ select
   (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and c.relkind in ('r', 'p', 'v')
        and has_table_privilege('anon', c.oid, 'select,insert,update,delete')) as anon_con_permisos,
-  (select count(*) from pg_policies where schemaname = 'public' and policyname like 'lobo\_%') as politicas;
+  (select count(*) from pg_policies where schemaname = 'public' and policyname like 'lobo\_%') as politicas,
+  (select count(*) from pg_policies where schemaname = 'public' and permissive = 'PERMISSIVE' and policyname not like 'lobo\_%') as reglas_ajenas_abiertas;
