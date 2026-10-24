@@ -59,7 +59,9 @@ Contraseñas: siempre en un gestor de contraseñas; nunca en el chat, en el cód
 
 Además, **Datos → Exportar datos a Excel** genera el Excel para el modelo financiero (no es un respaldo completo de la base).
 
-> El plan gratuito de Supabase **no** incluye copias diarias propias. Un respaldo cuenta como *verificado* solo después de restaurarlo en un proyecto de pruebas (guía de restauración: se escribe con el Prompt H; hasta entonces, la restauración no está probada).
+> El plan gratuito de Supabase **no** incluye copias diarias propias. Un respaldo cuenta como *verificado* solo después de restaurarlo en un proyecto de pruebas. Guía paso a paso (ensayo y desastre): [`docs/RESTAURAR.md`](RESTAURAR.md).
+>
+> **Último ensayo de restauración:** _pendiente_ (anota aquí la fecha, el respaldo usado y el resultado cuando se haga).
 
 ## Desplegar un cambio al sistema
 
@@ -113,6 +115,6 @@ Todo en verde antes de fusionar. Si algo falla, copia el mensaje completo y pás
 
 ## Lo que está pendiente (fuera de este manual)
 
-- Guía de restauración de respaldos y su prueba en un proyecto aparte (Prompt H).
+- Ensayo de restauración en un proyecto aparte: la guía y las herramientas ya existen (`docs/RESTAURAR.md`); falta correr la consulta de esquema en Supabase (Paso 0) y hacer el ensayo.
 - Confirmación del contador sobre impuestos y facturación electrónica.
 - Activar la tarea de respaldo con el usuario `respaldo` (al desplegar la seguridad).

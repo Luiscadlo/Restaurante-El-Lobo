@@ -66,7 +66,7 @@ test('no hay llaves secretas, cadenas de conexión con clave ni claves privadas 
 
 test('ningún respaldo ni export con datos reales está por subirse', () => {
   const malos = archivos().filter(f =>
-    /(^|\/)ElLobo_(respaldo|datos|Modelo)/i.test(f) || /(^|\/)datos_[^/]*\.json$/i.test(f) || /\.(xlsx|xls|xlsm)$/i.test(f));
+    /(^|\/)ElLobo_(respaldo|datos|Modelo|restaurar)/i.test(f) || /(^|\/)datos_[^/]*\.json$/i.test(f) || /\.(xlsx|xls|xlsm)$/i.test(f));
   // Única excepción permitida: el catálogo público de platos del Menú
   const permitidos = new Set(['Menu/platos.xlsx', 'Menu/Menu/platos.xlsx']);
   expect(malos.filter(f => !permitidos.has(f))).toEqual([]);

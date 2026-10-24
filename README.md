@@ -16,10 +16,10 @@ Sistema propio del restaurante El Lobo (Montería, Colombia): pedidos, cobros, f
 | `Contabilidad/README.md` | Notas del módulo de descuentos y de las migraciones ya aplicadas. |
 | `Contabildad/` | **Solo avisos** del enlace viejo (escrito con "d" por error). Muestran el enlace nuevo y redirigen a los 8 segundos. Se borra cuando nadie lo use (Prompt E2). |
 | `Menu/` | Generador del menú del día (un HTML autónomo, el sistema lo muestra en la pestaña Menú) y materiales de diseño. |
-| `sql/` | Scripts para Supabase: `rls_seguridad.sql` (reglas de acceso), `rollback_rls.sql` (deshacerlas), `matriz_permisos.json` (fuente de esas reglas) y migraciones. |
-| `herramientas/` | `generar_rls.py`: genera los SQL de seguridad desde la matriz de permisos. |
+| `sql/` | Scripts para Supabase: `rls_seguridad.sql` (reglas de acceso), `rollback_rls.sql` (deshacerlas), `matriz_permisos.json` (fuente de esas reglas), `consulta_esquema.sql` (saca la estructura de la base, solo lectura) y migraciones. |
+| `herramientas/` | `generar_rls.py` (SQL de seguridad desde la matriz de permisos) y las de restauración: `esquema_a_sql.py`, `respaldo_a_sql.py`, `restaurar_respaldo.py` (ver `docs/RESTAURAR.md`). |
 | `tests/` | Pruebas automáticas (ver `tests/LEEME.md`). No se publican ni tocan datos reales. |
-| `docs/` | Documentación: `RUNBOOK.md` (operación diaria), `DESPLIEGUE_SEGURIDAD.md`, `MATRIZ_PERMISOS.md`. |
+| `docs/` | Documentación: `RUNBOOK.md` (operación diaria), `RESTAURAR.md` (restaurar un respaldo), `DESPLIEGUE_SEGURIDAD.md`, `MATRIZ_PERMISOS.md`, `ESPECIFICO_EL_LOBO.md`. |
 | `QR del lobo .docx` | Material del local (QR de pago). No es parte del sistema. |
 
 ## Cómo se despliega
@@ -53,6 +53,7 @@ El archivo `.gitignore` bloquea los casos comunes, pero no deshace lo que ya est
 ## Documentación
 
 - Operación del día a día, usuarios, respaldos y qué hacer si algo falla: [`docs/RUNBOOK.md`](docs/RUNBOOK.md)
+- Restaurar un respaldo (ensayo y desastre): [`docs/RESTAURAR.md`](docs/RESTAURAR.md)
 - Seguridad (usuarios y reglas de la base) paso a paso: [`docs/DESPLIEGUE_SEGURIDAD.md`](docs/DESPLIEGUE_SEGURIDAD.md)
 - Quién puede hacer qué: [`docs/MATRIZ_PERMISOS.md`](docs/MATRIZ_PERMISOS.md)
 - Pruebas: [`tests/LEEME.md`](tests/LEEME.md)

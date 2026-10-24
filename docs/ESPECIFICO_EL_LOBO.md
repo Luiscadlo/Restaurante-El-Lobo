@@ -4,7 +4,7 @@
 >
 > **Cómo se sacó:** con búsquedas y análisis automático del archivo `Contabilidad/ElLobo-Sistema Contable.html` (≈ 10.000 líneas, 561 KB), de `Contabilidad/modelo-financiero/generar_modelo_financiero.py` (4.691 líneas) y de `Menu/Menú diario-El Lobo.html`; las columnas de cada tabla se midieron además **abriendo el sistema con datos de prueba y registrando qué campos lee la pantalla** (no de memoria). Los números de línea corresponden a la versión de la rama `inventario-migracion` (sobre los PR #3, #6 y #7) y se mueven con cada cambio.
 >
-> **Límites honestos:** (1) lo que el código escribe se detectó leyendo cada llamada a la base; unas pocas escrituras se arman en variables y pueden faltar. (2) Lo que el código *lee* se midió abriendo las 12 pestañas con datos de ejemplo; un campo que solo se lee en un modal poco común puede no aparecer. (3) **La lista de columnas es lo que el código necesita; el esquema real de Supabase se confirma en el Prompt H** (`sql/esquema_completo.sql`, que aún no existe): ahí se comparan una contra la otra.
+> **Límites honestos:** (1) lo que el código escribe se detectó leyendo cada llamada a la base; unas pocas escrituras se arman en variables y pueden faltar. (2) Lo que el código *lee* se midió abriendo las 12 pestañas con datos de ejemplo; un campo que solo se lee en un modal poco común puede no aparecer. (3) **La lista de columnas es lo que el código necesita; el esquema real de Supabase se confirma con `sql/consulta_esquema.sql` → `sql/esquema_completo.sql`** (Prompt H; el archivo se genera cuando se corra esa consulta). La lista está copiada en `tests/fixtures/columnas_usadas.json` y una prueba (`tests/python/test_cobertura_esquema.py`) la compara contra el esquema completo apenas exista.
 
 ## Resumen en 10 líneas
 
@@ -142,7 +142,7 @@ Todas pasan por `sbFetch` (token del usuario, un reintento con renovación si la
 
 Leyenda de cada columna: **L** la lee la pantalla · **E** el código la escribe al insertar · **M** la modifica con `PATCH` · **C** se usa para filtrar u ordenar · **P** aparece solo en los datos de prueba (el código no la usa) · **†** columna *opcional con respaldo*: si no existe en Supabase el código reintenta sin ella y avisa.
 
-Esta lista es lo que el código **necesita**. Para el esquema real (tipos, restricciones, índices) falta el Prompt H.
+Esta lista es lo que el código **necesita**. El esquema real (tipos, restricciones, índices) se saca con `sql/consulta_esquema.sql` (ver `docs/RESTAURAR.md`, Paso 0).
 
 | Tabla | N.º | Columnas (uso) |
 |---|---|---|
@@ -240,7 +240,7 @@ No hay otras librerías ni frameworks. El generador de menú es autosuficiente: 
 7. **Reintentos "sin la columna que falta"** repetidos 8 veces (pedidos, extras, apertura de turno, cierres, gastos…): código duplicado y difícil de seguir; hay que quitarlos al fijar un esquema único.
 8. **Reglas implícitas en comentarios:** la mayor parte de las reglas de negocio (fiados se pagan en el mes, pendientes se cierran el mismo día, Tablero = Σ cierres, descuentos informativos) solo están en comentarios y en `Contabilidad/README.md`.
 9. **Restricciones de "días anteriores" solo de pantalla** (ver `docs/MATRIZ_PERMISOS.md`, decisión 3).
-10. **Sin control de versiones del esquema:** las migraciones `.sql` ya corridas se quitaron de la carpeta (siguen en el historial) y no hay `esquema_completo.sql`; hasta H, reconstruir la base desde cero no es posible.
+10. **Sin control de versiones del esquema:** las migraciones `.sql` ya corridas se quitaron de la carpeta (siguen en el historial) y no hay `esquema_completo.sql`; con H existen las herramientas para reconstruirla (`sql/consulta_esquema.sql` + `herramientas/esquema_a_sql.py`), pero `sql/esquema_completo.sql` se genera solo cuando se corra la consulta en Supabase; hasta entonces, reconstruir la base desde cero no es posible.
 11. **`confirm()`/`alert()`/`prompt()` en 16 sitios:** bloquean el hilo y se ven distinto en cada navegador/celular.
 12. **El contrato con el motor Python es un Excel** con nombres de hoja y de columna fijos (sección 3) sin prueba que lo proteja.
 13. **Hora del dispositivo:** si un equipo tiene mal el reloj o la zona horaria, los pedidos quedan con la fecha/turno equivocados.
@@ -268,7 +268,7 @@ Hay 119 pruebas web (humo, reglas de plata, respaldo, seguridad, flujos del most
 
 **El contrato entre el sistema y el motor** (nombres de hojas y columnas del Excel) tampoco tiene prueba.
 
-**Verificación contra `sql/esquema_completo.sql`:** ese archivo **todavía no existe** (lo crea el Prompt H a partir del esquema real de Supabase). Cuando exista, hay que comprobar contra la tabla de la sección 2.5 que cubre las 16 tablas y todas las columnas marcadas L, E, M o C, y tener presentes las columnas † (opcionales con respaldo) y las heredadas (`ajuste_manual`).
+**Verificación contra `sql/esquema_completo.sql`:** ese archivo **todavía no existe** (se genera a partir del esquema real de Supabase, `docs/RESTAURAR.md` Paso 0). La comparación ya está automatizada: `tests/python/test_cobertura_esquema.py` exige las 16 tablas y todas las columnas marcadas L, E, M o C (`tests/fixtures/columnas_usadas.json`), y avisa de las † (opcionales con respaldo) que falten; las heredadas (`ajuste_manual`) cuentan como requeridas porque el código las lee.
 
 ---
 
