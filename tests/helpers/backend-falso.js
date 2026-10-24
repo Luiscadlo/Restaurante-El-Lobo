@@ -32,13 +32,13 @@ const TABLAS_CAJA = TABLAS_LOADSTATE.filter(t => !TABLAS_SOLO_ADMIN.includes(t))
 
 // Usuarios de prueba (ficticios). La clave NO es ninguna clave real.
 const USUARIOS = {
-  'caja@lobo.test':     { password: 'clave-caja',     rol: 'caja' },
-  'dueno1@lobo.test':   { password: 'clave-dueno1',   rol: 'admin' },
-  'dueno2@lobo.test':   { password: 'clave-dueno2',   rol: 'admin' },
-  'respaldo@lobo.test': { password: 'clave-respaldo', rol: 'respaldo' },
-  'sinrol@lobo.test':   { password: 'clave-sinrol',   rol: null },
+  'caja@elobo.test':     { password: 'clave-caja',     rol: 'caja' },
+  'dueno1@elobo.test':   { password: 'clave-dueno1',   rol: 'admin' },
+  'dueno2@elobo.test':   { password: 'clave-dueno2',   rol: 'admin' },
+  'respaldo@elobo.test': { password: 'clave-respaldo', rol: 'respaldo' },
+  'sinrol@elobo.test':   { password: 'clave-sinrol',   rol: null },
 };
-const USUARIO_POR_ROL = { caja: 'caja@lobo.test', admin: 'dueno1@lobo.test' };
+const USUARIO_POR_ROL = { caja: 'caja@elobo.test', admin: 'dueno1@elobo.test' };
 
 function copiaProfunda(x) { return JSON.parse(JSON.stringify(x)); }
 const b64url = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
