@@ -109,6 +109,14 @@ test.describe('pantalla de entrada', () => {
     await expect(pagina2.locator('#rolBadge')).toHaveText('👑 Admin');
   });
 
+  test('la insignia no depende de mayúsculas: «Admin» y «ADMIN» también se muestran solo como «👑 Admin»', async ({ page }) => {
+    await abrirSistema(page, { usuario: 'admin' });
+    const textos = await page.evaluate(() => ['Admin@elobo.test', 'ADMIN@ELOBO.TEST', 'luisca@elobo.test'].map(correo => {
+      sesionBase.email = correo; sincronizarSesion(); return document.getElementById('rolBadge').textContent;
+    }));
+    expect(textos).toEqual(['👑 Admin', '👑 Admin', '👑 Admin · luisca']);
+  });
+
   test('la clave de otro usuario con el nombre corto sigue siendo rechazada', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: null });
     await escribirLogin(page, 'caja', 'clave-dueno1');
