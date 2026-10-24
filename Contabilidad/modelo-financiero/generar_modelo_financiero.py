@@ -388,25 +388,42 @@ def ingresos_por_cierre(cierres):
     return base + ajuste_ef.fillna(0) + ajuste_tr.fillna(0)
 
 
-def desglose_sin_pedido(cierres_mes, ventas_dia, desayuno_dia, turno):
+def abonos_por_cierre(cierres):
+    """Abonos de fiado que cada cierre trae DENTRO de su efectivo/transferencia (columnas
+    abonos_efectivo + abonos_transferencia; misma regla que abonosDeCierre() del sistema). Cierres
+    anteriores al 16-oct, o sin esas columnas: 0. OJO: esa plata YA está en efectivo/transferencia —
+    ingresos_por_cierre() NO la suma otra vez; esto solo sirve para explicar de dónde vino."""
+    if cierres is None or cierres.empty:
+        return pd.Series(dtype="float64")
+    return _num(cierres, "abonos_efectivo").fillna(0) + _num(cierres, "abonos_transferencia").fillna(0)
+
+
+def desglose_sin_pedido(cierres_mes, ventas_dia, desayuno_dia, turno, fiados_saldados=0.0):
     """De dónde viene lo que el cierre de un turno trae SIN pedido que lo respalde:
     (ingresos del cierre − desayuno) − ventas por pedidos, separado en
       · ajustes   — ajuste_efectivo / ajuste_transferencia / ajuste_manual (misma
                     lógica de ajustesDeCierre() del sistema),
-      · manuales  — cierres manuales: efectivo + transferencia − desayuno − pedidos de ese día,
-      · otros     — el resto (p. ej. pedidos fiados que figuran con su monto pero cuya plata
-                    no entró al cierre del día).
-    `ventas_dia` / `desayuno_dia`: Series por fecha (Σ monto_total de los pedidos del turno; desayuno)."""
+      · manuales  — cierres manuales: efectivo + transferencia − abonos − desayuno − pedidos de ese día,
+      · abonos    — abonos de fiado recibidos en el turno (plata de fiados que se consumieron otro día:
+                    entra al cierre del día del abono, no al del consumo),
+      · saldados  — NEGATIVO: valor de los fiados consumidos en el mes y saldados con abonos nuevos. Ya
+                    cuentan como venta por pedido en su día de consumo, pero su plata llegó con los
+                    abonos (arriba), no con el pedido,
+      · otros     — el resto (lo que ninguna de las anteriores explica; se calcula en la hoja).
+    Se cumple: (ingresos − desayuno) − ventas = ajustes + manuales + abonos + saldados + otros.
+    `ventas_dia` / `desayuno_dia`: Series por fecha (Σ monto_total de los pedidos del turno; desayuno).
+    `fiados_saldados`: Σ monto_total (positivo) de esos fiados en el mes y turno."""
     c = cierres_mes[cierres_mes["turno"] == turno] if (cierres_mes is not None and not cierres_mes.empty and "turno" in cierres_mes.columns) else pd.DataFrame()
     if c.empty:
-        return dict(ajustes=0.0, manuales=0.0)
+        return dict(ajustes=0.0, manuales=0.0, abonos=0.0, saldados=-float(fiados_saldados))
     total_cierre = ingresos_por_cierre(c)
     base = _num(c, "efectivo").fillna(0) + _num(c, "transferencia").fillna(0)
+    abonos_c = abonos_por_cierre(c)
     ajustes = float((total_cierre - base).sum())
     des = c["fecha"].map(desayuno_dia).fillna(0) if turno == "almuerzo" else 0.0
-    resto = base - des - c["fecha"].map(ventas_dia).fillna(0)
+    resto = base - abonos_c - des - c["fecha"].map(ventas_dia).fillna(0)
     manuales = float(resto[_bool(c, "manual")].sum())
-    return dict(ajustes=ajustes, manuales=manuales)
+    return dict(ajustes=ajustes, manuales=manuales, abonos=float(abonos_c.sum()), saldados=-float(fiados_saldados))
 
 
 def ingreso_turno_cierres(cierres, turno):
@@ -503,6 +520,39 @@ def es_gratis(df):
     familia en comida rápida). El sistema los guarda con es_gratis = TRUE y
     metodo = 'gratis' — se aceptan ambas marcas por si falta la columna."""
     return _bool(df, "es_gratis") | (df["metodo"] == "gratis" if "metodo" in df.columns else pd.Series(False, index=df.index))
+
+
+def cobrado_via_abonos(df):
+    """Fiados saldados con abonos NUEVOS (desde el 16-oct): pagado_via_abono = TRUE y con fecha_pago
+    (misma regla que cobradoViaAbonos() del sistema). Conservan la fecha/turno de CONSUMO — sus unidades
+    y su valor cuentan como venta en ese día — pero su plata ya entró con cada abono, en el cierre del
+    día en que se recibió. Los saldados con abonos VIEJOS (sin fecha_pago) NO entran aquí."""
+    if df is None or df.empty:
+        return pd.Series(False, index=df.index if df is not None else None, dtype=bool)
+    if "fecha_pago" not in df.columns:
+        return pd.Series(False, index=df.index, dtype=bool)
+    fp = df["fecha_pago"]
+    return _bool(df, "pagado_via_abono") & fp.notna() & (fp.astype(str).str.strip() != "")
+
+
+def descuentos_de(df):
+    """Descuento (pesos) de cada fila de pedidos: columna `descuento` (0 si falta — exports de antes
+    del 3-oct). monto_total/monto_almuerzo ya vienen NETOS: un descuento es plata que NO ingresó."""
+    return _num(df, "descuento").fillna(0)
+
+
+def contar_pedidos_con_descuento(df):
+    """Pedidos (no filas) con descuento > 0: se cuenta por grupo_pedido, o por id si no tiene
+    (igual que agruparPorPedido() del sistema, que usa el Tablero)."""
+    if df is None or df.empty:
+        return 0
+    d = df[descuentos_de(df) > 0]
+    if d.empty:
+        return 0
+    grupo = d["grupo_pedido"] if "grupo_pedido" in d.columns else pd.Series(np.nan, index=d.index, dtype="object")
+    ident = d["id"] if "id" in d.columns else pd.Series(range(len(d)), index=d.index)
+    clave = grupo.astype("object").where(grupo.notna() & (grupo.astype(str) != ""), "legacy-" + ident.astype(str))
+    return int(clave.nunique())
 
 
 def preparar_pedidos(pagados, pendientes, cierres=None):
@@ -674,6 +724,7 @@ def cargar_datos_reales(path_excel, mes_inicio=MES_INICIO_DATOS_REALES):
     pendientes = hoja("Pedidos_Pendientes")
     abonos = hoja("Abonos_Fiado")
     aperturas = hoja("Aperturas_Turno")
+    desc_log = hoja("Descuentos_Log")      # opcional: solo existe si ya se dio algún descuento
 
     # Recorta TODO a partir de mes_inicio — datos de antes (ej. el mes de
     # prueba) se ignoran en cualquier tabla con columna "fecha", antes de que
@@ -682,7 +733,7 @@ def cargar_datos_reales(path_excel, mes_inicio=MES_INICIO_DATOS_REALES):
     inicio_ts = pd.Timestamp(f"{mes_inicio}-01")
     tablas_fecha = dict(Cierres_Dia=cierres, Pedidos_Pagados=pedidos, Pedidos_Pendientes=pendientes,
                          Egresos=egresos, Gastos_Cierre=gastos_cierre, Movimientos_Caja=movs_caja,
-                         Aperturas_Turno=aperturas, Abonos_Fiado=abonos)
+                         Aperturas_Turno=aperturas, Abonos_Fiado=abonos, Descuentos_Log=desc_log)
     for nombre_tabla, df in tablas_fecha.items():
         if df.empty or "fecha" not in df.columns:
             continue
@@ -750,8 +801,16 @@ def cargar_datos_reales(path_excel, mes_inicio=MES_INICIO_DATOS_REALES):
 
         # De dónde vienen los ingresos de cierre que no tienen pedido detrás (ajustes, cierres manuales)
         desayuno_dia = desayuno_por_dia(aperturas_mes)
-        sp_alm = desglose_sin_pedido(cierres_mes, ing_alm.groupby("fecha")["monto_total"].sum() if not ing_alm.empty else pd.Series(dtype=float), desayuno_dia, "almuerzo")
-        sp_cena = desglose_sin_pedido(cierres_mes, ing_cena.groupby("fecha")["monto_total"].sum() if not ing_cena.empty else pd.Series(dtype=float), desayuno_dia, "cena")
+        # Fiados consumidos en el mes y ya saldados con abonos nuevos: su valor es venta de su día de
+        # consumo, pero su plata entró con los abonos (en otros cierres).
+        def saldados_via_abono(df):
+            return float(_num(df[cobrado_via_abonos(df)], "monto_total").fillna(0).sum()) if not df.empty else 0.0
+        sp_alm = desglose_sin_pedido(cierres_mes, ing_alm.groupby("fecha")["monto_total"].sum() if not ing_alm.empty else pd.Series(dtype=float), desayuno_dia, "almuerzo", saldados_via_abono(ing_alm))
+        sp_cena = desglose_sin_pedido(cierres_mes, ing_cena.groupby("fecha")["monto_total"].sum() if not ing_cena.empty else pd.Series(dtype=float), desayuno_dia, "cena", saldados_via_abono(ing_cena))
+        # Descuentos del mes (informativo): mismas filas que el Tablero — turnos cerrados, sin Gratis.
+        desc_alm = float(descuentos_de(ing_alm).sum()) if not ing_alm.empty else 0.0
+        desc_cena = float(descuentos_de(ing_cena).sum()) if not ing_cena.empty else 0.0
+        n_ped_desc = contar_pedidos_con_descuento(pd.concat([ing_alm, ing_cena], ignore_index=True)) if (not ing_alm.empty or not ing_cena.empty) else 0
 
         def suma_cat(df, cat):
             # "egresos" guarda la categoría en la columna "cat"; "gastos_dia"
@@ -782,6 +841,9 @@ def cargar_datos_reales(path_excel, mes_inicio=MES_INICIO_DATOS_REALES):
             unidades_platos_fuertes_almuerzo=unid_pf, ventas_platos_fuertes_almuerzo=ventas_pf,
             sinped_ajustes_almuerzo=sp_alm["ajustes"], sinped_manual_almuerzo=sp_alm["manuales"],
             sinped_ajustes_cena=sp_cena["ajustes"], sinped_manual_cena=sp_cena["manuales"],
+            sinped_abonos_almuerzo=sp_alm["abonos"], sinped_saldados_almuerzo=sp_alm["saldados"],
+            sinped_abonos_cena=sp_cena["abonos"], sinped_saldados_cena=sp_cena["saldados"],
+            descuentos_almuerzo=desc_alm, descuentos_cena=desc_cena, pedidos_con_descuento=n_ped_desc,
             costo_insumos=costo_insumos, costo_desechables=costo_desechables, nomina=nomina,
             arriendo_servicios=arriendo_serv, otros_gastos=otros,
             ingresos_desayuno=ingresos_desayuno,
@@ -815,12 +877,31 @@ def cargar_datos_reales(path_excel, mes_inicio=MES_INICIO_DATOS_REALES):
         valor_inventario = float((inventario["stock"] * inventario["costo"]).sum())
 
     cuentas_por_cobrar_fiados = calcular_cuentas_por_cobrar_fiados(pendientes, abonos, pedidos)
+    reportar_descuentos(hist, pedidos, desc_log)
 
     return hist, {
         "caja_acumulada": caja_acumulada,
         "valor_inventario": valor_inventario,
         "cuentas_por_cobrar_fiados": cuentas_por_cobrar_fiados,
     }, diario
+
+
+def reportar_descuentos(hist, pedidos, desc_log=None):
+    """Imprime por mes los descuentos otorgados (informativo: NO cambian ingresos ni utilidad — monto_total
+    ya viene neto) y, si el export trae la hoja Descuentos_Log, la cruza con las filas de Pedidos_Pagados."""
+    if hist is None or hist.empty or "descuentos_almuerzo" not in hist.columns:
+        return
+    total = float((hist["descuentos_almuerzo"] + hist["descuentos_cena"]).sum())
+    if total <= 0 and (desc_log is None or desc_log.empty):
+        return
+    print("\nDescuentos otorgados (informativo — ya NO están en los ingresos; turnos cerrados, sin Gratis):")
+    for _i, r in hist.iterrows():
+        d = float(r["descuentos_almuerzo"] + r["descuentos_cena"])
+        if d > 0:
+            print(f"  · {r['periodo']}: {fmt_pesos(d)} en {int(r['pedidos_con_descuento'])} pedido(s)")
+    if desc_log is not None and not desc_log.empty and "descuento" in desc_log.columns:
+        tot_log = float(_num(desc_log, "descuento").fillna(0).sum())
+        print(f"  Descuentos_Log: {len(desc_log)} registro(s) por {fmt_pesos(tot_log)} (incluye turnos aún sin cerrar)")
 
 
 def calcular_cuentas_por_cobrar_fiados(pendientes, abonos, pagados):
@@ -908,6 +989,8 @@ def datos_de_ejemplo(n_meses=12):
         ventas_mes = ped_d[ped_d["turno"] == turno_].groupby("periodo")["monto_total"].sum() if not ped_d.empty else pd.Series(dtype=float)
         hist[col_] = hist["periodo"].map(ventas_mes).fillna(0.0)
         hist[f"sinped_ajustes_{turno_}"] = 0.0     # el demo no trae ajustes manuales
+        hist[f"sinped_abonos_{turno_}"] = 0.0      # ni abonos de fiado
+        hist[f"sinped_saldados_{turno_}"] = 0.0    # ni fiados saldados con abonos
         # cierres manuales del demo: días con ingreso del turno y cierre marcado "manual" (ingreso − pedidos de ese día)
         cie_m = diario["cierres"]
         dias_man = cie_m[cie_m["manual"] & (cie_m["turno"] == turno_)]["fecha"] if not cie_m.empty else []
@@ -915,6 +998,9 @@ def datos_de_ejemplo(n_meses=12):
         ped_dia = ped_d[ped_d["turno"] == turno_].groupby("fecha")["monto_total"].sum() if not ped_d.empty else pd.Series(dtype=float)
         resto_man = ing_turno.reindex(dias_man).fillna(0) - ped_dia.reindex(dias_man).fillna(0) if len(dias_man) else pd.Series(dtype=float)
         hist[f"sinped_manual_{turno_}"] = hist["periodo"].map(resto_man.groupby(resto_man.index.to_period("M").astype(str)).sum()).fillna(0.0) if len(resto_man) else 0.0
+    hist["descuentos_almuerzo"] = 0.0          # el demo no trae descuentos
+    hist["descuentos_cena"] = 0.0
+    hist["pedidos_con_descuento"] = 0
     pf_d = ped_d[(ped_d["turno"] == "almuerzo") & ped_d["pedido"].isin(PLATOS_FUERTES)] if not ped_d.empty else ped_d
     hist["unidades_platos_fuertes_almuerzo"] = hist["periodo"].map(pf_d.groupby("periodo")["cantidad"].sum()).fillna(0.0) if not pf_d.empty else 0.0
     hist["ventas_platos_fuertes_almuerzo"] = hist["periodo"].map(monto_almuerzo_pedidos(pf_d).groupby(pf_d["periodo"]).sum()).fillna(0.0) if not pf_d.empty else 0.0
@@ -1570,13 +1656,14 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows, mes_foco):
             numero(ws, r, col_ini + i, float(hist_df.iloc[i][col_ventas]))
         r += 1
         fr["sin"] = r
-        label(ws, r, "Ingresos de cierre sin pedido asociado (ajustes y cierres manuales)")
+        label(ws, r, "Ingresos de cierre sin pedido asociado (ajustes, cierres manuales y abonos de fiado)")
         for c in range(col_ini, col_ini + n_hist):
             cl = get_column_letter(c)
             neto = f"({cl}{f_ing}-{cl}{f_des})" if f_des else f"{cl}{f_ing}"
             numero(ws, r, c, f"={neto}-{cl}{fr['ventas']}")
         r += 1
-        # Desglose informativo (suma EXACTAMENTE la fila de arriba): a) ajustes, b) cierres manuales, c) el residual.
+        # Desglose informativo (suma EXACTAMENTE la fila de arriba): a) ajustes, b) cierres manuales,
+        # c) abonos de fiado recibidos, d) fiados saldados con abonos (negativo), e) el residual.
         fr["sin_aj"] = r
         label(ws, r, "Ajustes de cierre (efectivo y transferencia)", indent=1)
         for i in range(n_hist):
@@ -1587,11 +1674,21 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows, mes_foco):
         for i in range(n_hist):
             numero(ws, r, col_ini + i, float(hist_df.iloc[i][f"sinped_manual_{turno_t}"]))
         r += 1
+        fr["sin_abo"] = r
+        label(ws, r, "Abonos de fiado recibidos (plata de fiados de otros días)", indent=1)
+        for i in range(n_hist):
+            numero(ws, r, col_ini + i, float(hist_df.iloc[i][f"sinped_abonos_{turno_t}"]))
+        r += 1
+        fr["sin_sal"] = r
+        label(ws, r, "Fiados saldados con abonos (ya son venta de su día; su plata entró con los abonos)", indent=1)
+        for i in range(n_hist):
+            numero(ws, r, col_ini + i, float(hist_df.iloc[i][f"sinped_saldados_{turno_t}"]))
+        r += 1
         fr["sin_dif"] = r
-        label(ws, r, "Diferencia entre pedidos y cierre (fiados no cobrados u otros)", indent=1)
+        label(ws, r, "Diferencia entre pedidos y cierre (otros)", indent=1)
         for c in range(col_ini, col_ini + n_hist):
             cl = get_column_letter(c)
-            numero(ws, r, c, f"={cl}{fr['sin']}-{cl}{fr['sin_aj']}-{cl}{fr['sin_man']}")
+            numero(ws, r, c, f"={cl}{fr['sin']}-{cl}{fr['sin_aj']}-{cl}{fr['sin_man']}-{cl}{fr['sin_abo']}-{cl}{fr['sin_sal']}")
         r += 1
         fr["vol"] = r
         label(ws, r, f"Pedidos registrados — {nombre_t}")
@@ -1645,6 +1742,22 @@ def hoja_model(wb, hist_df, meses_fcst_labels, extra, driver_rows, mes_foco):
     fila_ventas_ped_cena, fila_sin_pedido_cena = filas_rev["cena"]["ventas"], filas_rev["cena"]["sin"]
     fila_vol_cena, fila_tkt_cena = filas_rev["cena"]["vol"], filas_rev["cena"]["tkt"]
     fila_eq_cena, fila_eqtot_cena = filas_rev["cena"]["eq"], filas_rev["cena"]["eqtot"]
+    # Descuentos (informativo): plata que NO ingresó. Los ingresos y las ventas por pedidos ya vienen NETOS,
+    # así que estas filas no alimentan ninguna otra: solo muestran cuánto se dejó de cobrar (mismo criterio del Tablero).
+    fila_descuentos = r
+    label(ws, r, "Descuentos otorgados (informativo — ya NO están en los ingresos)")
+    for i in range(n_hist):
+        numero(ws, r, col_ini + i, float(hist_df.iloc[i]["descuentos_almuerzo"] + hist_df.iloc[i]["descuentos_cena"]))
+    r += 1
+    label(ws, r, "· Pedidos con descuento (cantidad)", indent=1)
+    for i in range(n_hist):
+        numero(ws, r, col_ini + i, int(hist_df.iloc[i]["pedidos_con_descuento"]))
+    r += 1
+    label(ws, r, "Ventas a precio de lista (informativo) = ventas por pedidos + desayuno + descuentos")
+    for c in range(col_ini, col_ini + n_hist):
+        cl = get_column_letter(c)
+        numero(ws, r, c, f"={cl}{filas_rev['almuerzo']['ventas']}+{cl}{filas_rev['cena']['ventas']}+{cl}{fila_desayuno}+{cl}{fila_descuentos}")
+    r += 2
     nota(ws, r, "Ticket = ventas por pedidos ÷ pedidos registrados (misma definición del Tablero; sin ajustes manuales ni cierres manuales, sin Gratis, solo turnos cerrados). "
                 "Los pedidos equivalentes son un ESTIMADO de cuántos pedidos 'valen' los ingresos sin pedido (a ticket promedio); si esos ingresos son negativos se dejan en 0 y la verificación muestra esa diferencia. "
                 "No se usan para el comportamiento de clientes (gráficos de pedidos) ni para el consumo familiar. "
@@ -4453,7 +4566,7 @@ def reportar_ingresos_sin_pedido(hist):
     cierres manuales) y reporta los meses donde ese monto es negativo (pedidos equivalentes = 0)."""
     if hist.empty or "ventas_pedidos_almuerzo" not in hist.columns:
         return
-    print("\nIngresos de cierre sin pedido asociado (ajustes y cierres manuales):")
+    print("\nIngresos de cierre sin pedido asociado (ajustes, cierres manuales y abonos de fiado):")
     negativos = []
     for _i, r in hist.iterrows():
         for turno, nombre, ing, des in (("almuerzo", "Almuerzo", r["ingresos_almuerzo"], r["ingresos_desayuno"]), ("cena", "Comidas rápidas", r["ingresos_cena"], 0.0)):
@@ -4461,9 +4574,13 @@ def reportar_ingresos_sin_pedido(hist):
             if total < 0:
                 negativos.append((r["periodo"], nombre, total))
             aj, ma = r.get(f"sinped_ajustes_{turno}"), r.get(f"sinped_manual_{turno}")
+            ab, sa = r.get(f"sinped_abonos_{turno}"), r.get(f"sinped_saldados_{turno}")
+            ab = 0.0 if ab is None or pd.isna(ab) else float(ab)
+            sa = 0.0 if sa is None or pd.isna(sa) else float(sa)
             detalle = ""
             if aj is not None and pd.notna(aj) and ma is not None and pd.notna(ma):
-                detalle = f" = ajustes {fmt_pesos(aj)} + cierres manuales {fmt_pesos(ma)} + otros {fmt_pesos(total - aj - ma)} (p. ej. fiados cuya plata no entró al cierre)"
+                detalle = (f" = ajustes {fmt_pesos(aj)} + cierres manuales {fmt_pesos(ma)} + abonos de fiado {fmt_pesos(ab)} "
+                           f"+ fiados saldados con abonos {fmt_pesos(sa)} + otros {fmt_pesos(total - aj - ma - ab - sa)}")
             if abs(total) >= 1 or detalle:
                 print(f"  · {r['periodo']} {nombre}: {fmt_pesos(total)}{detalle}")
     if negativos:
