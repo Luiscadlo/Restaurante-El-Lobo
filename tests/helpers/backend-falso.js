@@ -72,7 +72,10 @@ async function abrirSistema(page, opciones = {}) {
     auth: [],        // 'password:correo' | 'refresh:correo' | 'logout'
     rest: [],        // { rol, metodo, tabla } de cada llamada a /rest/v1
     denegadas: [],   // 'rol OP tabla' que la matriz de permisos no deja hacer
+    logoutScopes: [], // 'local' = cierra solo esta sesión (no saca a otros equipos)
     tokens: {},      // lo último emitido por correo (para inspeccionar)
+    // Interruptores que una prueba puede mover EN MEDIO de la prueba:
+    control: { rechazarRefresh: !!opciones.rechazarRefresh, authFalla: opciones.authFalla || null },
   };
 
   // ── Auth falso ────────────────────────────────────────────────────────
@@ -113,8 +116,12 @@ async function abrirSistema(page, opciones = {}) {
   let guardada = opciones.sesionGuardada || null;
   if (!guardada && usuario === 'caja') guardada = sesionGuardable(USUARIO_POR_ROL.caja);
   if (guardada) {
-    await page.addInitScript(([clave, valor]) => { try { localStorage.setItem(clave, valor); } catch (e) {} },
-      ['ellobo.sesion.caja.v1', JSON.stringify(guardada)]);
+    // Se siembra UNA vez por pestaña (no en cada recarga): así "Salir" y "recargar" se comportan como en la vida real.
+    await page.addInitScript(([clave, valor]) => {
+      try {
+        if (!sessionStorage.getItem('__prueba_sembrada')) { localStorage.setItem(clave, valor); sessionStorage.setItem('__prueba_sembrada', '1'); }
+      } catch (e) {}
+    }, ['ellobo.sesion.caja.v1', JSON.stringify(guardada)]);
   }
 
   await page.route(/^https?:\/\//, async route => {
@@ -126,11 +133,12 @@ async function abrirSistema(page, opciones = {}) {
       // ── /auth/v1/... ──
       const ma = url.pathname.match(/^\/auth\/v1\/(token|logout)$/);
       if (ma) {
-        if (opciones.authFalla === 'red') return route.abort('failed');
-        if (opciones.authFalla === '500') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"msg":"error"}' });
-        if (opciones.authFalla === '429') return route.fulfill({ status: 429, contentType: 'application/json', body: '{"error_code":"over_request_rate_limit"}' });
+        if (reg.control.authFalla === 'red') return route.abort('failed');
+        if (reg.control.authFalla === '500') return route.fulfill({ status: 500, contentType: 'application/json', body: '{"msg":"error"}' });
+        if (reg.control.authFalla === '429') return route.fulfill({ status: 429, contentType: 'application/json', body: '{"error_code":"over_request_rate_limit"}' });
         if (ma[1] === 'logout') {
           reg.auth.push('logout');
+          reg.logoutScopes.push(url.searchParams.get('scope'));
           return route.fulfill({ status: 204, headers: cors, body: '' });
         }
         let cuerpo = {};
@@ -147,7 +155,7 @@ async function abrirSistema(page, opciones = {}) {
         }
         if (tipo === 'refresh_token') {
           const correo = refrescos.get(cuerpo.refresh_token);
-          if (opciones.rechazarRefresh || !correo) {
+          if (reg.control.rechazarRefresh || !correo) {
             reg.auth.push('refresh-rechazado');
             return route.fulfill({ status: 400, contentType: 'application/json', headers: cors, body: JSON.stringify({ code: 400, error_code: 'refresh_token_not_found', msg: 'Invalid Refresh Token' }) });
           }

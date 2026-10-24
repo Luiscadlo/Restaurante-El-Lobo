@@ -2279,7 +2279,10 @@ function refrescarSesion(sesion) {
       if (typeof navigator !== 'undefined' && navigator.locks) await navigator.locks.request('ellobo-auth', trabajo);
       else await trabajo();
     } catch (e) {
-      if (e.tipo === 'credenciales') sesionPerdida(sesion);
+      if (e.tipo === 'credenciales') {
+        sesionPerdida(sesion);
+        throw errorAuth('Tu sesión venció. Ingresa de nuevo.', 'credenciales');
+      }
       throw e;
     } finally {
       sesion._refrescando = null;
@@ -2343,15 +2346,20 @@ function sesionPerdida(sesion) {
 function mostrarLogin(mensaje) {
   document.getElementById('loadingOverlay').style.display = 'none';
   document.getElementById('loginOverlay').style.display = 'flex';
-  const err = document.getElementById('login-error');
-  err.textContent = mensaje || '';
-  err.style.display = mensaje ? 'block' : 'none';
+  if (mensaje !== undefined) {              // sin mensaje se conserva el aviso que ya esté (p. ej. "Tu sesión venció")
+    const err = document.getElementById('login-error');
+    err.textContent = mensaje;
+    err.style.display = mensaje ? 'block' : 'none';
+  }
   const campo = document.getElementById('login-email');
   if (campo) campo.focus();
 }
 function ocultarLogin() {
   document.getElementById('loginOverlay').style.display = 'none';
   document.getElementById('login-password').value = '';
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+  err.style.display = 'none';
 }
 
 let ingresando = false;
@@ -9794,6 +9802,9 @@ function auditoriaVistosGuardados() {
 function actualizarBadgeAuditoria() {
   const badge = document.getElementById('audit-badge');
   if (!badge) return;
+  // Auditoría es de administrador: con caja no se muestra ni el numerito (y caja ni siquiera
+  // puede leer los pedidos eliminados / descuentos, así que la cuenta saldría incompleta).
+  if (!adminAutenticado) { badge.style.display = 'none'; return; }
   const vistos = auditoriaVistosGuardados();
   const nuevos = auditoriaEventosIds().filter(id => !vistos.has(id));
   badge.textContent = nuevos.length;
@@ -9801,6 +9812,7 @@ function actualizarBadgeAuditoria() {
 }
 
 function marcarAuditoriaVista() {
+  if (!adminAutenticado) return;   // con caja no se ve la pestaña: no se pisa lo que ya vio un administrador
   try { localStorage.setItem(AUDITORIA_VISTOS_KEY, JSON.stringify(auditoriaEventosIds())); } catch(e) {}
   actualizarBadgeAuditoria();
 }
