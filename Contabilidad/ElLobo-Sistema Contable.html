@@ -441,13 +441,13 @@
   <div class="tab" onclick="showTab('diaadia',this)">Cierre</div>
   <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
   <div class="tab" onclick="showTab('menu',this)">Menú</div>
-  <!-- Administrativas — solo rol admin (en caja piden autorización de un administrador) -->
-  <div class="tab" onclick="showTab('dashboard',this)">🔒 Tablero</div>
-  <div class="tab" onclick="showTab('ingfin',this)">🔒 Ingresos</div>
-  <div class="tab" onclick="showTab('egresos',this)">🔒 Egresos</div>
-  <div class="tab" onclick="showTab('caja',this)">🔒 Caja</div>
-  <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
-  <div class="tab" onclick="showTab('datos',this)">🔒 Datos</div>
+  <!-- Administrativas — solo rol admin: con caja NO aparecen (sincronizarSesion() las muestra u oculta). Para verlas: Salir y entrar como administrador. -->
+  <div class="tab tab-admin" id="tab-nav-dashboard" style="display:none;" onclick="showTab('dashboard',this)">Tablero</div>
+  <div class="tab tab-admin" id="tab-nav-ingfin" style="display:none;" onclick="showTab('ingfin',this)">Ingresos</div>
+  <div class="tab tab-admin" id="tab-nav-egresos" style="display:none;" onclick="showTab('egresos',this)">Egresos</div>
+  <div class="tab tab-admin" id="tab-nav-caja" style="display:none;" onclick="showTab('caja',this)">Caja</div>
+  <div class="tab tab-admin" id="tab-nav-auditoria" style="display:none;" onclick="showTab('auditoria',this)">Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
+  <div class="tab tab-admin" id="tab-nav-datos" style="display:none;" onclick="showTab('datos',this)">Datos</div>
 </nav>
 
 <!-- Aviso de respaldo (se llena con renderAvisoRespaldo; visible para todos) -->
@@ -2426,9 +2426,24 @@ async function salirDelSistema() {
   location.reload();
 }
 
-// Rol efectivo → bandera que usa la pantalla (adminAutenticado) + encabezado.
+// Secciones solo para administradores: con caja no aparecen en la barra (orden de la barra).
+const TABS_ADMIN = ['dashboard', 'ingfin', 'egresos', 'caja', 'auditoria', 'datos'];
+
+// Rol efectivo → bandera que usa la pantalla (adminAutenticado) + encabezado + barra de secciones.
+// OJO: ocultar secciones es solo comodidad; lo que protege los datos son las reglas de la base (sql/).
 function sincronizarSesion() {
   adminAutenticado = esAdminActivo();
+  TABS_ADMIN.forEach(id => {
+    const t = document.getElementById('tab-nav-' + id);
+    if (t) t.style.display = adminAutenticado ? '' : 'none';
+  });
+  if (!adminAutenticado) {
+    // Si estaba mirando una sección de administrador y ya no lo es, vuelve a Pedidos.
+    const abierta = document.querySelector('.section.active');
+    if (abierta && TABS_ADMIN.some(id => abierta.id === 'tab-' + id)) {
+      showTab('ingresos', document.querySelector(`.tab[onclick*="showTab('ingresos'"]`));
+    }
+  }
   const badge = document.getElementById('rolBadge');
   const salir = document.getElementById('btn-salir');
   const importar = document.getElementById('btn-importar');

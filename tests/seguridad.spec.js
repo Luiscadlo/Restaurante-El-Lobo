@@ -327,6 +327,46 @@ test.describe('caja y autorización de administrador', () => {
     expect(reg.auth.length).toBe(llamadas);
   });
 
+  const TABS_CAJA = ['Pedidos', 'Pendientes', 'Fiados', 'Cierre', 'Inventario', 'Menú'];
+  const TABS_DUENO = ['Tablero', 'Ingresos', 'Egresos', 'Caja', 'Auditoría', 'Datos'];
+  const tabsVisibles = page => page.evaluate(() => [...document.querySelectorAll('nav .tab')]
+    .filter(t => getComputedStyle(t).display !== 'none').map(t => t.textContent.replace(/\s+\d+\s*$/, '').trim()));
+
+  test('con caja la barra solo trae las 6 secciones del mostrador; las de dueño ni aparecen', async ({ page }) => {
+    await abrirSistema(page);
+    expect(await tabsVisibles(page)).toEqual(TABS_CAJA);
+    for (const id of ['dashboard', 'ingfin', 'egresos', 'caja', 'auditoria', 'datos']) {
+      await expect(page.locator(`#tab-nav-${id}`)).toBeHidden();
+    }
+  });
+
+  test('un dueño que entra directo ve las 12 secciones, sin candados', async ({ page }) => {
+    await abrirSistema(page, { usuario: 'admin' });
+    expect(await tabsVisibles(page)).toEqual([...TABS_CAJA, ...TABS_DUENO]);
+    expect(await tabsVisibles(page)).not.toContainEqual(expect.stringContaining('🔒'));
+  });
+
+  test('si el dueño se autoriza en el sitio aparecen las 6 secciones, y al cerrar vuelven a ocultarse y se regresa a Pedidos', async ({ page }) => {
+    await abrirSistema(page);
+    await irA(page, 'egresos');
+    await page.fill('#egresos-email', 'dueno1');
+    await page.fill('#egresos-password', 'clave-dueno1');
+    await page.click('#egresos-login button');
+    await expect(page.locator('#egresos-contenido')).toBeVisible();
+    expect(await tabsVisibles(page)).toEqual([...TABS_CAJA, ...TABS_DUENO]);
+    await page.locator('#egresos-contenido').getByRole('button', { name: /Cerrar sesión/ }).click();
+    expect(await tabsVisibles(page)).toEqual(TABS_CAJA);
+    await expect(page.locator('#tab-ingresos')).toHaveClass(/active/);      // volvió a Pedidos
+    await expect(page.locator('#tab-egresos')).not.toHaveClass(/active/);
+  });
+
+  test('la pantalla de carga arranca con las secciones de dueño ocultas (nunca asoman antes de saber quién entró)', async ({ page }) => {
+    await abrirSistema(page, { usuario: null });
+    for (const id of ['dashboard', 'ingfin', 'egresos', 'caja', 'auditoria', 'datos']) {
+      await expect(page.locator(`#tab-nav-${id}`)).toBeHidden();
+    }
+  });
+
   test('un dueño se autoriza en el sitio: se abren TODAS las secciones y se cargan las tablas de admin', async ({ page }) => {
     const reg = await abrirSistema(page);
     await irA(page, 'egresos');
@@ -371,8 +411,9 @@ test.describe('caja y autorización de administrador', () => {
     expect(await page.evaluate(() => ST.egresos.length)).toBeGreaterThan(0);
     await irA(page, 'egresos');
     await page.locator('#egresos-contenido').getByRole('button', { name: /Cerrar sesión/ }).click();
-    await expect(page.locator('#egresos-login')).toBeVisible();
+    await expect(page.locator('#tab-ingresos')).toHaveClass(/active/);       // vuelve a Pedidos
     await expect(page.locator('#egresos-contenido')).toBeHidden();
+    await expect(page.locator('#tab-nav-egresos')).toBeHidden();
     expect(await page.evaluate(() => ({ e: ST.egresos.length, m: ST.movimientosCaja.length, i: ST.ingresosExtra.length, x: ST.pedidosEliminados.length }))).toEqual({ e: 0, m: 0, i: 0, x: 0 });
     await expect.poll(() => reg.auth.includes('logout')).toBe(true);
     // las siguientes peticiones vuelven a usar el token de caja

@@ -34,8 +34,8 @@ Además: **sin sesión no se puede nada** (la llave pública que va en la págin
 
 ## Qué ve cada uno en pantalla
 
-- **Caja:** Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Las pestañas con candado (Tablero, Ingresos, Egresos, Caja, Auditoría, Datos), el historial completo de cierres, el respaldo, el cierre manual y **Importar** piden autorización de un administrador.
-- **Autorizar en el sitio:** desde la sesión de caja, un dueño escribe **su correo y su contraseña** en cualquier candado. Se abre todo lo de administrador; no se guarda en el equipo (si recargas o pulsas "Cerrar sesión", vuelve a caja).
+- **Caja:** Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Las secciones de dueño (Tablero, Ingresos, Egresos, Caja, Auditoría, Datos) **no aparecen** con caja; el historial completo de cierres, el respaldo y el cierre manual piden autorización de un administrador e **Importar** no aparece.
+- **Ver las secciones de dueño:** lo normal es pulsar **Salir** y entrar como administrador. También se puede autorizar en el sitio, desde los pocos candados que quedan dentro de Cierre (historial, respaldo, cierre manual): el dueño escribe **su usuario y su contraseña**, aparecen todas las secciones y no se guarda en el equipo (si recargas o pulsas "Cerrar sesión", vuelve a caja).
 - **Admin entrando directo:** todo abierto; no se recuerda (al recargar hay que volver a entrar).
 - **Caja entrando directo:** se recuerda en ese equipo para no pedir la clave en cada recarga. "Salir" la borra.
 
