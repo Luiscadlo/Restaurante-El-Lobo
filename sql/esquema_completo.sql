@@ -2,10 +2,8 @@
 -- El Lobo — ESQUEMA COMPLETO (estructura de la base, SIN datos)
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Generado por herramientas/esquema_a_sql.py a partir de sql/consulta_esquema.sql.
--- Origen: PostgreSQL 17.6 on aarch64-unknown-linux-gnu · consulta corrida el 2026-10-24T18:02:37.290947+00:00
+-- Origen: PostgreSQL 17.6 on aarch64-unknown-linux-gnu · consulta corrida el 2026-10-24T18:17:21.465651+00:00
 -- Contenido: tablas: 17 · columnas: 156 · restricciones: 43 · índices: 0 · funciones: 0 · vistas: 0 · disparadores: 0.
--- NOTA: la tabla «config» se añadió a partir de sql/migracion_supabase_config.sql (cuando se corrió la consulta todavía no existía en
---   producción). Se reemplaza solo al volver a correr sql/consulta_esquema.sql y regenerar este archivo (docs/RESTAURAR.md).
 --
 -- Para qué: crear la base de El Lobo en un proyecto de Supabase NUEVO Y VACÍO (restaurar un respaldo,
 --   hacer pruebas). NO lo corras en el proyecto de producción: ya tiene todo esto.
