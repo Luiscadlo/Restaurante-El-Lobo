@@ -1603,6 +1603,33 @@
   </div>
 
   <div id="auditoria-contenido" style="display:none;">
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-body">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;">
+          <div>
+            <div class="filtro-label">Período</div>
+            <div class="filter-bar" id="auditoria-periodo" style="margin-bottom:0;">
+              <button class="filter-btn" data-periodo="hoy" onclick="setFAuditoria('hoy')">Hoy</button>
+              <button class="filter-btn" id="auditoria-btn-ayer" title="Ver solo lo de ayer" onclick="setFAuditoriaAyer()">Ayer</button>
+              <button class="filter-btn" data-periodo="semana" onclick="setFAuditoria('semana')">Semana</button>
+              <button class="filter-btn" data-periodo="mes" onclick="setFAuditoria('mes')">Mes</button>
+              <button class="filter-btn active" data-periodo="todo" onclick="setFAuditoria('todo')">Todo</button>
+            </div>
+          </div>
+          <div>
+            <div class="filtro-label">Un día o un rango <span style="text-transform:none;">(desde – hasta)</span></div>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
+              <input type="date" id="auditoria-desde" style="padding:8px 10px;" title="Desde (si eliges solo este, ves solo ese día)" onchange="setFAuditoriaRango('desde')">
+              <span style="color:var(--text3);font-size:11px;">–</span>
+              <input type="date" id="auditoria-hasta" style="padding:8px 10px;" title="Hasta" onchange="setFAuditoriaRango('hasta')">
+              <button class="filter-btn" title="Quitar el filtro y ver todo" onclick="setFAuditoria('todo')">✕</button>
+            </div>
+          </div>
+        </div>
+        <div id="auditoria-filtro-resumen" style="font-size:12px;color:var(--text2);margin-top:12px;"></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Los ajustes se filtran por la fecha del cierre; los pedidos eliminados y los descuentos, por el día en que se hicieron.</div>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">📋 Ajustes manuales registrados en cierres</div>
@@ -9766,10 +9793,66 @@ function aplicarGateAdmin(prefix, renderFn) {
   }
 }
 
+// ── Filtro por día de Auditoría ───────────────────────────────────────
+// Mismo filtro de fechas que Egresos/Ingresos (enFiltroFecha): un período rápido
+// (hoy/semana/mes/todo) o un rango «desde – hasta» (un solo día = la misma fecha).
+// Los ajustes se ubican por la fecha de su CIERRE; los pedidos eliminados y los
+// descuentos, por el día (hora local) en que se hicieron (created_at), que es lo
+// que dice su primera columna. Si un registro no trae created_at, vale su fecha.
+const fAuditoria = { periodo: 'todo', desde: '', hasta: '' };
+
+function diaDeEventoAuditoria(r) {
+  const d = r.created_at ? new Date(r.created_at) : null;
+  return d && !Number.isNaN(d.getTime()) ? toLocalDateStr(d) : (r.fecha || '');
+}
+const auditoriaVisibleCierre = c => enFiltroFecha(c.fecha, fAuditoria);
+const auditoriaVisibleEvento = r => enFiltroFecha(diaDeEventoAuditoria(r), fAuditoria);
+function auditoriaFiltroActivo() { return fAuditoria.periodo !== 'todo' || !!(fAuditoria.desde || fAuditoria.hasta); }
+
+function textoFiltroAuditoria() {
+  const { desde, hasta, periodo } = fAuditoria;
+  if (desde || hasta) {
+    if (desde && hasta) return desde === hasta ? `el ${desde}` : `del ${desde} al ${hasta}`;
+    return desde ? `desde el ${desde}` : `hasta el ${hasta}`;
+  }
+  return { hoy: 'hoy', semana: 'esta semana', mes: 'este mes' }[periodo] || 'todo';
+}
+
+// Período rápido: quita el rango escrito y marca el botón.
+function setFAuditoria(periodo) {
+  limpiarRangoFiltro(fAuditoria, 'auditoria-desde', 'auditoria-hasta');
+  fAuditoria.periodo = periodo;
+  document.querySelectorAll('#auditoria-periodo .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.periodo === periodo));
+  renderAuditoria();
+}
+
+// Rango escrito a mano. Si solo eliges un extremo, el otro se pone igual: ves solo ese día
+// (para un rango, cambia el otro extremo; para «desde ese día en adelante», borra «hasta»).
+function setFAuditoriaRango(cambio) {
+  const d = document.getElementById('auditoria-desde'), h = document.getElementById('auditoria-hasta');
+  if (d && h) {
+    if (cambio === 'desde' && d.value && !h.value) h.value = d.value;
+    else if (cambio === 'hasta' && h.value && !d.value) d.value = h.value;
+  }
+  aplicarRangoFiltro(fAuditoria, 'auditoria-desde', 'auditoria-hasta', '#auditoria-periodo', cambio);
+  renderAuditoria();
+}
+
+function setFAuditoriaAyer() {
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  const ayer = toLocalDateStr(d);
+  document.getElementById('auditoria-desde').value = ayer;
+  document.getElementById('auditoria-hasta').value = ayer;
+  setFAuditoriaRango('desde');
+}
+
 function renderAuditoria() {
   const body = document.getElementById('auditoria-body');
   if (!body) return;
-  const ajustes = ST.cierresDia.filter(c => ajustesDeCierre(c).total !== 0).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const filtrando = auditoriaFiltroActivo();
+  const todosAjustes = ST.cierresDia.filter(c => ajustesDeCierre(c).total !== 0);
+  const ajustes = todosAjustes.filter(auditoriaVisibleCierre).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const vacio = (hayDatos, sinNada, sinEnPeriodo) => (filtrando && hayDatos) ? sinEnPeriodo : sinNada;
   body.innerHTML = ajustes.length
     ? ajustes.map(c => {
         const aj = ajustesDeCierre(c);
@@ -9781,11 +9864,11 @@ function renderAuditoria() {
         <td style="color:var(--text2);">${c.ajuste_manual_nota || '—'}</td>
       </tr>`;
       }).join('')
-    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ajustes manuales registrados</div></div></td></tr>`;
+    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">${vacio(todosAjustes.length, 'Sin ajustes manuales registrados', 'Sin ajustes manuales en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
 
   const elimBody = document.getElementById('auditoria-eliminados-body');
   if (elimBody) {
-    const eliminados = [...ST.pedidosEliminados].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    const eliminados = ST.pedidosEliminados.filter(auditoriaVisibleEvento).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     elimBody.innerHTML = eliminados.length
       ? eliminados.map(e => `<tr>
           <td>${new Date(e.created_at).toLocaleString('es-CO')}</td>
@@ -9795,12 +9878,12 @@ function renderAuditoria() {
           <td style="color:var(--text2);">${LABELS[e.pedido]||e.pedido}${e.detalle ? ' — ' + e.detalle : ''}</td>
           <td class="amount-neg">${fmt(e.monto_total||0)}</td>
         </tr>`).join('')
-      : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">Sin pedidos eliminados registrados</div></div></td></tr>`;
+      : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">${vacio(ST.pedidosEliminados.length, 'Sin pedidos eliminados registrados', 'Sin pedidos eliminados en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
   }
 
   const descBody = document.getElementById('auditoria-descuentos-body');
   if (descBody) {
-    const descuentos = [...(ST.pedidosDescuentos || [])].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    const descuentos = (ST.pedidosDescuentos || []).filter(auditoriaVisibleEvento).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     descBody.innerHTML = descuentos.length
       ? descuentos.map(d => `<tr>
           <td>${new Date(d.created_at).toLocaleString('es-CO')}</td>
@@ -9811,7 +9894,18 @@ function renderAuditoria() {
           <td style="color:var(--text2);">${d.cierre_ajustado ? `💵 ${fmtAjuste(d.ajuste_efectivo||0)} · 💳 ${fmtAjuste(d.ajuste_transferencia||0)}` : '—'}</td>
           <td style="color:var(--text3);font-size:11px;">${d.gastos_eliminados || '—'}</td>
         </tr>`).join('')
-      : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🏷</div><div class="empty-text">Sin descuentos aplicados todavía</div></div></td></tr>`;
+      : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🏷</div><div class="empty-text">${vacio((ST.pedidosDescuentos || []).length, 'Sin descuentos aplicados todavía', 'Sin descuentos en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
+  }
+
+  // Resumen del filtro: qué se está viendo y cuántos registros quedan de cuántos hay.
+  const resumen = document.getElementById('auditoria-filtro-resumen');
+  if (resumen) {
+    const totE = ST.pedidosEliminados.length, totD = (ST.pedidosDescuentos || []).length;
+    const verE = ST.pedidosEliminados.filter(auditoriaVisibleEvento).length;
+    const verD = (ST.pedidosDescuentos || []).filter(auditoriaVisibleEvento).length;
+    resumen.innerHTML = filtrando
+      ? `Mostrando <b>${textoFiltroAuditoria()}</b>: ajustes <b>${ajustes.length}</b> de ${todosAjustes.length} · eliminados <b>${verE}</b> de ${totE} · descuentos <b>${verD}</b> de ${totD}`
+      : `Mostrando todo: ajustes <b>${todosAjustes.length}</b> · eliminados <b>${totE}</b> · descuentos <b>${totD}</b>`;
   }
 }
 
@@ -9821,12 +9915,13 @@ function renderAuditoria() {
 // badge muestra cuántos son nuevos y desaparece al entrar a la pestaña.
 const AUDITORIA_VISTOS_KEY = 'elLobo_auditoria_vistos';
 
-function auditoriaEventosIds() {
+// soloVisibles = true: solo los que el filtro de día de Auditoría deja ver ahora.
+function auditoriaEventosIds(soloVisibles = false) {
   const ajustesIds = ST.cierresDia
-    .filter(c => c.ajuste_manual)
+    .filter(c => c.ajuste_manual && (!soloVisibles || auditoriaVisibleCierre(c)))
     .map(c => `ajuste:${c.fecha}:${c.turno}`);
-  const elimIds = ST.pedidosEliminados.map(e => `elim:${e.id}`);
-  const descIds = (ST.pedidosDescuentos || []).map(d => `desc:${d.id}`);
+  const elimIds = ST.pedidosEliminados.filter(e => !soloVisibles || auditoriaVisibleEvento(e)).map(e => `elim:${e.id}`);
+  const descIds = (ST.pedidosDescuentos || []).filter(d => !soloVisibles || auditoriaVisibleEvento(d)).map(d => `desc:${d.id}`);
   return [...ajustesIds, ...elimIds, ...descIds];
 }
 
@@ -9849,7 +9944,12 @@ function actualizarBadgeAuditoria() {
 
 function marcarAuditoriaVista() {
   if (!adminAutenticado) return;   // con caja no se ve la pestaña: no se pisa lo que ya vio un administrador
-  try { localStorage.setItem(AUDITORIA_VISTOS_KEY, JSON.stringify(auditoriaEventosIds())); } catch(e) {}
+  // Se marcan como vistos los que se ven ahora; lo que un filtro de día deje escondido sigue
+  // contando como novedad en el numerito (sin filtro, esto equivale a marcar todo).
+  const vistos = auditoriaVistosGuardados();
+  const visibles = new Set(auditoriaEventosIds(true));
+  const guardar = auditoriaEventosIds().filter(id => vistos.has(id) || visibles.has(id));
+  try { localStorage.setItem(AUDITORIA_VISTOS_KEY, JSON.stringify(guardar)); } catch(e) {}
   actualizarBadgeAuditoria();
 }
 

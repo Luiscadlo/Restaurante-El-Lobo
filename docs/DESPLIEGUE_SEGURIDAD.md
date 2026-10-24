@@ -119,6 +119,7 @@ Si algo de esto no pasa, **no sigas**: cuéntame qué viste (ver "Si algo sale m
 
 **Con un dueño (entrando directo):**
 - [ ] Tablero, Ingresos, Egresos, Caja, Auditoría y Datos abren y muestran cifras.
+- [ ] En Auditoría, el filtro por día funciona: **Hoy**, **Ayer**, o elige una fecha en «Desde» y ves solo ese día.
 - [ ] Auditoría muestra la eliminación que acabas de hacer (y el descuento).
 - [ ] **Datos → Respaldo completo** descarga el JSON con las 16 tablas.
 
