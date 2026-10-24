@@ -398,6 +398,24 @@
   <div style="color:#a09880;font-size:13px;font-family:'DM Mono',monospace;">Sincronizando datos…</div>
 </div>
 
+<!-- Pantalla de entrada: nada del sistema se ve ni se carga hasta iniciar sesión (Supabase Auth) -->
+<div id="loginOverlay" style="position:fixed;inset:0;background:#0f0e0c;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:16px;">
+  <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:#e8b84b;">🐺 El Lobo</div>
+  <form id="login-form" class="panel" style="width:100%;max-width:340px;padding:20px;" onsubmit="enviarLogin(event)" novalidate>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Ingresa con tu usuario para usar el sistema.</div>
+    <div class="form-group mb">
+      <label for="login-email">Correo</label>
+      <input type="email" id="login-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com">
+    </div>
+    <div class="form-group mb">
+      <label for="login-password">Contraseña</label>
+      <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <div id="login-error" role="alert" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px;"></div>
+    <button type="submit" id="login-btn" class="btn btn-primary" style="width:100%;">Entrar</button>
+  </form>
+</div>
+
 <header>
   <div class="logo" style="display:flex;align-items:center;gap:10px;">
     <span style="color:var(--accent);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;letter-spacing:-0.5px;">🐺 El Lobo</span>
@@ -406,8 +424,10 @@
   <div class="header-right">
     <div id="syncBadge" style="border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid rgba(232,184,75,0.4);background:rgba(232,184,75,0.1);color:var(--accent);">🔄 Sincronizando…</div>
     <button class="btn-abrir-turno" id="btn-abrir-turno-header" onclick="abrirModalTurno()" title="Registrar caja inicial del turno">🔓 Abrir turno</button>
-    <button class="btn btn-outline" onclick="exportarDatos()" style="font-size:11px;padding:6px 12px;" title="Exportar respaldo JSON">⬇ <span class="btn-label">Exportar</span></button>
-    <label class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;" title="Importar respaldo JSON">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
+    <button class="btn btn-outline" onclick="pedirRespaldoCompleto()" style="font-size:11px;padding:6px 12px;" title="Respaldo completo de todas las tablas (pide acceso de administrador)">⬇ <span class="btn-label">Exportar</span></button>
+    <label id="btn-importar" class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;display:none;" title="Importar (solo administrador; limitado: ingresos, egresos, inventario y gastos del día)">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
+    <div id="rolBadge" style="display:none;border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);" title="Usuario con el que se inició sesión"></div>
+    <button class="btn btn-outline" id="btn-salir" onclick="salirDelSistema()" style="font-size:11px;padding:6px 12px;display:none;" title="Cerrar la sesión de este equipo">🚪 <span class="btn-label">Salir</span></button>
     <div class="turno-badge turno-almuerzo" id="turnoBadge">☀️ Almuerzo</div>
     <div class="date-badge" id="currentDate"></div>
   </div>
@@ -421,7 +441,7 @@
   <div class="tab" onclick="showTab('diaadia',this)">Cierre</div>
   <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
   <div class="tab" onclick="showTab('menu',this)">Menú</div>
-  <!-- Administrativas — todas piden la misma contraseña -->
+  <!-- Administrativas — solo rol admin (en caja piden autorización de un administrador) -->
   <div class="tab" onclick="showTab('dashboard',this)">🔒 Tablero</div>
   <div class="tab" onclick="showTab('ingfin',this)">🔒 Ingresos</div>
   <div class="tab" onclick="showTab('egresos',this)">🔒 Egresos</div>
@@ -429,6 +449,9 @@
   <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
   <div class="tab" onclick="showTab('datos',this)">🔒 Datos</div>
 </nav>
+
+<!-- Aviso de respaldo (se llena con renderAvisoRespaldo; visible para todos) -->
+<div id="aviso-respaldo" style="display:none;padding:12px 24px 0;"></div>
 
 <main>
 
@@ -439,8 +462,12 @@
     <div class="panel-body">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">El tablero muestra el estado financiero completo del negocio.</div>
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="email" id="tablero-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('tablero-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="tablero-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('tablero-password')">
+        <input type="password" id="tablero-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('tablero-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('tablero-password')">Entrar</button>
     </div>
@@ -913,8 +940,12 @@
     <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
     <div class="panel-body">
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="email" id="egresos-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('egresos-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="egresos-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('egresos-password')">
+        <input type="password" id="egresos-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('egresos-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('egresos-password')">Entrar</button>
     </div>
@@ -1127,8 +1158,12 @@
     <div class="panel-body">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Ingresos totales del negocio, tomados de los cierres guardados.</div>
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="email" id="ingfin-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('ingfin-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="ingfin-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('ingfin-password')">
+        <input type="password" id="ingfin-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('ingfin-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('ingfin-password')">Entrar</button>
     </div>
@@ -1439,10 +1474,13 @@
   <div class="panel">
     <div class="panel-header"><div class="panel-title">🔒 Historial completo de cierres</div></div>
     <div class="panel-body" id="dd-historial-login">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Para ver o corregir cierres de otros días necesitas la contraseña.</div>
-      <div style="display:flex;gap:8px;max-width:400px;">
-        <input type="password" id="dd-historial-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('dd-historial-password')">
-        <button class="btn btn-primary" onclick="intentarAccesoAdmin('dd-historial-password')">Entrar</button>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Para ver o corregir cierres de otros días necesitas autorización de un administrador (correo y contraseña).</div>
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:400px;">
+        <input type="email" id="dd-historial-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo de administrador" onkeydown="if(event.key==='Enter')document.getElementById('dd-historial-password').focus()">
+        <div style="display:flex;gap:8px;">
+          <input type="password" id="dd-historial-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('dd-historial-password')">
+          <button class="btn btn-primary" onclick="intentarAccesoAdmin('dd-historial-password')">Entrar</button>
+        </div>
       </div>
     </div>
     <div id="dd-historial-contenido" style="display:none;">
@@ -1466,8 +1504,12 @@
     <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
     <div class="panel-body">
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="email" id="caja-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('caja-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="caja-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('caja-password')">
+        <input type="password" id="caja-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('caja-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('caja-password')">Entrar</button>
     </div>
@@ -1550,8 +1592,12 @@
     <div class="panel-body">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Esta sección muestra todos los ajustes manuales hechos en los cierres.</div>
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="email" id="auditoria-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('auditoria-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="auditoria-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('auditoria-password')">
+        <input type="password" id="auditoria-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('auditoria-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('auditoria-password')">Entrar</button>
     </div>
@@ -1602,8 +1648,12 @@
     <div class="panel-body">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Exportación completa de datos para análisis externo (Excel/Python).</div>
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="email" id="datos-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('datos-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="datos-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('datos-password')">
+        <input type="password" id="datos-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('datos-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('datos-password')">Entrar</button>
     </div>
@@ -1686,6 +1736,29 @@
   </div>
 </div>
 
+<!-- Modal: Respaldo completo (pide acceso de administrador) -->
+<div id="modal-respaldo" class="modal-overlay" style="display:none;" onclick="cerrarModalRespaldoClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModalRespaldo()">✕</button>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:18px;">💾 Respaldo completo</div>
+
+    <div id="respaldo-login">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Descargar el respaldo completo de todas las tablas requiere autorización de un administrador (correo y contraseña).</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <input type="email" id="respaldo-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo de administrador" onkeydown="if(event.key==='Enter')document.getElementById('respaldo-password').focus()">
+        <div style="display:flex;gap:8px;">
+          <input type="password" id="respaldo-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoRespaldo()">
+          <button class="btn btn-primary" onclick="intentarAccesoRespaldo()">Entrar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="respaldo-contenido" style="display:none;">
+      <div style="font-size:12px;color:var(--text3);">Acceso concedido. Preparando el respaldo…</div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Cierre manual (respaldo cuando el sistema no se pudo usar ese día) -->
 <div id="modal-cierre-manual" class="modal-overlay" style="display:none;" onclick="cerrarModalCierreManualClick(event)">
   <div class="modal-box">
@@ -1693,10 +1766,13 @@
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:18px;">✍️ Cierre manual</div>
 
     <div id="cierremanual-login">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Cargar un cierre a mano requiere la contraseña de administrador.</div>
-      <div style="display:flex;gap:8px;">
-        <input type="password" id="cierremanual-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoCierreManual()">
-        <button class="btn btn-primary" onclick="intentarAccesoCierreManual()">Entrar</button>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Cargar un cierre a mano requiere autorización de un administrador (correo y contraseña).</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <input type="email" id="cierremanual-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo de administrador" onkeydown="if(event.key==='Enter')document.getElementById('cierremanual-password').focus()">
+        <div style="display:flex;gap:8px;">
+          <input type="password" id="cierremanual-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoCierreManual()">
+          <button class="btn btn-primary" onclick="intentarAccesoCierreManual()">Entrar</button>
+        </div>
       </div>
     </div>
 
@@ -2082,17 +2158,319 @@ const EMPAQUE_DOMICILIO = 1000;
 
 // ── Supabase ───────────────────────────────────────────────────────────
 const SB_URL = 'https://arxyfcquvsmfoxmbifne.supabase.co';
+// Llave PÚBLICA (anon) del proyecto: identifica el proyecto, no da acceso por sí sola (ver "Sesión" abajo).
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyeHlmY3F1dnNtZm94bWJpZm5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzkwMTcsImV4cCI6MjA5NzcxNTAxN30.2s8SgF_YlLy3eyI9Wz1TD48VTFPDHo4xMw8J7J9YL4w';
 
-const sbH = (extra = {}) => ({
-  'Content-Type': 'application/json',
-  'apikey': SB_KEY,
-  'Authorization': `Bearer ${SB_KEY}`,
-  ...extra
-});
+// ── Sesión (Supabase Auth) ─────────────────────────────────────────────
+// Cada persona entra con SU usuario (correo + contraseña). Supabase devuelve un
+// token firmado (JWT) que lleva el ROL (app_metadata.rol): 'admin', 'caja' o
+// 'respaldo'. Ese token es lo que usa cada petición a la base de datos: la llave
+// pública de abajo (SB_KEY) sola ya no da acceso a nada.
+// IMPORTANTE: lo que se muestra u oculta en pantalla según el rol es solo comodidad.
+// El control real está en el servidor (reglas RLS, carpeta sql/): aunque alguien
+// altere esta página, la base solo le entrega lo que su rol permite.
+//
+// · Caja (usuario compartido del mostrador): su sesión se recuerda en este equipo
+//   (localStorage) para no pedir la clave en cada recarga.
+// · Admin (cada dueño con su propio usuario): NUNCA se guarda; si recargas la
+//   página hay que volver a entrar. También puede "autorizarse en el sitio"
+//   desde una sesión de caja (correo + contraseña en una pestaña con candado):
+//   esa sesión elevada vive solo en memoria y se pierde al recargar o al pulsar
+//   "Cerrar sesión".
+const ROLES_APP = ['admin', 'caja'];     // 'respaldo' es solo para el respaldo automático: no entra a la pantalla
+const AUTH_KEY_CAJA = 'ellobo.sesion.caja.v1';
+const MARGEN_TOKEN_SEG = 60;             // se renueva el token cuando le quedan menos de 60 s
+let sesionBase  = null;                  // quien inició sesión en este equipo (caja o admin)
+let sesionAdmin = null;                  // admin autorizado en el sitio sobre una sesión de caja (solo memoria)
+
+const ahoraSeg = () => Math.floor(Date.now() / 1000);
+
+function errorAuth(mensaje, tipo) { return Object.assign(new Error(mensaje), { tipo }); }
+
+// Lee el contenido (payload) de un JWT. No verifica la firma — eso lo hace el servidor en cada petición.
+function decodificarJWT(token) {
+  try {
+    const b64 = String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(atob(b64).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
+    return JSON.parse(json);
+  } catch (e) { return null; }
+}
+
+function sesionDeRespuesta(r) {
+  const payload = decodificarJWT(r.access_token) || {};
+  return {
+    access_token: r.access_token,
+    refresh_token: r.refresh_token,
+    expires_at: Number(r.expires_at) || (ahoraSeg() + (Number(r.expires_in) || 3600)),
+    email: (r.user && r.user.email) || payload.email || '',
+    rol: (payload.app_metadata && payload.app_metadata.rol) || null,
+  };
+}
+
+// POST a /auth/v1/... — traduce los errores del servicio a mensajes en español.
+async function authPost(ruta, cuerpo, token) {
+  let r;
+  try {
+    r = await fetch(`${SB_URL}/auth/v1/${ruta}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY, ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+      body: JSON.stringify(cuerpo || {})
+    });
+  } catch (e) {
+    throw errorAuth('No hay conexión con el servidor. Revisa el internet e intenta de nuevo.', 'red');
+  }
+  let datos = null;
+  try { datos = await r.json(); } catch (e) { /* sin cuerpo (p. ej. logout) */ }
+  if (!r.ok) {
+    if (r.status === 429) throw errorAuth('Demasiados intentos seguidos. Espera un minuto e intenta de nuevo.', 'limite');
+    if (r.status >= 500) throw errorAuth('El servicio de acceso no responde. Intenta de nuevo en un momento.', 'servidor');
+    throw errorAuth('Correo o contraseña incorrectos.', 'credenciales');
+  }
+  return datos;
+}
+
+async function iniciarSesion(email, password) {
+  const sesion = sesionDeRespuesta(await authPost('token?grant_type=password', { email, password }));
+  return sesion;
+}
+
+// Cierra la sesión en el servidor (solo ESTA sesión: scope=local, para no sacar a otros equipos). No bloquea.
+function cerrarEnServidor(sesion) {
+  if (!sesion || !sesion.access_token) return Promise.resolve();
+  return authPost('logout?scope=local', {}, sesion.access_token).catch(() => {});
+}
+
+// Persistencia: SOLO la sesión de caja.
+function guardarSesionCaja(s) {
+  try {
+    localStorage.setItem(AUTH_KEY_CAJA, JSON.stringify({
+      access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at, email: s.email, rol: s.rol
+    }));
+  } catch (e) { /* sin almacenamiento: se pedirá la clave en cada recarga */ }
+}
+function leerSesionCaja() {
+  try {
+    const s = JSON.parse(localStorage.getItem(AUTH_KEY_CAJA));
+    if (s && s.rol === 'caja' && s.access_token && s.refresh_token) return s;
+  } catch (e) { /* vacío o dañado */ }
+  return null;
+}
+function borrarSesionCaja() { try { localStorage.removeItem(AUTH_KEY_CAJA); } catch (e) {} }
+
+// Renueva el token con el refresh_token. Varias peticiones a la vez comparten UNA sola renovación,
+// y si otra pestaña de este mismo equipo ya renovó (Supabase rota el refresh_token), se adopta su sesión
+// en vez de gastar el token viejo de nuevo.
+function refrescarSesion(sesion) {
+  if (sesion._refrescando) return sesion._refrescando;
+  const trabajo = async () => {
+    if (sesion === sesionBase) {
+      const guardada = leerSesionCaja();
+      if (guardada && guardada.refresh_token !== sesion.refresh_token && guardada.expires_at - MARGEN_TOKEN_SEG > ahoraSeg()) {
+        Object.assign(sesion, guardada);
+        return;
+      }
+    }
+    const nueva = sesionDeRespuesta(await authPost('token?grant_type=refresh_token', { refresh_token: sesion.refresh_token }));
+    Object.assign(sesion, nueva);
+    if (sesion === sesionBase && sesion.rol === 'caja') guardarSesionCaja(sesion);
+  };
+  sesion._refrescando = (async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.locks) await navigator.locks.request('ellobo-auth', trabajo);
+      else await trabajo();
+    } catch (e) {
+      if (e.tipo === 'credenciales') {
+        sesionPerdida(sesion);
+        throw errorAuth('Tu sesión venció. Ingresa de nuevo.', 'credenciales');
+      }
+      throw e;
+    } finally {
+      sesion._refrescando = null;
+    }
+  })();
+  return sesion._refrescando;
+}
+
+async function tokenDe(sesion) {
+  if (sesion.expires_at - MARGEN_TOKEN_SEG <= ahoraSeg()) await refrescarSesion(sesion);
+  return sesion.access_token;
+}
+
+const sesionActiva = () => sesionAdmin || sesionBase;
+const esAdminActivo = () => { const s = sesionActiva(); return !!s && s.rol === 'admin'; };
+
+// Encabezados de cada petición a la base: la llave pública identifica el proyecto
+// y el token de la persona (si hay sesión) es lo que decide qué puede ver y hacer.
+async function sbH(extra = {}) {
+  const s = sesionActiva();
+  const token = s ? await tokenDe(s) : SB_KEY;
+  return {
+    'Content-Type': 'application/json',
+    'apikey': SB_KEY,
+    'Authorization': `Bearer ${token}`,
+    ...extra
+  };
+}
+
+// fetch con el token de la sesión. Si el servidor responde 401 (el token venció justo ahora),
+// renueva una vez y reintenta; si sigue en 401, la sesión ya no sirve y se vuelve a la pantalla de entrada.
+async function sbFetch(url, init = {}) {
+  const intentar = async () => fetch(url, { ...init, headers: await sbH(init.headers) });
+  let r = await intentar();
+  const s = sesionActiva();
+  if (r.status === 401 && s) {
+    try { await refrescarSesion(s); } catch (e) { return r; }
+    r = await intentar();
+    if (r.status === 401) sesionPerdida(s);
+  }
+  return r;
+}
+
+// La sesión dejó de servir (token y renovación rechazados).
+function sesionPerdida(sesion) {
+  if (sesion && sesion === sesionAdmin) {
+    quitarAdmin();
+    showToast('🔒 La autorización de administrador venció — vuelve a ingresar el correo y la contraseña', 'warning');
+    return;
+  }
+  if (!sesionBase) return;               // ya se avisó
+  sesionBase = null;
+  sesionAdmin = null;
+  borrarSesionCaja();
+  vaciarTablasAdmin();
+  sincronizarSesion();
+  mostrarLogin('Tu sesión venció. Ingresa de nuevo.');
+}
+
+// ── Pantalla de entrada ──
+function mostrarLogin(mensaje) {
+  document.getElementById('loadingOverlay').style.display = 'none';
+  document.getElementById('loginOverlay').style.display = 'flex';
+  if (mensaje !== undefined) {              // sin mensaje se conserva el aviso que ya esté (p. ej. "Tu sesión venció")
+    const err = document.getElementById('login-error');
+    err.textContent = mensaje;
+    err.style.display = mensaje ? 'block' : 'none';
+  }
+  const campo = document.getElementById('login-email');
+  if (campo) campo.focus();
+}
+function ocultarLogin() {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('login-password').value = '';
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+  err.style.display = 'none';
+}
+
+let ingresando = false;
+async function enviarLogin(ev) {
+  if (ev) ev.preventDefault();
+  if (ingresando) return;
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  if (!email || !password) { mostrarLogin('Escribe tu correo y tu contraseña.'); return; }
+  ingresando = true;
+  btn.disabled = true;
+  let sesion;
+  try {
+    sesion = await iniciarSesion(email, password);
+  } catch (e) {
+    mostrarLogin(e.message);
+    return;
+  } finally {
+    ingresando = false;
+    btn.disabled = false;
+  }
+  if (!ROLES_APP.includes(sesion.rol)) {
+    cerrarEnServidor(sesion);
+    mostrarLogin(sesion.rol
+      ? 'Este usuario es solo para el respaldo automático y no puede entrar a la pantalla.'
+      : 'Tu usuario todavía no tiene un rol asignado. Avísale al administrador.');
+    return;
+  }
+  sesionBase = sesion;
+  sesionAdmin = null;
+  if (sesion.rol === 'caja') guardarSesionCaja(sesion); else borrarSesionCaja();
+  sincronizarSesion();
+  ocultarLogin();
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  await loadState();
+}
+
+// Cierra la sesión de este equipo (la de caja o la del admin que entró directo) y recarga:
+// así no queda ningún dato en memoria y vuelve la pantalla de entrada.
+async function salirDelSistema() {
+  const sesiones = [sesionAdmin, sesionBase].filter(Boolean);
+  borrarSesionCaja();
+  // Avisa al servidor, pero sin esperar de más: si no hay internet igual se sale.
+  await Promise.race([Promise.all(sesiones.map(cerrarEnServidor)), new Promise(r => setTimeout(r, 2000))]);
+  sesionBase = null;
+  sesionAdmin = null;
+  location.reload();
+}
+
+// Rol efectivo → bandera que usa la pantalla (adminAutenticado) + encabezado.
+function sincronizarSesion() {
+  adminAutenticado = esAdminActivo();
+  const badge = document.getElementById('rolBadge');
+  const salir = document.getElementById('btn-salir');
+  const importar = document.getElementById('btn-importar');
+  if (importar) importar.style.display = adminAutenticado ? '' : 'none';
+  if (!badge || !salir) return;
+  if (!sesionBase) { badge.style.display = 'none'; salir.style.display = 'none'; return; }
+  let texto;
+  if (sesionBase.rol === 'admin') texto = `👑 Admin · ${sesionBase.email}`;
+  else if (sesionAdmin) texto = `👤 Caja · 🔓 ${sesionAdmin.email}`;
+  else texto = '👤 Caja';
+  badge.textContent = texto;
+  badge.style.display = '';
+  salir.style.display = '';
+}
+
+// Admin autorizado "en el sitio" sobre una sesión de caja. No guarda nada en el equipo.
+let autorizandoAdmin = false;
+async function autorizarAdmin(email, password) {
+  if (esAdminActivo()) return { ok: true };
+  if (!sesionBase) return { ok: false, mensaje: 'Primero inicia sesión.' };
+  if (autorizandoAdmin) return { ok: false, mensaje: 'Espera un momento…' };
+  autorizandoAdmin = true;
+  try {
+    const sesion = await iniciarSesion(email, password);
+    if (sesion.rol !== 'admin') {
+      cerrarEnServidor(sesion);
+      return { ok: false, mensaje: 'Ese usuario no es administrador.' };
+    }
+    sesionAdmin = sesion;
+    sincronizarSesion();
+    try {
+      await cargarTablasAdmin();
+    } catch (e) {
+      console.error(e);
+      quitarAdmin(true);
+      return { ok: false, mensaje: 'No se pudieron cargar los datos de administrador. Intenta de nuevo.' };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, mensaje: e.message };
+  } finally {
+    autorizandoAdmin = false;
+  }
+}
+
+// Deja de usar la sesión de administrador elevada: vuelve a caja y borra de memoria lo que solo el admin ve.
+function quitarAdmin(silencioso) {
+  const s = sesionAdmin;
+  sesionAdmin = null;
+  cerrarEnServidor(s);
+  vaciarTablasAdmin();
+  sincronizarSesion();
+  if (!silencioso) renderAll();
+}
+
 
 async function sbGet(tabla, qs = '') {
-  const r = await fetch(`${SB_URL}/rest/v1/${tabla}${qs ? '?' + qs : ''}`, { headers: sbH() });
+  const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}${qs ? '?' + qs : ''}`);
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
@@ -2116,8 +2494,8 @@ async function sbGetAll(tabla, qs = '') {
   let acumulado = [];
   for (;;) {
     const qsLote = (qs ? qs + '&' : '') + `limit=${LOTE}&offset=${offset}`;
-    const r = await fetch(`${SB_URL}/rest/v1/${tabla}?${qsLote}`, {
-      headers: sbH({ 'Prefer': 'count=exact' })
+    const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}?${qsLote}`, {
+      headers: { 'Prefer': 'count=exact' }
     });
     if (!r.ok) throw new Error(await r.text());
     const lote = await r.json();
@@ -2133,13 +2511,19 @@ async function sbGetAll(tabla, qs = '') {
   return acumulado;
 }
 
+// Tablas de auditoría: caja puede AGREGAR registros pero no leerlos (así un empleado no puede ver
+// ni alterar el rastro de lo que borra o descuenta). Para caja el insert no pide la fila de vuelta.
+const TABLAS_SOLO_ESCRITURA_CAJA = ['pedidos_eliminados', 'pedidos_descuentos'];
+
 async function sbInsert(tabla, data) {
-  const r = await fetch(`${SB_URL}/rest/v1/${tabla}`, {
+  const sinRetorno = TABLAS_SOLO_ESCRITURA_CAJA.includes(tabla) && !esAdminActivo();
+  const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}`, {
     method: 'POST',
-    headers: sbH({ 'Prefer': 'return=representation' }),
+    headers: { 'Prefer': sinRetorno ? 'return=minimal' : 'return=representation' },
     body: JSON.stringify(data)
   });
   if (!r.ok) throw new Error(await r.text());
+  if (sinRetorno) return [];
   return r.json(); // array de filas insertadas
 }
 
@@ -2170,9 +2554,9 @@ async function sbInsertConCuenta(tabla, datos) {
 }
 
 async function sbPatch(tabla, qs, data) {
-  const r = await fetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
+  const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
     method: 'PATCH',
-    headers: sbH({ 'Prefer': 'return=representation' }),
+    headers: { 'Prefer': 'return=representation' },
     body: JSON.stringify(data)
   });
   if (!r.ok) throw new Error(await r.text());
@@ -2180,9 +2564,8 @@ async function sbPatch(tabla, qs, data) {
 }
 
 async function sbDelete(tabla, qs) {
-  const r = await fetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
-    method: 'DELETE',
-    headers: sbH()
+  const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
+    method: 'DELETE'
   });
   if (!r.ok) throw new Error(await r.text());
 }
@@ -2206,7 +2589,10 @@ let ST = {
   abonosFiado: [], // abonos parciales contra el saldo total de un cliente fiado
   // Log de auditoría de descuentos aplicados — null (no []) si la tabla
   // pedidos_descuentos todavía no existe en Supabase (ver descuentosDisponibles()).
-  pedidosDescuentos: null
+  pedidosDescuentos: null,
+  // Filas de la tabla config (clave/valor). undefined = todavía no se cargó;
+  // null = la tabla config no existe en Supabase (ver sql/migracion_supabase_config.sql).
+  config: undefined
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -2245,12 +2631,44 @@ function showToast(msg, tipo = 'info', accion = null) {
 }
 
 // ── loadState: lee todas las tablas en paralelo ───────────────────────
+// Tablas que solo ve el administrador (finanzas y auditoría). Con una sesión de caja NO se
+// piden — el servidor tampoco las entregaría — y quedan vacías en memoria.
+function pedirTablasAdmin() {
+  return Promise.all([
+    sbGetAll('egresos',     'order=created_at.desc'),
+    sbGetAll('movimientos_caja', 'order=created_at.desc').catch(() => []),
+    sbGetAll('ingresos_extra', 'order=fecha.desc').catch(() => []),
+    sbGetAll('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
+    sbGetAll('pedidos_descuentos', 'order=created_at.desc').catch(() => null)
+  ]);
+}
+function asignarTablasAdmin([egresos, movimientosCaja, ingresosExtra, pedidosEliminados, pedidosDescuentos]) {
+  ST.egresos = egresos;
+  ST.movimientosCaja = movimientosCaja;
+  ST.ingresosExtra = ingresosExtra;
+  ST.pedidosEliminados = pedidosEliminados;
+  ST.pedidosDescuentos = pedidosDescuentos;
+}
+function vaciarTablasAdmin() {
+  ST.egresos = [];
+  ST.movimientosCaja = [];
+  ST.ingresosExtra = [];
+  ST.pedidosEliminados = [];
+  // Caja no puede LEER pedidos_descuentos (solo agregar registros). [] (y no null) significa "la tabla
+  // se asume presente" para descuentosDisponibles(): si se dejara null, caja perdería los descuentos.
+  ST.pedidosDescuentos = [];
+}
+// Al autorizar a un administrador sobre una sesión de caja: trae lo que faltaba y redibuja.
+async function cargarTablasAdmin() {
+  asignarTablasAdmin(await pedirTablasAdmin());
+  renderAll();
+}
+
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado, abonosFiado, pedidosDescuentos] = await Promise.all([
+    const [pedidos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, clientesFiado, abonosFiado, config, tablasAdmin] = await Promise.all([
       sbGetAll('pedidos',     'order=created_at.desc'),
-      sbGetAll('egresos',     'order=created_at.desc'),
       sbGetAll('inventario',  'order=nombre.asc'),
       sbGetAll('consumos',    'order=fecha.desc'),
       sbGetAll('gastos_dia',  'order=fecha.desc'),
@@ -2258,17 +2676,14 @@ async function loadState() {
       sbGetAll('cierres_dia', 'order=fecha.desc').catch(() => []),
       sbGetAll('aperturas_turno', 'order=created_at.desc').catch(() => []),
       sbGetAll('notas_dia',   'order=created_at.desc').catch(() => []),
-      sbGetAll('movimientos_caja', 'order=created_at.desc').catch(() => []),
-      sbGetAll('ingresos_extra', 'order=fecha.desc').catch(() => []),
-      sbGetAll('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
       sbGetAll('clientes_fiado', 'order=nombre.asc').catch(() => []),
       sbGetAll('abonos_fiado', 'order=fecha.desc').catch(() => []),
-      sbGetAll('pedidos_descuentos', 'order=created_at.desc').catch(() => null)
+      sbGetAll('config', 'order=clave.asc').catch(() => null),
+      esAdminActivo() ? pedirTablasAdmin() : null
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
     ST.pendientes = pedidos.filter(p => p.estado === 'pendiente');
-    ST.egresos    = egresos;
     ST.inventario = inventario;
     ST.consumos   = consumos;
     ST.gastosDia  = gastosDia;
@@ -2276,12 +2691,10 @@ async function loadState() {
     ST.cierresDia = cierresDia;
     ST.aperturasTurno = aperturasTurno;
     ST.notasDia   = notasDia;
-    ST.movimientosCaja = movimientosCaja;
-    ST.ingresosExtra   = ingresosExtra;
-    ST.pedidosEliminados = pedidosEliminados;
     ST.clientesFiado   = clientesFiado;
     ST.abonosFiado     = abonosFiado;
-    ST.pedidosDescuentos = pedidosDescuentos;
+    ST.config = config;
+    if (tablasAdmin) asignarTablasAdmin(tablasAdmin); else vaciarTablasAdmin();
 
     setSyncBadge('ok');
   } catch (e) {
@@ -2577,22 +2990,199 @@ function descuentosDisponibles() {
   return columnasOk && tablaOk;
 }
 
-// ── Exportar / Importar ───────────────────────────────────────────────
-function exportarDatos() {
-  const fecha = today();
-  const blob = new Blob([JSON.stringify({
-    ingresos: ST.ingresos,
-    pendientes: ST.pendientes,
-    egresos: ST.egresos,
-    inventario: ST.inventario,
-    consumos: ST.consumos,
-    gastosDia: ST.gastosDia
-  }, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `ElLobo_respaldo_${fecha}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+// ── Respaldo completo + aviso ─────────────────────────────────────────
+// El plan gratis de Supabase no trae copias automáticas: este respaldo es la red de
+// seguridad. Baja TODAS las tablas, verifica que no falte ninguna fila y registra la
+// fecha en config.ultimo_respaldo (de ahí sale el aviso de la pantalla).
+const RESPALDO_AVISO_DIAS = 7;   // más de esta cantidad de días sin respaldo → aviso ámbar
+const RESPALDO_ROJO_DIAS  = 10;  // desde esta cantidad de días → aviso rojo
+
+// TODAS las tablas que usa el código con sbGet/sbGetAll/sbInsert/sbPatch/sbDelete
+// (derivadas con grep, no de memoria) más config. Una prueba automática
+// (tests/respaldo.spec.js) falla si aparece una tabla nueva en el código y no se agrega aquí.
+const TABLAS_RESPALDO = [
+  'pedidos', 'egresos', 'inventario', 'consumos', 'gastos_dia', 'mesas', 'cierres_dia',
+  'aperturas_turno', 'notas_dia', 'movimientos_caja', 'ingresos_extra', 'pedidos_eliminados',
+  'clientes_fiado', 'abonos_fiado', 'pedidos_descuentos', 'config'
+];
+// Tablas que pueden no existir todavía en Supabase (migración sin correr): se omiten del
+// respaldo en vez de hacerlo fallar. Cualquier OTRA tabla que falle aborta el respaldo.
+const TABLAS_RESPALDO_OPCIONALES = {
+  config: () => Array.isArray(ST.config),
+  pedidos_descuentos: () => ST.pedidosDescuentos !== null && ST.pedidosDescuentos !== undefined
+};
+// Columna de orden para paginar sin saltar ni repetir filas (por defecto, id).
+const ORDEN_RESPALDO = { config: 'order=clave.asc' };
+
+// Igual que sbGetAll(), pero devuelve también el total que reporta Supabase
+// (header Content-Range) para poder verificar que no falta ninguna fila.
+async function sbGetAllConTotal(tabla, qs = '') {
+  const LOTE = 5000;
+  let offset = 0, acumulado = [], total = null;
+  for (;;) {
+    const qsLote = (qs ? qs + '&' : '') + `limit=${LOTE}&offset=${offset}`;
+    const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}?${qsLote}`, { headers: { 'Prefer': 'count=exact' } });
+    if (!r.ok) throw new Error(await r.text());
+    const lote = await r.json();
+    acumulado = acumulado.concat(lote);
+    const t = parseInt((r.headers.get('content-range') || '').split('/')[1], 10);
+    if (Number.isFinite(t)) total = t;
+    if (!lote.length) break;
+    offset += lote.length;
+    if (Number.isFinite(t) ? offset >= t : lote.length < LOTE) break;
+  }
+  return { filas: acumulado, total };
+}
+
+// Baja una tabla completa y la verifica: las filas bajadas deben coincidir con el total de
+// Supabase y no haber ids repetidos. Si no coincide (por ejemplo, entró un pedido mientras
+// se bajaba), reintenta una vez; si sigue sin coincidir, falla con un mensaje claro.
+async function descargarTablaVerificada(tabla) {
+  const orden = ORDEN_RESPALDO[tabla] || 'order=id.asc';
+  let problema = '';
+  for (let intento = 1; intento <= 2; intento++) {
+    let res;
+    try { res = await sbGetAllConTotal(tabla, orden); }
+    catch (e) { res = await sbGetAllConTotal(tabla, ''); } // tabla sin columna id: sin orden explícito
+    const { filas, total } = res;
+    if (total === null) { problema = `Supabase no informó el total de filas de "${tabla}"`; continue; }
+    if (filas.length !== total) { problema = `"${tabla}": se bajaron ${filas.length} filas pero Supabase reporta ${total}`; continue; }
+    if (filas.length && 'id' in filas[0] && new Set(filas.map(f => f.id)).size !== filas.length) { problema = `"${tabla}": hay filas repetidas`; continue; }
+    return filas;
+  }
+  throw new Error(problema);
+}
+
+// Un solo "toast" de progreso que se actualiza (null lo quita).
+function progresoRespaldo(texto) {
+  let el = document.getElementById('toast-respaldo');
+  if (texto === null) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast-respaldo';
+    el.className = 'toast info';
+    el.appendChild(document.createElement('span'));
+    document.body.appendChild(el);
+  }
+  el.firstChild.textContent = texto;
+}
+
+// Guarda config.ultimo_respaldo (insert o patch). Devuelve true si quedó registrado.
+async function registrarUltimoRespaldo(valor) {
+  if (!Array.isArray(ST.config)) return false;
+  try {
+    const existente = ST.config.find(c => c.clave === 'ultimo_respaldo');
+    if (existente) {
+      const [fila] = await sbPatch('config', 'clave=eq.ultimo_respaldo', { valor, actualizado_en: new Date().toISOString() });
+      Object.assign(existente, fila || { valor });
+    } else {
+      const [fila] = await sbInsert('config', { clave: 'ultimo_respaldo', valor });
+      ST.config.push(fila || { clave: 'ultimo_respaldo', valor });
+    }
+    return true;
+  } catch (e) { console.error(e); return false; }
+}
+
+let respaldoEnCurso = false;
+async function respaldoCompleto() {
+  if (respaldoEnCurso) { showToast('Ya hay un respaldo en curso…', 'info'); return; }
+  respaldoEnCurso = true;
+  try {
+    const lista = TABLAS_RESPALDO.filter(t => !TABLAS_RESPALDO_OPCIONALES[t] || TABLAS_RESPALDO_OPCIONALES[t]());
+    const tablas = {}, conteos = {};
+    for (let i = 0; i < lista.length; i++) {
+      progresoRespaldo(`💾 Respaldando ${i + 1}/${lista.length}: ${lista[i]}… (no cierres la página)`);
+      tablas[lista[i]] = await descargarTablaVerificada(lista[i]);
+      conteos[lista[i]] = tablas[lista[i]].length;
+    }
+    const fecha = today();
+    const generado_en = new Date().toISOString();
+    const blob = new Blob([JSON.stringify({ version: 1, generado_en, fecha, conteos, tablas }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ElLobo_respaldo_completo_${fecha}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    const guardado = await registrarUltimoRespaldo({ generado_en, fecha, conteos });
+    progresoRespaldo(null);
+    const filasTotal = Object.values(conteos).reduce((x, y) => x + y, 0);
+    showToast(`✅ Respaldo completo descargado (${lista.length} tablas, ${filasTotal} filas)`, 'ok');
+    if (!guardado) showToast('⚠ El archivo se descargó, pero no quedó registrado el respaldo (falta la tabla config en Supabase): el aviso seguirá activo', 'warning');
+    renderAvisoRespaldo();
+  } catch (e) {
+    console.error(e);
+    progresoRespaldo(null);
+    showToast('⚠ El respaldo NO se completó: ' + e.message, 'warning');
+  } finally {
+    respaldoEnCurso = false;
+  }
+}
+
+// El botón "Exportar" del encabezado: el respaldo completo siempre pasa por el acceso de
+// administrador (aplicarGateAdmin/intentarAccesoAdmin, igual que el cierre manual).
+let respaldoPendiente = false;
+function pedirRespaldoCompleto() {
+  if (adminAutenticado) { respaldoCompleto(); return; }
+  respaldoPendiente = true;
+  document.getElementById('respaldo-password').value = '';
+  document.getElementById('modal-respaldo').style.display = 'flex';
+  aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal);
+}
+function iniciarRespaldoDesdeModal() {
+  if (!respaldoPendiente) return;
+  respaldoPendiente = false;
+  cerrarModalRespaldo();
+  respaldoCompleto();
+}
+async function intentarAccesoRespaldo() {
+  await intentarAccesoAdmin('respaldo-password');
+  aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal);
+}
+function cerrarModalRespaldo() {
+  respaldoPendiente = false;
+  document.getElementById('modal-respaldo').style.display = 'none';
+}
+function cerrarModalRespaldoClick(e) {
+  if (e.target.id === 'modal-respaldo') cerrarModalRespaldo();
+}
+// Nombre anterior (sigue existiendo por si algo lo llama).
+function exportarDatos() { pedirRespaldoCompleto(); }
+
+// Días calendario entre dos fechas AAAA-MM-DD (sin depender de la zona horaria).
+function diasDesdeFecha(fechaStr, hoyStr = today()) {
+  const aMs = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((aMs(hoyStr) - aMs(fechaStr)) / 86400000);
+}
+// null = sin aviso; 'ambar' o 'rojo'. dias null/NaN = nunca se ha hecho un respaldo.
+function nivelAvisoRespaldo(dias) {
+  if (dias === null || dias === undefined || Number.isNaN(dias)) return 'ambar';
+  if (dias >= RESPALDO_ROJO_DIAS) return 'rojo';
+  if (dias > RESPALDO_AVISO_DIAS) return 'ambar';
+  return null;
+}
+function renderAvisoRespaldo() {
+  const el = document.getElementById('aviso-respaldo');
+  if (!el) return;
+  if (ST.config === undefined) { el.style.display = 'none'; el.innerHTML = ''; return; } // aún no cargó
+  if (ST.config === null) {
+    el.innerHTML = `<div class="alert info"><div style="flex:1;">ℹ️ El aviso de respaldo está desactivado: falta crear la tabla <b>config</b> en Supabase (archivo sql/migracion_supabase_config.sql).</div></div>`;
+    el.style.display = '';
+    return;
+  }
+  const fila = ST.config.find(c => c.clave === 'ultimo_respaldo');
+  const fecha = fila && fila.valor ? (fila.valor.fecha || String(fila.valor.generado_en || '').slice(0, 10)) : '';
+  const dias = fecha ? diasDesdeFecha(fecha) : null;
+  const nivel = nivelAvisoRespaldo(dias);
+  if (!nivel) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const texto = (dias === null || Number.isNaN(dias))
+    ? 'Todavía no se ha hecho ningún respaldo completo.'
+    : `Hace ${dias} días no se hace respaldo completo.`;
+  el.innerHTML = `<div class="alert ${nivel === 'rojo' ? 'warning' : 'info'}">
+    <div style="flex:1;">${nivel === 'rojo' ? '🚨' : '⚠️'} ${texto}</div>
+    <button class="btn btn-outline" style="font-size:11px;" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo ahora</button>
+  </div>`;
+  el.style.display = '';
 }
 
 // Período de los datos a descargar en la pestaña Datos (para el modelo
@@ -2730,6 +3320,9 @@ function exportarExcelCompleto() {
 async function importarDatos(e) {
   const file = e.target.files[0];
   if (!file) return;
+  // Solo administrador (el botón ya está oculto para caja; esto es un segundo seguro en pantalla —
+  // el servidor igualmente no deja a caja escribir en egresos).
+  if (!adminAutenticado) { e.target.value = ''; showToast('🔒 Importar datos es solo para administradores', 'warning'); return; }
   try {
     const datos = JSON.parse(await file.text());
     if (!datos.ingresos && !datos.egresos) {
@@ -4529,7 +5122,7 @@ function abrirModalDescuento(ids) {
   // día solo se puede tocar con la contraseña de administrador — cambiar su
   // monto equivale a corregir un cierre de otro día.
   if (primero.estado === 'pagado' && primero.fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, ingresa la contraseña en Auditoría o el historial de cierres', 'warning');
+    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, autorízate como administrador en Auditoría o en el historial de cierres', 'warning');
     return;
   }
   descuentoModalIds = idArr;
@@ -5831,7 +6424,7 @@ function cerrarModalTurnoClick(e) {
 }
 
 // ── Cierre manual: respaldo por si el sistema no se pudo usar ese día y las
-// cuentas se llevaron aparte. Reutiliza la contraseña compartida de admin. ──
+// cuentas se llevaron aparte. Solo administrador. ──
 let cierreManualTurno = 'almuerzo';
 // Gastos categorizados en cola, en memoria, hasta que se pulse "Guardar cierre
 // manual" — ahí se insertan como filas reales en gastos_dia (igual que
@@ -5872,10 +6465,10 @@ function cerrarModalCierreManualClick(e) {
   if (e.target.id === 'modal-cierre-manual') cerrarModalCierreManual();
 }
 
-// intentarAccesoAdmin() ya deja adminAutenticado=true/false y muestra el toast;
+// intentarAccesoAdmin() ya deja adminAutenticado=true/false y muestra el aviso;
 // aquí solo hace falta re-evaluar el gate de ESTE modal (no lo hace renderAll()).
-function intentarAccesoCierreManual() {
-  intentarAccesoAdmin('cierremanual-password');
+async function intentarAccesoCierreManual() {
+  await intentarAccesoAdmin('cierremanual-password');
   aplicarGateAdmin('cierremanual', () => prepararFormCierreManual(cierreManualPendiente));
 }
 
@@ -8676,7 +9269,7 @@ function renderDiaADia() {
     if (btnCorregir) btnCorregir.style.display = puedeCorregir ? '' : 'none';
     if (msgEl) msgEl.textContent = puedeCorregir
       ? '🔒 Este turno ya está cerrado. Los valores quedaron guardados.'
-      : '🔒 Este cierre es de otro día — ingresa la contraseña en "Historial completo de cierres" (más abajo) para verlo o corregirlo.';
+      : '🔒 Este cierre es de otro día — autorízate como administrador en "Historial completo de cierres" (más abajo) para verlo o corregirlo.';
 
     renderNotasCierre(fecha);
     aplicarGateAdmin('dd-historial', renderHistorialCierres);
@@ -8766,7 +9359,7 @@ function irADiaADia(fecha, turno) {
 function corregirCierreActual() {
   const fecha = document.getElementById('dd-fecha').value || today();
   if (fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para corregir un cierre de otro día, ingresa la contraseña en "Historial completo de cierres"', 'warning');
+    showToast('🔒 Para corregir un cierre de otro día, autorízate como administrador en "Historial completo de cierres"', 'warning');
     return;
   }
   // Un cierre manual no tiene pedidos reales detrás — corregirlo por la vía
@@ -9080,38 +9673,48 @@ function renderCaja() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// ACCESO ADMINISTRADOR — una sola contraseña compartida por Tablero,
-// Ingresos, Egresos, Caja, Auditoría y el historial completo de Cierre.
-// Autenticarse en cualquiera de ellas desbloquea las demás por el resto
-// de la sesión (hasta recargar la página o pulsar "Cerrar sesión").
-// (Nota: es un candado simple del lado del cliente, pensado para que no
-// cualquiera entre a curiosear — no es seguridad real de servidor, ya que
-// el código de la página es visible para quien sepa cómo mirarlo.)
+// ACCESO ADMINISTRADOR — Tablero, Ingresos, Egresos, Caja, Auditoría, Datos,
+// el historial completo de cierres, el respaldo y el cierre manual son solo
+// para el rol "admin" (cada dueño tiene su propio usuario).
+// · Si se entró con un usuario admin, todo esto ya está abierto.
+// · Si se entró como caja, al abrir una de estas secciones se pide el correo y
+//   la contraseña de un administrador ("autorizar en el sitio"). Autorizarse en
+//   una abre las demás hasta pulsar "Cerrar sesión" o recargar la página.
+// El candado de pantalla es solo comodidad: el servidor (RLS) es quien realmente
+// impide que caja lea o toque las tablas de administración (ver sql/).
 // ══════════════════════════════════════════════════════════════════════
-const ADMIN_PASSWORD = 'Chocolate1625@2004';
-let adminAutenticado = false;
+let adminAutenticado = false;   // lo calcula sincronizarSesion() a partir del rol del token
 
-function intentarAccesoAdmin(inputId) {
+// Botón "Entrar" de cada candado: lee el correo (campo "-email" junto a la contraseña) y la clave.
+async function intentarAccesoAdmin(inputId) {
   const input = document.getElementById(inputId);
-  if (!input) return;
-  if (input.value === ADMIN_PASSWORD) {
-    adminAutenticado = true;
-    input.value = '';
-    showToast('🔓 Acceso concedido', 'ok');
-    renderAll();
-  } else {
-    showToast('⚠ Contraseña incorrecta', 'warning');
-    input.value = '';
+  if (!input) return false;
+  const campoEmail = document.getElementById(inputId.replace(/-password$/, '-email'));
+  const email = campoEmail ? campoEmail.value.trim() : '';
+  const password = input.value;
+  if (!email || !password) {
+    showToast('⚠ Escribe el correo y la contraseña de un administrador', 'warning');
+    return false;
   }
+  input.value = '';
+  const r = await autorizarAdmin(email, password);
+  if (!r.ok) { showToast('⚠ ' + r.mensaje, 'warning'); return false; }
+  if (campoEmail) campoEmail.value = '';
+  showToast('🔓 Acceso de administrador concedido', 'ok');
+  renderAll();
+  return true;
 }
 
+// "🔒 Cerrar sesión" dentro de las secciones de administrador:
+// · autorizado en el sitio → vuelve a caja;  · entró como admin → sale del sistema.
 function cerrarSesionAdmin() {
-  adminAutenticado = false;
+  if (sesionAdmin) { quitarAdmin(); return; }
+  if (sesionBase && sesionBase.rol === 'admin') { salirDelSistema(); return; }
   renderAll();
 }
 
-// Muestra el login o el contenido de una sección protegida según el estado
-// de adminAutenticado, y renderiza su contenido si corresponde.
+// Muestra el candado o el contenido de una sección protegida según adminAutenticado
+// (rol admin en la sesión activa), y renderiza su contenido si corresponde.
 // Espera divs con id "{prefix}-login" y "{prefix}-contenido".
 function aplicarGateAdmin(prefix, renderFn) {
   const login = document.getElementById(prefix + '-login');
@@ -9199,6 +9802,9 @@ function auditoriaVistosGuardados() {
 function actualizarBadgeAuditoria() {
   const badge = document.getElementById('audit-badge');
   if (!badge) return;
+  // Auditoría es de administrador: con caja no se muestra ni el numerito (y caja ni siquiera
+  // puede leer los pedidos eliminados / descuentos, así que la cuenta saldría incompleta).
+  if (!adminAutenticado) { badge.style.display = 'none'; return; }
   const vistos = auditoriaVistosGuardados();
   const nuevos = auditoriaEventosIds().filter(id => !vistos.has(id));
   badge.textContent = nuevos.length;
@@ -9206,6 +9812,7 @@ function actualizarBadgeAuditoria() {
 }
 
 function marcarAuditoriaVista() {
+  if (!adminAutenticado) return;   // con caja no se ve la pestaña: no se pisa lo que ya vio un administrador
   try { localStorage.setItem(AUDITORIA_VISTOS_KEY, JSON.stringify(auditoriaEventosIds())); } catch(e) {}
   actualizarBadgeAuditoria();
 }
@@ -9422,7 +10029,7 @@ function renderAll() {
   renderFiados();
   renderDiaADia();
   renderInventario();
-  // Administrativas — todas detrás de la misma contraseña compartida
+  // Administrativas — solo rol admin
   aplicarGateAdmin('tablero', renderTablero);
   aplicarGateAdmin('ingfin',  renderIngresosFinanciero);
   aplicarGateAdmin('egresos', renderEgresos);
@@ -9431,10 +10038,27 @@ function renderAll() {
   aplicarGateAdmin('datos', renderDatosExport);
   renderPendientesNotasBadge();
   actualizarBadgeAuditoria();
+  renderAvisoRespaldo();
 }
 
 // ── ARRANQUE ──────────────────────────────────────────────────────────
-loadState();
+// Sin sesión no se carga ni se muestra nada: primero la pantalla de entrada.
+async function arrancar() {
+  const guardada = leerSesionCaja();            // solo la sesión de caja se recuerda en el equipo
+  if (guardada) {
+    sesionBase = guardada;
+    try {
+      await tokenDe(sesionBase);                // si venció, la renueva
+    } catch (e) {
+      // Sin internet: se sigue (loadState avisará "sin conexión"). Si el servidor la rechazó, sesionPerdida() ya abrió el login.
+      console.error('No se pudo renovar la sesión:', e);
+    }
+  }
+  if (!sesionBase) { mostrarLogin(); return; }
+  sincronizarSesion();
+  await loadState();
+}
+arrancar();
 </script>
 </body>
 </html>
