@@ -28,7 +28,7 @@ GitHub Pages publica la rama `main` tal cual. Cada cambio llega a `main` por un 
 
 ## Cómo se entra
 
-Con usuario y contraseña (Supabase Auth). Hay tres roles: **admin** (cada dueño con su usuario), **caja** (un usuario compartido para el mostrador) y **respaldo** (solo lectura, para la copia automática; no entra a la pantalla). Las reglas las hace cumplir la base de datos (RLS), no la pantalla. Detalle en `docs/MATRIZ_PERMISOS.md`.
+Con usuario y contraseña (Supabase Auth). Hay tres roles: **admin** (cada dueño con su usuario), **caja** (un usuario compartido para el mostrador) y **respaldo** (solo lectura, reservado por si algún día el respaldo se automatiza; no entra a la pantalla). Las reglas las hace cumplir la base de datos (RLS), no la pantalla. Detalle en `docs/MATRIZ_PERMISOS.md`.
 
 ## Pruebas
 
