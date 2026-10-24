@@ -48,8 +48,8 @@ test.describe('pantalla de entrada', () => {
 
   test('clave incorrecta: avisa, sigue en la entrada y no carga nada', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: null });
-    await escribirLogin(page, 'caja@lobo.test', 'clave-equivocada');
-    await expect(page.locator('#login-error')).toContainText('Correo o contraseña incorrectos');
+    await escribirLogin(page, 'caja@elobo.test', 'clave-equivocada');
+    await expect(page.locator('#login-error')).toContainText('Usuario o contraseña incorrectos');
     expect(await loginVisible(page)).toBe(true);
     expect(reg.rest).toEqual([]);
     expect(await guardado(page)).toBeNull();
@@ -60,22 +60,71 @@ test.describe('pantalla de entrada', () => {
   test('faltan datos: pide escribir correo y contraseña sin llamar al servidor', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: null });
     await page.click('#login-btn');
-    await expect(page.locator('#login-error')).toContainText('Escribe tu correo y tu contraseña');
+    await expect(page.locator('#login-error')).toContainText('Escribe tu usuario y tu contraseña');
     expect(reg.auth).toEqual([]);
   });
 
   test('entrar con Enter funciona', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: null });
-    await page.fill('#login-email', 'caja@lobo.test');
+    await page.fill('#login-email', 'caja@elobo.test');
     await page.fill('#login-password', 'clave-caja');
     await page.press('#login-password', 'Enter');
     await esperarCarga(page);
-    expect(reg.auth).toContain('password:caja@lobo.test');
+    expect(reg.auth).toContain('password:caja@elobo.test');
+  });
+
+  test('basta escribir el usuario corto («caja»): el sistema completa el correo por detrás', async ({ page }) => {
+    const reg = await abrirSistema(page, { usuario: null });
+    await escribirLogin(page, 'caja', 'clave-caja');
+    await esperarCarga(page);
+    expect(reg.auth).toEqual(['password:caja@elobo.test']);
+    await expect(page.locator('#rolBadge')).toHaveText('👤 Caja');
+  });
+
+  test('mayúsculas y espacios de más no importan («  Caja »)', async ({ page }) => {
+    const reg = await abrirSistema(page, { usuario: null });
+    await escribirLogin(page, '  Caja ', 'clave-caja');
+    await esperarCarga(page);
+    expect(reg.auth).toEqual(['password:caja@elobo.test']);
+  });
+
+  test('un dueño entra escribiendo solo «dueno1» y ve su nombre corto', async ({ page }) => {
+    const reg = await abrirSistema(page, { usuario: null });
+    await escribirLogin(page, 'dueno1', 'clave-dueno1');
+    await esperarCarga(page);
+    expect(reg.auth).toEqual(['password:dueno1@elobo.test']);
+    await expect(page.locator('#rolBadge')).toHaveText('👑 Admin · dueno1');
+  });
+
+  test('la clave de otro usuario con el nombre corto sigue siendo rechazada', async ({ page }) => {
+    const reg = await abrirSistema(page, { usuario: null });
+    await escribirLogin(page, 'caja', 'clave-dueno1');
+    await expect(page.locator('#login-error')).toContainText('Usuario o contraseña incorrectos');
+    expect(await loginVisible(page)).toBe(true);
+    expect(reg.rest).toEqual([]);
+  });
+
+  test('un correo completo de otro dominio se envía tal cual (no se le agrega nada)', async ({ page }) => {
+    const reg = await abrirSistema(page, { usuario: null });
+    await escribirLogin(page, 'alguien@otro-dominio.com', 'x');
+    await expect(page.locator('#login-error')).toContainText('Usuario o contraseña incorrectos');
+    expect(reg.auth).toEqual(['password-fallido:alguien@otro-dominio.com']);
+  });
+
+  test('correoDeUsuario / nombreDeUsuario', async ({ page }) => {
+    await abrirSistema(page, { usuario: null });
+    const r = await page.evaluate(() => ({
+      corto: correoDeUsuario('caja'), mayus: correoDeUsuario('  LuisCadlo '), completo: correoDeUsuario('a@b.com'),
+      vacio: correoDeUsuario('   '), nulo: correoDeUsuario(null),
+      nombre: nombreDeUsuario('luiscadlo@elobo.test'), ajeno: nombreDeUsuario('a@b.com'), dominio: DOMINIO_USUARIOS,
+    }));
+    expect(r).toEqual({ corto: 'caja@elobo.test', mayus: 'luiscadlo@elobo.test', completo: 'a@b.com', vacio: '', nulo: '',
+                        nombre: 'luiscadlo', ajeno: 'a@b.com', dominio: 'elobo.test' });
   });
 
   test('caja: entra, carga SOLO las tablas operativas y todo lo hace con el token de caja', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: null });
-    await escribirLogin(page, 'caja@lobo.test', 'clave-caja');
+    await escribirLogin(page, 'caja@elobo.test', 'clave-caja');
     await esperarCarga(page);
     expect(await loginVisible(page)).toBe(false);
     expect([...new Set(reg.peticiones)].sort()).toEqual([...TABLAS_CAJA].sort());
@@ -92,7 +141,7 @@ test.describe('pantalla de entrada', () => {
     expect([...new Set(reg.peticiones)].sort()).toEqual([...TABLAS_LOADSTATE].sort());
     expect(new Set(reg.rest.map(r => r.rol))).toEqual(new Set(['admin']));
     expect(reg.denegadas).toEqual([]);
-    await expect(page.locator('#rolBadge')).toContainText('dueno1@lobo.test');
+    await expect(page.locator('#rolBadge')).toHaveText('👑 Admin · dueno1');   // se muestra el nombre corto
     await expect(page.locator('#btn-importar')).toBeVisible();
     expect(await page.evaluate(() => adminAutenticado)).toBe(true);
   });
@@ -109,7 +158,7 @@ test.describe('pantalla de entrada', () => {
 
   test('un usuario de respaldo NO puede entrar a la pantalla (y se cierra su sesión)', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: null });
-    await escribirLogin(page, 'respaldo@lobo.test', 'clave-respaldo');
+    await escribirLogin(page, 'respaldo@elobo.test', 'clave-respaldo');
     await expect(page.locator('#login-error')).toContainText('solo para el respaldo automático');
     expect(await loginVisible(page)).toBe(true);
     expect(reg.rest).toEqual([]);
@@ -119,7 +168,7 @@ test.describe('pantalla de entrada', () => {
 
   test('un usuario sin rol asignado no entra y se le explica por qué', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: null });
-    await escribirLogin(page, 'sinrol@lobo.test', 'clave-sinrol');
+    await escribirLogin(page, 'sinrol@elobo.test', 'clave-sinrol');
     await expect(page.locator('#login-error')).toContainText('todavía no tiene un rol asignado');
     expect(reg.rest).toEqual([]);
   });
@@ -127,7 +176,7 @@ test.describe('pantalla de entrada', () => {
   for (const [falla, texto] of [['red', 'No hay conexión'], ['500', 'no responde'], ['429', 'Demasiados intentos']]) {
     test(`el servicio de acceso falla (${falla}): mensaje claro y se puede reintentar`, async ({ page }) => {
       const reg = await abrirSistema(page, { usuario: null, authFalla: falla });
-      await escribirLogin(page, 'caja@lobo.test', 'clave-caja');
+      await escribirLogin(page, 'caja@elobo.test', 'clave-caja');
       await expect(page.locator('#login-error')).toContainText(texto);
       expect(await loginVisible(page)).toBe(true);
       expect(reg.rest).toEqual([]);
@@ -140,7 +189,7 @@ test.describe('pantalla de entrada', () => {
 test.describe('sesión guardada (caja)', () => {
   test('al entrar como caja se recuerda; la clave NO se guarda en ningún lado', async ({ page }) => {
     await abrirSistema(page, { usuario: null });
-    await escribirLogin(page, 'caja@lobo.test', 'clave-caja');
+    await escribirLogin(page, 'caja@elobo.test', 'clave-caja');
     await esperarCarga(page);
     const g = await guardado(page);
     expect(g).not.toBeNull();
@@ -160,11 +209,11 @@ test.describe('sesión guardada (caja)', () => {
   test('sesión vencida: se renueva sola y se guarda la nueva', async ({ page }) => {
     const ahora = Math.floor(new Date('2026-10-20T14:00:00-05:00').getTime() / 1000);   // el reloj de las pruebas está fijo
     const reg = await abrirSistema(page, { usuario: null });
-    const vencida = reg.emitirSesion('caja@lobo.test', { expires_at: ahora - 10 });
+    const vencida = reg.emitirSesion('caja@elobo.test', { expires_at: ahora - 10 });
     await page.evaluate(([k, v]) => localStorage.setItem(k, v), [CLAVE_GUARDADA, JSON.stringify(vencida)]);
     await page.reload();
     await esperarCarga(page);
-    expect(reg.auth).toContain('refresh:caja@lobo.test');
+    expect(reg.auth).toContain('refresh:caja@elobo.test');
     const nueva = JSON.parse(await guardado(page));
     expect(nueva.refresh_token).not.toBe(vencida.refresh_token);   // Supabase rota el refresh_token: se guarda el nuevo
     expect(nueva.expires_at).toBeGreaterThan(ahora);
@@ -175,7 +224,7 @@ test.describe('sesión guardada (caja)', () => {
     const ahora = Math.floor(new Date('2026-10-20T14:00:00-05:00').getTime() / 1000);
     const reg = await abrirSistema(page, {
       usuario: null, rechazarRefresh: true, esperarLogin: true,
-      sesionGuardada: { access_token: 'x.y.z', refresh_token: 'refresh-viejo', expires_at: ahora - 60, email: 'caja@lobo.test', rol: 'caja' },
+      sesionGuardada: { access_token: 'x.y.z', refresh_token: 'refresh-viejo', expires_at: ahora - 60, email: 'caja@elobo.test', rol: 'caja' },
     });
     expect(await loginVisible(page)).toBe(true);
     await expect(page.locator('#login-error')).toContainText('Tu sesión venció');
@@ -195,7 +244,7 @@ test.describe('sesión guardada (caja)', () => {
   test('si otra pestaña ya renovó, se adopta su sesión en vez de gastar el refresh_token viejo', async ({ page }) => {
     const reg = await abrirSistema(page);
     const ahora = Math.floor(new Date('2026-10-20T14:00:00-05:00').getTime() / 1000);
-    const deOtraPestana = reg.emitirSesion('caja@lobo.test');   // sesión más nueva, vigente
+    const deOtraPestana = reg.emitirSesion('caja@elobo.test');   // sesión más nueva, vigente
     await page.evaluate(([k, v]) => { localStorage.setItem(k, v); sesionBase.expires_at = Math.floor(Date.now() / 1000) - 5; }, [CLAVE_GUARDADA, JSON.stringify(deOtraPestana)]);
     const antes = reg.auth.filter(a => a.startsWith('refresh')).length;
     await page.evaluate(() => sbGet('mesas'));
@@ -236,24 +285,34 @@ test.describe('caja y autorización de administrador', () => {
     for (const [id, pre] of [['dashboard', 'tablero'], ['ingfin', 'ingfin'], ['egresos', 'egresos'], ['caja', 'caja'], ['auditoria', 'auditoria'], ['datos', 'datos']]) {
       await irA(page, id);
       await expect(page.locator(`#${pre}-login`)).toBeVisible();
-      await expect(page.locator(`#${pre}-email`)).toBeVisible();      // se pide correo + contraseña
+      await expect(page.locator(`#${pre}-email`)).toBeVisible();      // se pide usuario + contraseña
       await expect(page.locator(`#${pre}-password`)).toBeVisible();
       await expect(page.locator(`#${pre}-contenido`)).toBeHidden();
     }
     expect(reg.errores).toEqual([]);
   });
 
+  test('en el candado basta escribir «dueno1» (usuario corto) y la contraseña', async ({ page }) => {
+    const reg = await abrirSistema(page);
+    await irA(page, 'egresos');
+    await page.fill('#egresos-email', 'dueno1');
+    await page.fill('#egresos-password', 'clave-dueno1');
+    await page.click('#egresos-login button');
+    await expect(page.locator('#egresos-contenido')).toBeVisible();
+    expect(reg.auth).toContain('password:dueno1@elobo.test');
+  });
+
   test('autorizar con clave equivocada o con un usuario que no es admin NO abre nada', async ({ page }) => {
     const reg = await abrirSistema(page);
     await irA(page, 'egresos');
-    await page.fill('#egresos-email', 'dueno1@lobo.test');
+    await page.fill('#egresos-email', 'dueno1@elobo.test');
     await page.fill('#egresos-password', 'mala');
     await page.click('#egresos-login button');
-    await expect(page.locator('.toast.warning', { hasText: 'Correo o contraseña incorrectos' })).toBeVisible();
+    await expect(page.locator('.toast.warning', { hasText: 'Usuario o contraseña incorrectos' })).toBeVisible();
     await expect(page.locator('#egresos-contenido')).toBeHidden();
 
     // la clave de caja no sirve para abrir secciones de administrador
-    await page.fill('#egresos-email', 'caja@lobo.test');
+    await page.fill('#egresos-email', 'caja@elobo.test');
     await page.fill('#egresos-password', 'clave-caja');
     await page.click('#egresos-login button');
     await expect(page.locator('.toast.warning', { hasText: 'Ese usuario no es administrador' })).toBeVisible();
@@ -271,12 +330,12 @@ test.describe('caja y autorización de administrador', () => {
   test('un dueño se autoriza en el sitio: se abren TODAS las secciones y se cargan las tablas de admin', async ({ page }) => {
     const reg = await abrirSistema(page);
     await irA(page, 'egresos');
-    await page.fill('#egresos-email', 'dueno2@lobo.test');         // cualquier dueño, cada uno con su usuario
+    await page.fill('#egresos-email', 'dueno2@elobo.test');         // cualquier dueño, cada uno con su usuario
     await page.fill('#egresos-password', 'clave-dueno2');
     await page.click('#egresos-login button');
     await expect(page.locator('#egresos-contenido')).toBeVisible();
     await expect(page.locator('#rolBadge')).toContainText('Caja');
-    await expect(page.locator('#rolBadge')).toContainText('dueno2@lobo.test');
+    await expect(page.locator('#rolBadge')).toHaveText('👤 Caja · 🔓 dueno2');
     // se pidieron las tablas de admin con el token de admin
     expect(reg.rest.filter(r => TABLAS_SOLO_ADMIN.includes(r.tabla)).every(r => r.rol === 'admin')).toBe(true);
     expect([...new Set(reg.peticiones)].sort()).toEqual([...TABLAS_LOADSTATE].sort());
