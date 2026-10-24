@@ -424,8 +424,6 @@
   <div class="header-right">
     <div id="syncBadge" style="border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid rgba(232,184,75,0.4);background:rgba(232,184,75,0.1);color:var(--accent);">🔄 Sincronizando…</div>
     <button class="btn-abrir-turno" id="btn-abrir-turno-header" onclick="abrirModalTurno()" title="Registrar caja inicial del turno">🔓 Abrir turno</button>
-    <button class="btn btn-outline" id="btn-exportar" data-solo-admin onclick="pedirRespaldoCompleto()" style="font-size:11px;padding:6px 12px;display:none;" title="Respaldo completo de todas las tablas (solo administrador)">⬇ <span class="btn-label">Exportar</span></button>
-    <label id="btn-importar" data-solo-admin class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;display:none;" title="Importar (solo administrador; limitado: ingresos, egresos, inventario y gastos del día)">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
     <div id="rolBadge" style="display:none;border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);" title="Usuario con el que se inició sesión"></div>
     <button class="btn btn-outline" id="btn-salir" onclick="salirDelSistema()" style="font-size:11px;padding:6px 12px;display:none;" title="Cerrar la sesión de este equipo">🚪 <span class="btn-label">Salir</span></button>
     <div class="turno-badge turno-almuerzo" id="turnoBadge">☀️ Almuerzo</div>
@@ -1664,10 +1662,18 @@
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
       <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
     </div>
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-header"><div class="panel-title">💾 Respaldo completo (copia de seguridad)</div></div>
+      <div class="panel-body">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Descarga un archivo <b>.json</b> con TODAS las tablas del sistema, completas (pedidos, egresos, cierres, caja, fiados, inventario, auditoría…). Es la copia que sirve para recuperar el sistema si algo falla (se restaura con <code>docs/RESTAURAR.md</code>). Hazlo <b>cada domingo</b> y guarda el archivo <b>fuera del repositorio</b> (que es público). Solo se registra como hecho si bajaron todas las filas.</div>
+        <div id="datos-respaldo-estado" style="font-size:12px;color:var(--text2);margin-bottom:14px;"></div>
+        <button class="btn btn-primary" id="btn-respaldo-completo" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo completo (.json)</button>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-header"><div class="panel-title">📊 Exportar datos a Excel</div></div>
       <div class="panel-body">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Genera un Excel (.xlsx) con una hoja por cada tabla del sistema (pedidos, egresos, cierres, caja, inventario, etc.) — pensado para análisis externo en Excel o Python (es el archivo que lee el modelo financiero), no para reimportar. Para respaldo/reimportación, usa el botón "Exportar" (JSON) del encabezado.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Para análisis (no es una copia de seguridad). Genera un Excel (.xlsx) con una hoja por cada tabla del sistema (pedidos, egresos, cierres, caja, inventario, etc.) — pensado para análisis externo en Excel o Python (es el archivo que lee el modelo financiero). No se puede restaurar desde aquí: para la copia de seguridad usa la tarjeta «Respaldo completo» de arriba.</div>
 
         <div class="filtro-label">Período de los datos históricos a descargar</div>
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:6px;">
@@ -2424,13 +2430,17 @@ function sincronizarSesion() {
   }
   const badge = document.getElementById('rolBadge');
   const salir = document.getElementById('btn-salir');
-  // Funciones de administrador dentro de las pestañas que caja sí ve (Exportar, Importar, Cierre manual,
+  // Funciones de administrador dentro de las pestañas que caja sí ve (Cierre manual,
   // Historial de cierres…): marcadas con data-solo-admin, con caja ni se dibujan.
   document.querySelectorAll('[data-solo-admin]').forEach(el => { el.style.display = adminAutenticado ? '' : 'none'; });
   if (!badge || !salir) return;
   if (!sesionBase) { badge.style.display = 'none'; salir.style.display = 'none'; return; }
   let texto;
-  if (sesionBase.rol === 'admin') texto = `👑 Admin · ${nombreDeUsuario(sesionBase.email)}`;
+  if (sesionBase.rol === 'admin') {
+    // «👑 Admin» a secas cuando el usuario se llama «admin» (si no, «👑 Admin · nombre», p. ej. «👑 Admin · luisca»).
+    const quien = nombreDeUsuario(sesionBase.email);
+    texto = quien.toLowerCase() === 'admin' ? '👑 Admin' : `👑 Admin · ${quien}`;
+  }
   else if (sesionAdmin) texto = `👤 Caja · 🔓 ${nombreDeUsuario(sesionAdmin.email)}`;
   else texto = '👤 Caja';
   badge.textContent = texto;
@@ -3004,7 +3014,7 @@ function descuentosDisponibles() {
 // El plan gratis de Supabase no trae copias automáticas: este respaldo es la red de
 // seguridad. Baja TODAS las tablas, verifica que no falte ninguna fila y registra la
 // fecha en config.ultimo_respaldo (de ahí sale el aviso de la pantalla).
-// El respaldo es SEMANAL y a mano (Exportar, solo administrador): el aviso sale desde cada DOMINGO y
+// El respaldo es SEMANAL y a mano (pestaña Datos → Respaldo completo, solo administrador): el aviso sale desde cada DOMINGO y
 // sigue saliendo hasta que haya un respaldo completo hecho desde ese domingo (el que registra
 // config.ultimo_respaldo, que solo se guarda si el respaldo terminó bien). Se pone rojo si pasan
 // RESPALDO_ROJO_DIAS días sin respaldo.
@@ -3123,6 +3133,7 @@ async function respaldoCompleto() {
     showToast(`✅ Respaldo completo descargado (${lista.length} tablas, ${filasTotal} filas)`, 'ok');
     if (!guardado) showToast('⚠ El archivo se descargó, pero no quedó registrado el respaldo (falta la tabla config en Supabase): el aviso seguirá activo', 'warning');
     renderAvisoRespaldo();
+    renderDatosRespaldo();
   } catch (e) {
     console.error(e);
     progresoRespaldo(null);
@@ -3132,15 +3143,12 @@ async function respaldoCompleto() {
   }
 }
 
-// El botón "Exportar" del encabezado y el botón del aviso de respaldo: son solo del administrador
+// El botón «Respaldo completo» de la pestaña Datos y el del aviso de respaldo: son solo del administrador
 // (con caja ni se dibujan). Si alguien lo llama a mano con caja, se niega — no hay ventana de contraseña.
 function pedirRespaldoCompleto() {
   if (!adminAutenticado) { showToast('🔒 El respaldo completo es solo para administradores', 'warning'); return; }
   respaldoCompleto();
 }
-// Nombre anterior (sigue existiendo por si algo lo llama).
-function exportarDatos() { pedirRespaldoCompleto(); }
-
 // Días calendario entre dos fechas AAAA-MM-DD (sin depender de la zona horaria).
 function diasDesdeFecha(fechaStr, hoyStr = today()) {
   const aMs = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
@@ -3252,7 +3260,23 @@ function datosParaExportar() {
   };
 }
 
+// Línea de estado de la tarjeta «Respaldo completo» (pestaña Datos): fecha del último respaldo registrado.
+function renderDatosRespaldo() {
+  const el = document.getElementById('datos-respaldo-estado');
+  if (!el) return;
+  if (ST.config === undefined) { el.textContent = ''; return; }
+  if (ST.config === null) { el.innerHTML = 'ℹ️ No se puede registrar el último respaldo: falta crear la tabla <b>config</b> en Supabase (sql/migracion_supabase_config.sql). El respaldo igual se descarga.'; return; }
+  const fila = ST.config.find(c => c.clave === 'ultimo_respaldo');
+  const fecha = fila && fila.valor ? (fila.valor.fecha || String(fila.valor.generado_en || '').slice(0, 10)) : '';
+  if (!fecha) { el.innerHTML = '⚠️ <b>Todavía no se ha hecho ningún respaldo completo.</b>'; return; }
+  const dias = diasDesdeFecha(fecha);
+  const nivel = nivelAvisoRespaldo(dias);
+  const cuando = dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`;
+  el.innerHTML = `Último respaldo completo: <b>${fecha}</b> (${cuando}). ` + (nivel ? '<b>Toca hacer uno.</b>' : '✅ Al día esta semana.');
+}
+
 function renderDatosExport() {
+  renderDatosRespaldo();
   document.querySelectorAll('#datos-presets .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.preset === fDatos.preset));
   const el = document.getElementById('datos-resumen');
   if (!el) return;
@@ -3266,8 +3290,8 @@ function renderDatosExport() {
 }
 
 // Exporta lo que hay en memoria a un Excel con una hoja por tabla — para
-// análisis externo (Excel/Python), no para reimportar (eso lo cubre
-// exportarDatos()/importarDatos(), el respaldo JSON de arriba). El período
+// análisis externo (Excel/Python), NO es una copia de seguridad (eso es el
+// Respaldo completo .json de esta misma pestaña, que se restaura con docs/RESTAURAR.md). El período
 // elegido en la pestaña Datos recorta las hojas de movimientos por fecha; las
 // que son estado actual (inventario, fiados pendientes, clientes, abonos y
 // movimientos de caja) van siempre completas.
@@ -3318,62 +3342,6 @@ function exportarExcelCompleto() {
   const sufijo = (fDatos.desde || fDatos.hasta) ? `_${fDatos.desde || 'inicio'}_a_${fDatos.hasta || 'hoy'}` : '';
   XLSX.writeFile(wb, `ElLobo_datos_${today()}${sufijo}.xlsx`);
   showToast(`✅ Excel exportado (${d.cierres.length} cierres, ${d.pagados.length} pedidos pagados)`, 'ok');
-}
-
-async function importarDatos(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  // Solo administrador (el botón ya está oculto para caja; esto es un segundo seguro en pantalla —
-  // el servidor igualmente no deja a caja escribir en egresos).
-  if (!adminAutenticado) { e.target.value = ''; showToast('🔒 Importar datos es solo para administradores', 'warning'); return; }
-  try {
-    const datos = JSON.parse(await file.text());
-    if (!datos.ingresos && !datos.egresos) {
-      alert('El archivo no parece ser un respaldo válido de El Lobo.'); return;
-    }
-    if (!confirm(`¿Importar datos de ${file.name}? Esto AÑADIRÁ los registros a Supabase.`)) return;
-
-    setSyncBadge('syncing');
-    const inserts = [];
-
-    // Ingresos del backup (formato viejo: monto → monto_total)
-    (datos.ingresos || []).forEach(i => {
-      inserts.push(sbInsert('pedidos', {
-        fecha: i.fecha, hora: i.hora, turno: i.turno, pedido: i.pedido,
-        sopa: i.sopa||'', arroz: i.arroz||'', proteina: i.proteina||'',
-        acomp: i.acomp||'', detalle: i.detalle||'',
-        metodo: i.metodo, cantidad: i.cantidad||1,
-        monto_almuerzo: i.monto || i.montoUnit || 0,
-        monto_domicilio: 0,
-        monto_total: i.monto || i.montoUnit || 0,
-        estado: 'pagado', es_domicilio: false, mesa: null, para_llevar: false
-      }).catch(() => {}));
-    });
-    (datos.egresos || []).forEach(eg => {
-      // "description" (en inglés) es el nombre real de esa columna en la
-      // tabla "egresos" de Supabase — ver la nota en agregarEgreso().
-      inserts.push(sbInsert('egresos', {
-        fecha: eg.fecha, cat: eg.cat, monto: eg.monto, description: eg.description || eg.desc || eg.descripcion || ''
-      }).catch(() => {}));
-    });
-    (datos.inventario || []).forEach(inv => {
-      inserts.push(sbInsert('inventario', {
-        nombre: inv.nombre, unidad: inv.unidad, stock: inv.stock, minimo: inv.minimo, costo: inv.costo
-      }).catch(() => {}));
-    });
-    (datos.gastosDia || []).forEach(g => {
-      inserts.push(sbInsert('gastos_dia', {
-        fecha: g.fecha, turno: g.turno, nombre: g.nombre, monto: g.monto
-      }).catch(() => {}));
-    });
-
-    await Promise.all(inserts);
-    await loadState();
-    showToast('✅ Datos importados correctamente', 'ok');
-  } catch (err) {
-    showToast('⚠ Error al importar: ' + err.message, 'warning');
-  }
-  e.target.value = '';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
