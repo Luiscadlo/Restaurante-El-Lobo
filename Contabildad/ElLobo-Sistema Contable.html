@@ -1,94 +1,58 @@
 <!DOCTYPE html>
 <!--
-Redirección temporal por un enlace antiguo con error de escritura; borrar cuando ya nadie lo use.
+AVISO DE ENLACE CAMBIADO. Esta carpeta ("Contabildad", con "d") nació por un error de escritura en el enlace.
+El enlace permanente es la raíz del sitio. Esta página avisa y, a los 8 segundos, lleva allá.
+Borrar esta carpeta (Prompt E2) cuando ya nadie use el enlace viejo. Los dos archivos de esta carpeta son idénticos.
 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>El Lobo</title>
+<title>El Lobo — enlace nuevo</title>
 <meta name="robots" content="noindex">
-<meta http-equiv="refresh" content="0; url=../Contabilidad/ElLobo-Sistema%20Contable.html">
-<script>
-  // Redirección inmediata conservando el query string y el hash (el meta refresh de arriba es solo el respaldo sin JavaScript).
-  window.location.replace("../Contabilidad/ElLobo-Sistema%20Contable.html" + window.location.search + window.location.hash);
-</script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta http-equiv="refresh" content="8; url=https://luiscadlo.github.io/Restaurante-El-Lobo/">
 <style>
-  :root {
-    --bg: #0f0e0c;
-    --accent: #e8b84b;
-  }
+  :root { --bg: #0f0e0c; --accent: #e8b84b; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
-    height: 100%;
-  }
+  html, body { height: 100%; }
   body {
-    background: var(--bg);
-    color: #f2ede2;
-    font-family: 'Syne', sans-serif;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    text-align: center;
-    padding: 24px;
+    background: var(--bg); color: #f2ede2;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; text-align: center; padding: 24px;
   }
-  .wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 18px;
+  .wrap { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 460px; }
+  h1 { font-weight: 800; font-size: clamp(22px, 6vw, 30px); color: var(--accent); }
+  p { font-size: 16px; line-height: 1.5; color: #d8d1c2; }
+  .url { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; color: #f2ede2;
+         background: #1b1915; border: 1px solid #3a352b; border-radius: 8px; padding: 10px 14px; word-break: break-all; }
+  a.boton {
+    display: inline-block; margin-top: 4px; font-size: 16px; font-weight: 700; color: #0f0e0c;
+    background: var(--accent); padding: 14px 26px; border-radius: 10px; text-decoration: none;
   }
-  h1 {
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: clamp(20px, 5vw, 30px);
-    color: var(--accent);
-    letter-spacing: 0.5px;
-  }
-  .spinner {
-    width: 34px;
-    height: 34px;
-    border: 3px solid rgba(232, 184, 75, 0.25);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.9s linear infinite;
-  }
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-  p.hint {
-    font-family: 'DM Mono', monospace;
-    font-size: 13px;
-    color: #b8b0a1;
-  }
-  a.enlace {
-    margin-top: 6px;
-    display: inline-block;
-    font-family: 'DM Mono', monospace;
-    font-size: 14px;
-    color: #0f0e0c;
-    background: var(--accent);
-    padding: 12px 22px;
-    border-radius: 8px;
-    text-decoration: none;
-    font-weight: 500;
-    transition: opacity 0.15s ease;
-  }
-  a.enlace:hover {
-    opacity: 0.85;
-  }
+  a.boton:hover { opacity: .85; }
+  .cuenta { font-size: 13px; color: #9b9486; }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="spinner"></div>
-    <h1>🐺 El Lobo — Redirigiendo...</h1>
-    <p class="hint">Si no eres redirigido automáticamente, usa el enlace de abajo.</p>
-    <a class="enlace" href="../Contabilidad/ElLobo-Sistema%20Contable.html">Ir al Sistema Contable El Lobo →</a>
+    <h1>🐺 Este enlace cambió</h1>
+    <p>Guarda el nuevo enlace (y bórrate el viejo de favoritos, del inicio del celular o de donde lo tengas):</p>
+    <div class="url" id="url-nuevo">https://luiscadlo.github.io/Restaurante-El-Lobo/</div>
+    <a class="boton" id="ir" href="https://luiscadlo.github.io/Restaurante-El-Lobo/">Ir al sistema →</a>
+    <p class="cuenta" id="cuenta">Te llevo allá en <span id="seg">8</span> segundos…</p>
   </div>
+<script>
+  // Cuenta regresiva de 8 s y redirección conservando lo que haya después del dominio (si alguien guardó un enlace con # o ?).
+  (function () {
+    var DESTINO = 'https://luiscadlo.github.io/Restaurante-El-Lobo/';
+    var restan = 8, seg = document.getElementById('seg');
+    var t = setInterval(function () {
+      restan -= 1;
+      if (seg) seg.textContent = String(Math.max(restan, 0));
+      if (restan <= 0) { clearInterval(t); window.location.replace(DESTINO + window.location.search + window.location.hash); }
+    }, 1000);
+  })();
+</script>
 </body>
 </html>
