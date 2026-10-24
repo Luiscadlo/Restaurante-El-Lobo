@@ -15,11 +15,11 @@ const { datos: DATOS_BASE, FECHA_HOY } = require('../fixtures/datos');
 const HTML = path.resolve(__dirname, '../../Contabilidad/ElLobo-Sistema Contable.html');
 const URL_HTML = pathToFileURL(HTML).href;
 
-// Las 15 tablas que pide loadState() hoy. Si el sistema pide otra, la prueba de humo lo avisa.
+// Las 16 tablas que pide loadState() hoy (15 + config del aviso de respaldo). Si el sistema pide otra, la prueba de humo lo avisa.
 const TABLAS_LOADSTATE = [
   'pedidos', 'egresos', 'inventario', 'consumos', 'gastos_dia', 'mesas', 'cierres_dia',
   'aperturas_turno', 'notas_dia', 'movimientos_caja', 'ingresos_extra', 'pedidos_eliminados',
-  'clientes_fiado', 'abonos_fiado', 'pedidos_descuentos',
+  'clientes_fiado', 'abonos_fiado', 'pedidos_descuentos', 'config',
 ];
 
 function copiaProfunda(x) { return JSON.parse(JSON.stringify(x)); }
@@ -29,6 +29,8 @@ function copiaProfunda(x) { return JSON.parse(JSON.stringify(x)); }
  * @param page   página de Playwright
  * @param opciones.datos   datos por tabla (por defecto, los de ejemplo)
  * @param opciones.fecha   fecha "de hoy" fija (por defecto 2026-10-20, 14:00 Bogotá)
+ * @param opciones.tablasFaltantes  tablas que "no existen" en Supabase (responden 404), p. ej. ['config']
+ * @param opciones.totalesFalsos    { tabla: n } → el header Content-Range de esa tabla dice n (para simular filas que faltan)
  * @returns { errores, peticiones, escrituras, noManejadas, avisos }
  */
 async function abrirSistema(page, opciones = {}) {
@@ -52,6 +54,10 @@ async function abrirSistema(page, opciones = {}) {
       }
       const tabla = m[1];
       const metodo = req.method();
+      if ((opciones.tablasFaltantes || []).includes(tabla)) {
+        reg.peticiones.push(tabla);
+        return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: '42P01', message: `relation "public.${tabla}" does not exist` }) });
+      }
       if (metodo === 'GET') {
         reg.peticiones.push(tabla);
         if (!(tabla in datos)) { reg.avisos.push(`tabla sin datos de ejemplo: ${tabla}`); }
@@ -59,8 +65,11 @@ async function abrirSistema(page, opciones = {}) {
         const limit = parseInt(url.searchParams.get('limit') || filas.length, 10);
         const offset = parseInt(url.searchParams.get('offset') || '0', 10);
         const lote = filas.slice(offset, offset + limit);
-        const rango = lote.length ? `${offset}-${offset + lote.length - 1}/${filas.length}` : `*/${filas.length}`;
-        return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'content-range': rango }, body: JSON.stringify(lote) });
+        const totalDicho = (opciones.totalesFalsos || {})[tabla] ?? filas.length;
+        const rango = lote.length ? `${offset}-${offset + lote.length - 1}/${totalDicho}` : `*/${totalDicho}`;
+        return route.fulfill({ status: 200, contentType: 'application/json',
+          headers: { 'content-range': rango, 'access-control-allow-origin': '*', 'access-control-expose-headers': 'Content-Range' },
+          body: JSON.stringify(lote) });
       }
       let cuerpo = null;
       try { cuerpo = req.postDataJSON(); } catch (e) { /* sin cuerpo */ }

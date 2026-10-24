@@ -406,8 +406,8 @@
   <div class="header-right">
     <div id="syncBadge" style="border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid rgba(232,184,75,0.4);background:rgba(232,184,75,0.1);color:var(--accent);">🔄 Sincronizando…</div>
     <button class="btn-abrir-turno" id="btn-abrir-turno-header" onclick="abrirModalTurno()" title="Registrar caja inicial del turno">🔓 Abrir turno</button>
-    <button class="btn btn-outline" onclick="exportarDatos()" style="font-size:11px;padding:6px 12px;" title="Exportar respaldo JSON">⬇ <span class="btn-label">Exportar</span></button>
-    <label class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;" title="Importar respaldo JSON">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
+    <button class="btn btn-outline" onclick="pedirRespaldoCompleto()" style="font-size:11px;padding:6px 12px;" title="Respaldo completo de todas las tablas (pide acceso de administrador)">⬇ <span class="btn-label">Exportar</span></button>
+    <label class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;" title="Importar (limitado: solo ingresos, egresos, inventario y gastos del día)">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
     <div class="turno-badge turno-almuerzo" id="turnoBadge">☀️ Almuerzo</div>
     <div class="date-badge" id="currentDate"></div>
   </div>
@@ -429,6 +429,9 @@
   <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
   <div class="tab" onclick="showTab('datos',this)">🔒 Datos</div>
 </nav>
+
+<!-- Aviso de respaldo (se llena con renderAvisoRespaldo; visible para todos) -->
+<div id="aviso-respaldo" style="display:none;padding:12px 24px 0;"></div>
 
 <main>
 
@@ -1686,6 +1689,26 @@
   </div>
 </div>
 
+<!-- Modal: Respaldo completo (pide acceso de administrador) -->
+<div id="modal-respaldo" class="modal-overlay" style="display:none;" onclick="cerrarModalRespaldoClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="cerrarModalRespaldo()">✕</button>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:18px;">💾 Respaldo completo</div>
+
+    <div id="respaldo-login">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Descargar el respaldo completo de todas las tablas requiere la contraseña de administrador.</div>
+      <div style="display:flex;gap:8px;">
+        <input type="password" id="respaldo-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoRespaldo()">
+        <button class="btn btn-primary" onclick="intentarAccesoRespaldo()">Entrar</button>
+      </div>
+    </div>
+
+    <div id="respaldo-contenido" style="display:none;">
+      <div style="font-size:12px;color:var(--text3);">Acceso concedido. Preparando el respaldo…</div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Cierre manual (respaldo cuando el sistema no se pudo usar ese día) -->
 <div id="modal-cierre-manual" class="modal-overlay" style="display:none;" onclick="cerrarModalCierreManualClick(event)">
   <div class="modal-box">
@@ -2206,7 +2229,10 @@ let ST = {
   abonosFiado: [], // abonos parciales contra el saldo total de un cliente fiado
   // Log de auditoría de descuentos aplicados — null (no []) si la tabla
   // pedidos_descuentos todavía no existe en Supabase (ver descuentosDisponibles()).
-  pedidosDescuentos: null
+  pedidosDescuentos: null,
+  // Filas de la tabla config (clave/valor). undefined = todavía no se cargó;
+  // null = la tabla config no existe en Supabase (ver sql/migracion_supabase_config.sql).
+  config: undefined
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -2248,7 +2274,7 @@ function showToast(msg, tipo = 'info', accion = null) {
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado, abonosFiado, pedidosDescuentos] = await Promise.all([
+    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado, abonosFiado, pedidosDescuentos, config] = await Promise.all([
       sbGetAll('pedidos',     'order=created_at.desc'),
       sbGetAll('egresos',     'order=created_at.desc'),
       sbGetAll('inventario',  'order=nombre.asc'),
@@ -2263,7 +2289,8 @@ async function loadState() {
       sbGetAll('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
       sbGetAll('clientes_fiado', 'order=nombre.asc').catch(() => []),
       sbGetAll('abonos_fiado', 'order=fecha.desc').catch(() => []),
-      sbGetAll('pedidos_descuentos', 'order=created_at.desc').catch(() => null)
+      sbGetAll('pedidos_descuentos', 'order=created_at.desc').catch(() => null),
+      sbGetAll('config', 'order=clave.asc').catch(() => null)
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
@@ -2282,6 +2309,7 @@ async function loadState() {
     ST.clientesFiado   = clientesFiado;
     ST.abonosFiado     = abonosFiado;
     ST.pedidosDescuentos = pedidosDescuentos;
+    ST.config = config;
 
     setSyncBadge('ok');
   } catch (e) {
@@ -2577,22 +2605,199 @@ function descuentosDisponibles() {
   return columnasOk && tablaOk;
 }
 
-// ── Exportar / Importar ───────────────────────────────────────────────
-function exportarDatos() {
-  const fecha = today();
-  const blob = new Blob([JSON.stringify({
-    ingresos: ST.ingresos,
-    pendientes: ST.pendientes,
-    egresos: ST.egresos,
-    inventario: ST.inventario,
-    consumos: ST.consumos,
-    gastosDia: ST.gastosDia
-  }, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `ElLobo_respaldo_${fecha}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+// ── Respaldo completo + aviso ─────────────────────────────────────────
+// El plan gratis de Supabase no trae copias automáticas: este respaldo es la red de
+// seguridad. Baja TODAS las tablas, verifica que no falte ninguna fila y registra la
+// fecha en config.ultimo_respaldo (de ahí sale el aviso de la pantalla).
+const RESPALDO_AVISO_DIAS = 7;   // más de esta cantidad de días sin respaldo → aviso ámbar
+const RESPALDO_ROJO_DIAS  = 10;  // desde esta cantidad de días → aviso rojo
+
+// TODAS las tablas que usa el código con sbGet/sbGetAll/sbInsert/sbPatch/sbDelete
+// (derivadas con grep, no de memoria) más config. Una prueba automática
+// (tests/respaldo.spec.js) falla si aparece una tabla nueva en el código y no se agrega aquí.
+const TABLAS_RESPALDO = [
+  'pedidos', 'egresos', 'inventario', 'consumos', 'gastos_dia', 'mesas', 'cierres_dia',
+  'aperturas_turno', 'notas_dia', 'movimientos_caja', 'ingresos_extra', 'pedidos_eliminados',
+  'clientes_fiado', 'abonos_fiado', 'pedidos_descuentos', 'config'
+];
+// Tablas que pueden no existir todavía en Supabase (migración sin correr): se omiten del
+// respaldo en vez de hacerlo fallar. Cualquier OTRA tabla que falle aborta el respaldo.
+const TABLAS_RESPALDO_OPCIONALES = {
+  config: () => Array.isArray(ST.config),
+  pedidos_descuentos: () => ST.pedidosDescuentos !== null && ST.pedidosDescuentos !== undefined
+};
+// Columna de orden para paginar sin saltar ni repetir filas (por defecto, id).
+const ORDEN_RESPALDO = { config: 'order=clave.asc' };
+
+// Igual que sbGetAll(), pero devuelve también el total que reporta Supabase
+// (header Content-Range) para poder verificar que no falta ninguna fila.
+async function sbGetAllConTotal(tabla, qs = '') {
+  const LOTE = 5000;
+  let offset = 0, acumulado = [], total = null;
+  for (;;) {
+    const qsLote = (qs ? qs + '&' : '') + `limit=${LOTE}&offset=${offset}`;
+    const r = await fetch(`${SB_URL}/rest/v1/${tabla}?${qsLote}`, { headers: sbH({ 'Prefer': 'count=exact' }) });
+    if (!r.ok) throw new Error(await r.text());
+    const lote = await r.json();
+    acumulado = acumulado.concat(lote);
+    const t = parseInt((r.headers.get('content-range') || '').split('/')[1], 10);
+    if (Number.isFinite(t)) total = t;
+    if (!lote.length) break;
+    offset += lote.length;
+    if (Number.isFinite(t) ? offset >= t : lote.length < LOTE) break;
+  }
+  return { filas: acumulado, total };
+}
+
+// Baja una tabla completa y la verifica: las filas bajadas deben coincidir con el total de
+// Supabase y no haber ids repetidos. Si no coincide (por ejemplo, entró un pedido mientras
+// se bajaba), reintenta una vez; si sigue sin coincidir, falla con un mensaje claro.
+async function descargarTablaVerificada(tabla) {
+  const orden = ORDEN_RESPALDO[tabla] || 'order=id.asc';
+  let problema = '';
+  for (let intento = 1; intento <= 2; intento++) {
+    let res;
+    try { res = await sbGetAllConTotal(tabla, orden); }
+    catch (e) { res = await sbGetAllConTotal(tabla, ''); } // tabla sin columna id: sin orden explícito
+    const { filas, total } = res;
+    if (total === null) { problema = `Supabase no informó el total de filas de "${tabla}"`; continue; }
+    if (filas.length !== total) { problema = `"${tabla}": se bajaron ${filas.length} filas pero Supabase reporta ${total}`; continue; }
+    if (filas.length && 'id' in filas[0] && new Set(filas.map(f => f.id)).size !== filas.length) { problema = `"${tabla}": hay filas repetidas`; continue; }
+    return filas;
+  }
+  throw new Error(problema);
+}
+
+// Un solo "toast" de progreso que se actualiza (null lo quita).
+function progresoRespaldo(texto) {
+  let el = document.getElementById('toast-respaldo');
+  if (texto === null) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast-respaldo';
+    el.className = 'toast info';
+    el.appendChild(document.createElement('span'));
+    document.body.appendChild(el);
+  }
+  el.firstChild.textContent = texto;
+}
+
+// Guarda config.ultimo_respaldo (insert o patch). Devuelve true si quedó registrado.
+async function registrarUltimoRespaldo(valor) {
+  if (!Array.isArray(ST.config)) return false;
+  try {
+    const existente = ST.config.find(c => c.clave === 'ultimo_respaldo');
+    if (existente) {
+      const [fila] = await sbPatch('config', 'clave=eq.ultimo_respaldo', { valor, actualizado_en: new Date().toISOString() });
+      Object.assign(existente, fila || { valor });
+    } else {
+      const [fila] = await sbInsert('config', { clave: 'ultimo_respaldo', valor });
+      ST.config.push(fila || { clave: 'ultimo_respaldo', valor });
+    }
+    return true;
+  } catch (e) { console.error(e); return false; }
+}
+
+let respaldoEnCurso = false;
+async function respaldoCompleto() {
+  if (respaldoEnCurso) { showToast('Ya hay un respaldo en curso…', 'info'); return; }
+  respaldoEnCurso = true;
+  try {
+    const lista = TABLAS_RESPALDO.filter(t => !TABLAS_RESPALDO_OPCIONALES[t] || TABLAS_RESPALDO_OPCIONALES[t]());
+    const tablas = {}, conteos = {};
+    for (let i = 0; i < lista.length; i++) {
+      progresoRespaldo(`💾 Respaldando ${i + 1}/${lista.length}: ${lista[i]}… (no cierres la página)`);
+      tablas[lista[i]] = await descargarTablaVerificada(lista[i]);
+      conteos[lista[i]] = tablas[lista[i]].length;
+    }
+    const fecha = today();
+    const generado_en = new Date().toISOString();
+    const blob = new Blob([JSON.stringify({ version: 1, generado_en, fecha, conteos, tablas }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ElLobo_respaldo_completo_${fecha}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    const guardado = await registrarUltimoRespaldo({ generado_en, fecha, conteos });
+    progresoRespaldo(null);
+    const filasTotal = Object.values(conteos).reduce((x, y) => x + y, 0);
+    showToast(`✅ Respaldo completo descargado (${lista.length} tablas, ${filasTotal} filas)`, 'ok');
+    if (!guardado) showToast('⚠ El archivo se descargó, pero no quedó registrado el respaldo (falta la tabla config en Supabase): el aviso seguirá activo', 'warning');
+    renderAvisoRespaldo();
+  } catch (e) {
+    console.error(e);
+    progresoRespaldo(null);
+    showToast('⚠ El respaldo NO se completó: ' + e.message, 'warning');
+  } finally {
+    respaldoEnCurso = false;
+  }
+}
+
+// El botón "Exportar" del encabezado: el respaldo completo siempre pasa por el acceso de
+// administrador (aplicarGateAdmin/intentarAccesoAdmin, igual que el cierre manual).
+let respaldoPendiente = false;
+function pedirRespaldoCompleto() {
+  if (adminAutenticado) { respaldoCompleto(); return; }
+  respaldoPendiente = true;
+  document.getElementById('respaldo-password').value = '';
+  document.getElementById('modal-respaldo').style.display = 'flex';
+  aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal);
+}
+function iniciarRespaldoDesdeModal() {
+  if (!respaldoPendiente) return;
+  respaldoPendiente = false;
+  cerrarModalRespaldo();
+  respaldoCompleto();
+}
+function intentarAccesoRespaldo() {
+  intentarAccesoAdmin('respaldo-password');
+  aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal);
+}
+function cerrarModalRespaldo() {
+  respaldoPendiente = false;
+  document.getElementById('modal-respaldo').style.display = 'none';
+}
+function cerrarModalRespaldoClick(e) {
+  if (e.target.id === 'modal-respaldo') cerrarModalRespaldo();
+}
+// Nombre anterior (sigue existiendo por si algo lo llama).
+function exportarDatos() { pedirRespaldoCompleto(); }
+
+// Días calendario entre dos fechas AAAA-MM-DD (sin depender de la zona horaria).
+function diasDesdeFecha(fechaStr, hoyStr = today()) {
+  const aMs = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((aMs(hoyStr) - aMs(fechaStr)) / 86400000);
+}
+// null = sin aviso; 'ambar' o 'rojo'. dias null/NaN = nunca se ha hecho un respaldo.
+function nivelAvisoRespaldo(dias) {
+  if (dias === null || dias === undefined || Number.isNaN(dias)) return 'ambar';
+  if (dias >= RESPALDO_ROJO_DIAS) return 'rojo';
+  if (dias > RESPALDO_AVISO_DIAS) return 'ambar';
+  return null;
+}
+function renderAvisoRespaldo() {
+  const el = document.getElementById('aviso-respaldo');
+  if (!el) return;
+  if (ST.config === undefined) { el.style.display = 'none'; el.innerHTML = ''; return; } // aún no cargó
+  if (ST.config === null) {
+    el.innerHTML = `<div class="alert info"><div style="flex:1;">ℹ️ El aviso de respaldo está desactivado: falta crear la tabla <b>config</b> en Supabase (archivo sql/migracion_supabase_config.sql).</div></div>`;
+    el.style.display = '';
+    return;
+  }
+  const fila = ST.config.find(c => c.clave === 'ultimo_respaldo');
+  const fecha = fila && fila.valor ? (fila.valor.fecha || String(fila.valor.generado_en || '').slice(0, 10)) : '';
+  const dias = fecha ? diasDesdeFecha(fecha) : null;
+  const nivel = nivelAvisoRespaldo(dias);
+  if (!nivel) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const texto = (dias === null || Number.isNaN(dias))
+    ? 'Todavía no se ha hecho ningún respaldo completo.'
+    : `Hace ${dias} días no se hace respaldo completo.`;
+  el.innerHTML = `<div class="alert ${nivel === 'rojo' ? 'warning' : 'info'}">
+    <div style="flex:1;">${nivel === 'rojo' ? '🚨' : '⚠️'} ${texto}</div>
+    <button class="btn btn-outline" style="font-size:11px;" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo ahora</button>
+  </div>`;
+  el.style.display = '';
 }
 
 // Período de los datos a descargar en la pestaña Datos (para el modelo
@@ -9431,6 +9636,7 @@ function renderAll() {
   aplicarGateAdmin('datos', renderDatosExport);
   renderPendientesNotasBadge();
   actualizarBadgeAuditoria();
+  renderAvisoRespaldo();
 }
 
 // ── ARRANQUE ──────────────────────────────────────────────────────────
