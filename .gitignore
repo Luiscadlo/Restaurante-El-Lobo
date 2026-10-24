@@ -26,3 +26,9 @@ datos_*.json
 # Python
 __pycache__/
 *.pyc
+
+# Pruebas automáticas (ver tests/LEEME.md)
+node_modules/
+test-results/
+playwright-report/
+.pytest_cache/
