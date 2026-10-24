@@ -96,6 +96,27 @@ test.describe('pantalla de entrada', () => {
     await expect(page.locator('#rolBadge')).toHaveText('👑 Admin · dueno1');
   });
 
+  test('el usuario llamado «admin» muestra solo «👑 Admin» (sin «Admin · admin»); con otro nombre se agrega el nombre', async ({ page }) => {
+    await abrirSistema(page, { usuario: null });
+    await escribirLogin(page, 'admin', 'clave-admin');
+    await esperarCarga(page);
+    await expect(page.locator('#rolBadge')).toHaveText('👑 Admin');
+    // con mayúsculas escritas a mano en el correo completo también
+    const pagina2 = await page.context().newPage();
+    await abrirSistema(pagina2, { usuario: null });
+    await escribirLogin(pagina2, 'Admin@elobo.test', 'clave-admin');
+    await esperarCarga(pagina2);
+    await expect(pagina2.locator('#rolBadge')).toHaveText('👑 Admin');
+  });
+
+  test('la insignia no depende de mayúsculas: «Admin» y «ADMIN» también se muestran solo como «👑 Admin»', async ({ page }) => {
+    await abrirSistema(page, { usuario: 'admin' });
+    const textos = await page.evaluate(() => ['Admin@elobo.test', 'ADMIN@ELOBO.TEST', 'luisca@elobo.test'].map(correo => {
+      sesionBase.email = correo; sincronizarSesion(); return document.getElementById('rolBadge').textContent;
+    }));
+    expect(textos).toEqual(['👑 Admin', '👑 Admin', '👑 Admin · luisca']);
+  });
+
   test('la clave de otro usuario con el nombre corto sigue siendo rechazada', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: null });
     await escribirLogin(page, 'caja', 'clave-dueno1');
@@ -131,7 +152,7 @@ test.describe('pantalla de entrada', () => {
     expect(new Set(reg.rest.map(r => r.rol))).toEqual(new Set(['caja']));
     expect(reg.denegadas).toEqual([]);
     await expect(page.locator('#rolBadge')).toHaveText('👤 Caja');
-    await expect(page.locator('#btn-importar')).toBeHidden();   // Importar es solo de admin
+    await expect(page.locator('#tab-nav-datos')).toBeHidden();   // el respaldo y el Excel (pestaña Datos) son solo de admin
     expect(await page.evaluate(() => adminAutenticado)).toBe(false);
     expect(reg.errores).toEqual([]);
   });
@@ -142,7 +163,7 @@ test.describe('pantalla de entrada', () => {
     expect(new Set(reg.rest.map(r => r.rol))).toEqual(new Set(['admin']));
     expect(reg.denegadas).toEqual([]);
     await expect(page.locator('#rolBadge')).toHaveText('👑 Admin · dueno1');   // se muestra el nombre corto
-    await expect(page.locator('#btn-importar')).toBeVisible();
+    await expect(page.locator('#tab-nav-datos')).toBeVisible();
     expect(await page.evaluate(() => adminAutenticado)).toBe(true);
   });
 
@@ -384,7 +405,7 @@ test.describe('caja y autorización de administrador', () => {
       await irA(page, id);
       await expect(page.locator(`#${pre}-contenido`)).toBeVisible();
     }
-    await expect(page.locator('#btn-importar')).toBeVisible();
+    await expect(page.locator('#tab-nav-datos')).toBeVisible();
     expect(reg.denegadas).toEqual([]);
     expect(reg.errores).toEqual([]);
     // los campos de acceso quedan limpios
@@ -421,7 +442,7 @@ test.describe('caja y autorización de administrador', () => {
     await page.evaluate(() => sbGet('mesas'));
     expect(reg.rest.slice(antes).map(r => r.rol)).toEqual(['caja']);
     await expect(page.locator('#rolBadge')).toHaveText('👤 Caja');
-    await expect(page.locator('#btn-importar')).toBeHidden();
+    await expect(page.locator('#tab-nav-datos')).toBeHidden();
   });
 
   test('admin que entró directo: "Cerrar sesión" del candado lo saca del sistema', async ({ page }) => {
@@ -430,13 +451,6 @@ test.describe('caja y autorización de administrador', () => {
     await page.locator('#egresos-contenido').getByRole('button', { name: /Cerrar sesión/ }).click();
     await esperarEntrada(page);
     expect(reg.auth).toContain('logout');
-  });
-
-  test('Importar: aunque se fuerce con caja, no hace nada', async ({ page }) => {
-    const reg = await abrirSistema(page);
-    await page.evaluate(() => importarDatos({ target: { files: [{ name: 'x.json', text: async () => '{"ingresos":[{}],"egresos":[]}' }], value: 'x' } }));
-    await expect(page.locator('.toast.warning', { hasText: 'solo para administradores' })).toBeVisible();
-    expect(reg.escrituras).toEqual([]);
   });
 
   test('si la autorización de admin deja de valer en pleno trabajo, vuelve a caja y avisa', async ({ page }) => {
@@ -465,18 +479,15 @@ test.describe('caja y autorización de administrador', () => {
 
 // ── Numerito de Auditoría ────────────────────────────────────────────────────
 // ── Funciones de administrador DENTRO de las pestañas que caja sí ve ──────────────────────
-// Con caja: sin Exportar, sin Importar, sin Cierre manual, sin Historial de cierres, sin aviso de
+// Con caja: sin Respaldo/Excel (pestaña Datos), sin Cierre manual, sin Historial de cierres, sin aviso de
 // respaldo y ninguna cajita de usuario/contraseña de administrador. Para todo eso: Salir e ingresar
 // como administrador. (Ocultar es comodidad; la seguridad real son las reglas de la base.)
 test.describe('funciones de administrador ocultas para caja', () => {
   const PESTANAS_CAJA = ['ingresos', 'pendientes', 'fiados', 'diaadia', 'inventario', 'menu'];
-  const ENCABEZADO_ADMIN = ['#btn-exportar', '#btn-importar'];                // en el encabezado: se ven en cualquier pestaña
   const CIERRE_ADMIN = ['#btn-cierre-manual', '#dd-historial-panel'];       // dentro de la pestaña Cierre
   // Se comprueba en la pestaña donde viven (si no, "oculto" sería trivial: la pestaña misma está cerrada).
   async function controlesAdmin(page, visibles) {
     const chequear = visibles ? sel => expect(page.locator(sel), sel).toBeVisible() : sel => expect(page.locator(sel), sel).toBeHidden();
-    await irA(page, 'ingresos');
-    for (const sel of ENCABEZADO_ADMIN) await chequear(sel);
     await irA(page, 'diaadia');
     for (const sel of CIERRE_ADMIN) await chequear(sel);
   }
@@ -505,7 +516,7 @@ test.describe('funciones de administrador ocultas para caja', () => {
 
   test('arrancan ocultos: antes de saber quién entró (pantalla de entrada) no asoma ningún control de administrador', async ({ page }) => {
     await abrirSistema(page, { usuario: null });
-    const estilos = await page.evaluate(sels => sels.map(s => [s, getComputedStyle(document.querySelector(s)).display]), [...ENCABEZADO_ADMIN, ...CIERRE_ADMIN]);
+    const estilos = await page.evaluate(sels => sels.map(s => [s, getComputedStyle(document.querySelector(s)).display]), CIERRE_ADMIN);
     for (const [sel, display] of estilos) expect(display, sel).toBe('none');
   });
 

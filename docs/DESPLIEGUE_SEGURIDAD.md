@@ -21,7 +21,7 @@ Leyenda: 🗄 Supabase (navegador) · 🌐 el sistema en el navegador/celular ·
 ## Antes de empezar (no sigas si falta algo)
 
 - [ ] El restaurante está **sin servicio** y nadie tiene pedidos abiertos. Los pendientes de ayer están cerrados.
-- [ ] Hiciste un **respaldo completo reciente** (botón **Exportar** del encabezado) y lo guardaste **fuera del repositorio**.
+- [ ] Hiciste un **respaldo completo reciente** (pestaña **Datos → 💾 Respaldo completo**) y lo guardaste **fuera del repositorio**.
 - [ ] Ya corriste en Supabase `sql/migracion_supabase_config.sql` (tabla `config`, del respaldo/aviso). Si no, hazlo ahora: el sistema nuevo la lee.
 - [ ] Decidiste las 3 decisiones de `docs/MATRIZ_PERMISOS.md` (si no respondes, quedan las opciones **A**).
 - [ ] Tienes el **nombre corto** de cada dueño que tendrá usuario propio (p. ej. `luiscadlo`), y un gestor de contraseñas (o papel guardado bajo llave) para las claves.
@@ -84,8 +84,8 @@ La base **todavía** está abierta a la llave pública (aún no corres el SQL de
 
 ## Paso 5 — Probar los usuarios (reglas todavía apagadas) 🌐
 
-- [ ] Entra con el usuario **caja**. Se ven Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Tablero, Ingresos, Egresos, Caja, Auditoría y Datos **no aparecen**. **Importar**, **Exportar**, **Cierre manual**, **Historial completo de cierres** ni el aviso de respaldo tampoco aparecen, y no hay ninguna cajita de usuario o contraseña a la vista.
-- [ ] Pulsa **Salir** y entra como **dueño** (p. ej. `luiscadlo`): aparecen las seis secciones, además de Exportar, Importar, Cierre manual y el Historial completo de cierres.
+- [ ] Entra con el usuario **caja**. Se ven Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Tablero, Ingresos, Egresos, Caja, Auditoría y Datos **no aparecen**. El **Cierre manual**, el **Historial completo de cierres** y el aviso de respaldo tampoco aparecen (ni hay botones de Exportar/Importar en el encabezado, para nadie), y no hay ninguna cajita de usuario o contraseña a la vista.
+- [ ] Pulsa **Salir** y entra como **dueño** (p. ej. `luiscadlo`): aparecen las seis secciones, además de Cierre manual y el Historial completo de cierres. La insignia del encabezado dice «👑 Admin» (si el usuario se llama `admin`) o «👑 Admin · nombre».
 - [ ] Prueba con una contraseña equivocada: debe rechazar.
 - [ ] Recarga la página con la sesión de caja: sigue en caja sin pedir clave. El dueño entra directo y no se recuerda: al recargar hay que volver a entrar (por diseño).
 - [ ] El usuario **respaldo** en la pantalla de entrada: debe decir que no entra a la pantalla.
@@ -120,7 +120,7 @@ Si algo de esto no pasa, **no sigas**: cuéntame qué viste (ver "Si algo sale m
 **Con un dueño (entrando directo):**
 - [ ] Tablero, Ingresos, Egresos, Caja, Auditoría y Datos abren y muestran cifras.
 - [ ] Auditoría muestra la eliminación que acabas de hacer (y el descuento).
-- [ ] **Exportar** (respaldo completo) descarga el JSON con las 16 tablas.
+- [ ] **Datos → Respaldo completo** descarga el JSON con las 16 tablas.
 
 **Que la llave pública ya no abre nada** — con la sesión cerrada (pantalla de entrada), abre la consola del navegador (F12 → Console; si pide, escribe `allow pasting` y Enter) y pega:
 
@@ -136,7 +136,7 @@ Después **borra los datos de "PRUEBA"** que hayas creado.
 
 La tarea programada automática (entraba con la llave pública) **dejó de poder leer** al activar el Paso 6 y se **eliminó**: el respaldo es a mano.
 
-- **Cada domingo:** entra como **administrador**, pulsa **Exportar** y guarda el archivo **fuera del repositorio** (que es público).
+- **Cada domingo:** entra como **administrador**, ve a **Datos → Respaldo completo**, pulsa el botón y guarda el archivo **fuera del repositorio** (que es público).
 - El aviso «Toca el respaldo semanal» sale **desde cada domingo** y se queda, cada día, **hasta que un respaldo completo termine bien** (solo se registra si bajaron todas las filas de las 16 tablas). Se pone rojo si pasan 10 días. Solo lo ve el administrador: si esa semana no entras como administrador, no lo verás.
 - (Si algún día se quiere automático: un usuario `respaldo` de solo lectura y una tarea nueva; la contraseña la pondría el dueño en Supabase, nunca por el chat.)
 

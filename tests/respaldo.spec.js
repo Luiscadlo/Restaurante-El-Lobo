@@ -7,6 +7,7 @@ const { datos: DATOS_BASE } = require('./fixtures/datos');
 const { entrarComoAdmin } = require('./helpers/sesion');
 
 const copia = x => JSON.parse(JSON.stringify(x));
+const irA = (page, id) => page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
 const HTML_TEXTO = fs.readFileSync(decodeURIComponent(new URL(URL_HTML).pathname), 'utf-8');
 
 // ── Que el respaldo no se olvide de ninguna tabla ──────────────────────────────
@@ -74,7 +75,7 @@ test.describe('aviso de respaldo', () => {
     await expect(aviso(page)).toBeVisible();
     // se exporta (completo y verificado) → queda registrado → desaparece
     const descarga = page.waitForEvent('download');
-    await page.getByRole('button', { name: /Exportar/ }).click();
+    await aviso(page).getByRole('button', { name: /Hacer respaldo ahora/ }).click();
     await descarga;
     await expect.poll(() => page.evaluate(() => ST.config.find(c => c.clave === 'ultimo_respaldo').valor.fecha)).toBe('2026-10-21');
     await expect(aviso(page)).toBeHidden();
@@ -88,7 +89,7 @@ test.describe('aviso de respaldo', () => {
     datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-17' } }];
     await abrirSistema(page, { datos, usuario: 'admin', totalesFalsos: { pedidos: 999 } });
     await expect(aviso(page)).toBeVisible();
-    await page.getByRole('button', { name: /Exportar/ }).click();
+    await aviso(page).getByRole('button', { name: /Hacer respaldo ahora/ }).click();
     await expect(page.locator('.toast.warning', { hasText: 'El respaldo NO se completó' })).toBeVisible();
     await expect(aviso(page)).toBeVisible();
   });
@@ -176,12 +177,23 @@ test.describe('funciones del aviso', () => {
   });
 });
 
-// ── Botón Exportar: solo administrador ────────────────────────────────────────
-test.describe('botón Exportar', () => {
-  test('con caja ni se ve; si alguien llama la función a mano, se niega: no descarga ni pide tablas', async ({ page }) => {
+// ── Respaldo completo: vive en la pestaña Datos (solo administrador) ─────────────────────────
+// El encabezado ya no tiene botones de Exportar ni de Importar (todo eso se hace desde Datos).
+test.describe('respaldo completo en la pestaña Datos', () => {
+  for (const [quien, opciones] of [['caja', {}], ['administrador', { usuario: 'admin' }]]) {
+    test(`el encabezado no tiene botones Exportar/Importar (con ${quien})`, async ({ page }) => {
+      await abrirSistema(page, opciones);
+      await expect(page.locator('#btn-exportar, #btn-importar')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Exportar|Importar/ })).toHaveCount(0);   // (con Pedidos abierta: Datos está cerrada)
+      await expect(page.locator('label', { hasText: /Importar/ })).toHaveCount(0);
+      expect(await page.evaluate(() => typeof importarDatos)).toBe('undefined');   // la importación vieja ya no existe
+    });
+  }
+
+  test('con caja la pestaña Datos ni se ve; si alguien llama la función a mano, se niega: no descarga ni pide tablas', async ({ page }) => {
     const reg = await abrirSistema(page);
-    await expect(page.getByRole('button', { name: /Exportar/ })).toBeHidden();
-    await expect(page.locator('#btn-importar')).toBeHidden();
+    await expect(page.locator('#tab-nav-datos')).toBeHidden();
+    await expect(page.locator('#btn-respaldo-completo')).toBeHidden();
     const peticionesAntes = reg.peticiones.length;
     let descargo = false;
     page.on('download', () => { descargo = true; });
@@ -193,9 +205,11 @@ test.describe('botón Exportar', () => {
     expect(reg.escrituras).toEqual([]);
   });
 
-  test('con administrador se ve y descarga directo, sin pedir contraseña', async ({ page }) => {
+  test('con administrador: Datos tiene la tarjeta «Respaldo completo» y el botón descarga directo, sin pedir contraseña', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: 'admin' });
-    const boton = page.getByRole('button', { name: /Exportar/ });
+    await irA(page, 'datos');
+    await expect(page.locator('#datos-contenido')).toContainText('Respaldo completo');
+    const boton = page.locator('#btn-respaldo-completo');
     await expect(boton).toBeVisible();
     const descarga = page.waitForEvent('download');
     await boton.click();
@@ -204,21 +218,52 @@ test.describe('botón Exportar', () => {
     expect(reg.errores).toEqual([]);
   });
 
-  test('un administrador autorizado en el sitio lo ve; al volver a caja se oculta de nuevo', async ({ page }) => {
+  test('un administrador autorizado en el sitio ve la tarjeta; al volver a caja desaparece', async ({ page }) => {
     await abrirSistema(page);
     await entrarComoAdmin(page);
-    await expect(page.getByRole('button', { name: /Exportar/ })).toBeVisible();
+    await irA(page, 'datos');
+    await expect(page.locator('#btn-respaldo-completo')).toBeVisible();
     await page.evaluate(() => cerrarSesionAdmin());
-    await expect(page.getByRole('button', { name: /Exportar/ })).toBeHidden();
+    await expect(page.locator('#btn-respaldo-completo')).toBeHidden();
+  });
+
+  test('la tarjeta muestra cuándo fue el último respaldo y se actualiza al hacer uno nuevo', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-17' } }];
+    await abrirSistema(page, { datos, usuario: 'admin' });
+    await irA(page, 'datos');
+    const estado = page.locator('#datos-respaldo-estado');
+    await expect(estado).toContainText('Último respaldo completo: 2026-10-17');
+    await expect(estado).toContainText('hace 3 días');
+    await expect(estado).toContainText('Toca hacer uno');
+    const descarga = page.waitForEvent('download');
+    await page.locator('#btn-respaldo-completo').click();
+    await descarga;
+    await expect(estado).toContainText('Último respaldo completo: 2026-10-20');
+    await expect(estado).toContainText('hoy');
+    await expect(estado).toContainText('Al día');
+  });
+
+  test('si nunca se hizo un respaldo, la tarjeta lo dice; si falta la tabla config, lo explica', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [];
+    await abrirSistema(page, { datos, usuario: 'admin' });
+    await irA(page, 'datos');
+    await expect(page.locator('#datos-respaldo-estado')).toContainText('Todavía no se ha hecho ningún respaldo completo');
+    const pagina2 = await page.context().newPage();
+    await abrirSistema(pagina2, { tablasFaltantes: ['config'], usuario: 'admin' });
+    await irA(pagina2, 'datos');
+    await expect(pagina2.locator('#datos-respaldo-estado')).toContainText('falta crear la tabla config');
   });
 });
 
 // ── El respaldo en sí ──────────────────────────────────────────────────────────
 test.describe('respaldoCompleto', () => {
-  // (la página se abre con { usuario: 'admin' }: el botón Exportar es solo del administrador)
+  // (la página se abre con { usuario: 'admin' }: el respaldo es solo del administrador, desde la pestaña Datos)
   async function respaldar(page) {
+    await irA(page, 'datos');
     const descarga = page.waitForEvent('download');
-    await page.getByRole('button', { name: /Exportar/ }).click();
+    await page.locator('#btn-respaldo-completo').click();
     const d = await descarga;
     return JSON.parse(fs.readFileSync(await d.path(), 'utf-8'));
   }
@@ -275,7 +320,8 @@ test.describe('respaldoCompleto', () => {
     const reg = await abrirSistema(page, { totalesFalsos: { pedidos: 999 }, usuario: 'admin' });
     let descargo = false;
     page.on('download', () => { descargo = true; });
-    await page.getByRole('button', { name: /Exportar/ }).click();
+    await irA(page, 'datos');
+    await page.locator('#btn-respaldo-completo').click();
     await expect(page.locator('.toast.warning', { hasText: 'El respaldo NO se completó' })).toBeVisible();
     // el motivo correcto: se bajaron 11 filas pero "Supabase" dijo 999 (no un error de otro tipo)
     await expect(page.locator('.toast.warning')).toContainText('"pedidos": se bajaron 11 filas pero Supabase reporta 999');
