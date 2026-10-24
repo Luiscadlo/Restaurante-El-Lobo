@@ -4,7 +4,7 @@ Esta guía deja a El Lobo con **usuarios con rol** y **la base de datos cerrada 
 
 Leyenda: 🗄 Supabase (navegador) · 🌐 el sistema en el navegador/celular · 🖥 GitHub / Claude Code · 💬 el chat con Claude
 
-> **Qué cambia para el equipo:** al abrir el sistema pide correo y contraseña. El mostrador entra con el usuario `caja` (queda recordado en ese equipo). Las pestañas con candado las abre un dueño escribiendo **su** correo y contraseña, o entrando directo con su usuario.
+> **Qué cambia para el equipo:** al abrir el sistema pide usuario y contraseña (solo el nombre corto, p. ej. `caja` o `luiscadlo`). El mostrador entra con el usuario `caja` (queda recordado en ese equipo). Las pestañas con candado las abre un dueño escribiendo **su** correo y contraseña, o entrando directo con su usuario.
 > **Qué NO cambia:** las pantallas, los cálculos, los cierres ni el Menú.
 
 ## Qué hay en el repositorio para esto
@@ -24,7 +24,7 @@ Leyenda: 🗄 Supabase (navegador) · 🌐 el sistema en el navegador/celular ·
 - [ ] Hiciste un **respaldo completo reciente** (botón **Exportar** del encabezado) y lo guardaste **fuera del repositorio**.
 - [ ] Ya corriste en Supabase `sql/migracion_supabase_config.sql` (tabla `config`, del respaldo/aviso). Si no, hazlo ahora: el sistema nuevo la lee.
 - [ ] Decidiste las 3 decisiones de `docs/MATRIZ_PERMISOS.md` (si no respondes, quedan las opciones **A**).
-- [ ] Tienes los **correos** de cada dueño que tendrá usuario propio, y un gestor de contraseñas (o papel guardado bajo llave) para las claves.
+- [ ] Tienes el **nombre corto** de cada dueño que tendrá usuario propio (p. ej. `luiscadlo`), y un gestor de contraseñas (o papel guardado bajo llave) para las claves.
 - [ ] Tienes a mano `sql/rollback_rls.sql` (para deshacer si algo sale mal).
 
 ## Paso 1 — Crear los usuarios 🗄
@@ -34,10 +34,11 @@ Supabase → **Authentication → Users → Add user → Create new user**. Marc
 | Usuario | Para qué | Cuántos |
 |---|---|---|
 | uno por cada dueño/familiar | rol **admin** (entra a todo) | tantos como personas |
-| `caja` (el correo que quieras, p. ej. `caja@…`) | el mostrador, compartido | 1 |
+| `caja` → en Supabase `caja@elobo.test` | el mostrador, compartido | 1 |
 | `respaldo` (p. ej. `respaldo@…`) | solo para la copia semanal automática; no entra a la pantalla | 1 |
 
-- El correo **no tiene que existir de verdad** (nunca se envía nada), pero conviene que sea reconocible.
+- **Cómo se llaman:** en Supabase cada usuario se crea como `nombre@elobo.test` (p. ej. `luiscadlo@elobo.test`, `caja@elobo.test`, `respaldo@elobo.test`). En el sistema solo se escribe el nombre corto (`luiscadlo`) y la pantalla agrega `@elobo.test` por detrás (`DOMINIO_USUARIOS` en el HTML: debe coincidir con el dominio con que se crearon).
+- El correo **no existe de verdad** (nunca se envía nada), así que no hay «olvidé mi contraseña» por correo: si alguien la olvida, se cambia en Supabase (Authentication → Users) o con el SQL de «Mantenimiento de los usuarios».
 - Contraseñas **largas y distintas** (12 caracteres o más). Guárdalas en el gestor de contraseñas. **Nunca** en el chat ni en el código.
 
 ## Paso 2 — Darle su rol a cada usuario 🗄
@@ -47,15 +48,15 @@ Supabase → **SQL Editor → New query**. Pega esto cambiando los correos por l
 ```sql
 update auth.users
 set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"rol":"admin"}'::jsonb
-where email in ('dueno1@ejemplo.com', 'dueno2@ejemplo.com');
+where email in ('luiscadlo@elobo.test');   -- un correo por cada dueño: 'otro@elobo.test', …
 
 update auth.users
 set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"rol":"caja"}'::jsonb
-where email = 'caja@ejemplo.com';
+where email = 'caja@elobo.test';
 
 update auth.users
 set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"rol":"respaldo"}'::jsonb
-where email = 'respaldo@ejemplo.com';
+where email = 'respaldo@elobo.test';
 
 -- Comprobación: cada correo debe aparecer con su rol (ninguno vacío)
 select email, raw_app_meta_data ->> 'rol' as rol from auth.users order by 1;
@@ -84,7 +85,7 @@ La base **todavía** está abierta a la llave pública (aún no corres el SQL de
 ## Paso 5 — Probar los usuarios (reglas todavía apagadas) 🌐
 
 - [ ] Entra con el usuario **caja**. Se ven Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Las pestañas con candado (Tablero, Ingresos, Egresos, Caja, Auditoría, Datos) piden correo y contraseña de un dueño. **Importar** no aparece.
-- [ ] En un candado, escribe el correo y la contraseña de un **dueño**: abre. Pulsa **🔒 Cerrar sesión** (dentro de esa pestaña): vuelve a caja.
+- [ ] En un candado, escribe el usuario (p. ej. `luiscadlo`) y la contraseña de un **dueño**: abre. Pulsa **🔒 Cerrar sesión** (dentro de esa pestaña): vuelve a caja.
 - [ ] Prueba con una contraseña equivocada y con el usuario de caja en un candado: debe rechazar.
 - [ ] Recarga la página con la sesión de caja: sigue en caja sin pedir clave. Con la autorización de dueño: al recargar vuelve a caja (por diseño).
 - [ ] Sal (**Salir**) y entra directo con un **dueño**: todo abierto.
@@ -161,7 +162,7 @@ El rollback no borra datos ni usuarios.
 **Cambiar o recuperar una contraseña:** Authentication → Users → ese usuario → **Send password recovery**, o con SQL (la nueva clave queda en el historial del editor; usa una clave nueva y larga, y bórrala del historial):
 
 ```sql
-update auth.users set encrypted_password = crypt('NUEVA-CLAVE-LARGA', gen_salt('bf')) where email = 'caja@ejemplo.com';
+update auth.users set encrypted_password = crypt('NUEVA-CLAVE-LARGA', gen_salt('bf')) where email = 'caja@elobo.test';
 ```
 
 **Si cambias algo de permisos:** edita `sql/matriz_permisos.json`, corre `python herramientas/generar_rls.py`, corre `python -m pytest tests/python/test_rls.py -q` y `npm test`, actualiza `docs/MATRIZ_PERMISOS.md`, y vuelve a correr `sql/rls_seguridad.sql` en Supabase (es seguro repetirlo).
