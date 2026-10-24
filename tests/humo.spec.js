@@ -14,7 +14,7 @@ async function irA(page, id) {
   await page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
 }
 
-test('abre el sistema y pide exactamente las tablas de loadState', async ({ page }) => {
+test('abre el sistema y pide exactamente las 16 tablas de loadState', async ({ page }) => {
   const reg = await abrirSistema(page);
   expect(reg.errores).toEqual([]);
   expect([...new Set(reg.peticiones)].sort()).toEqual([...TABLAS_LOADSTATE].sort());
