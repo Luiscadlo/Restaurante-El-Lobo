@@ -1,7 +1,7 @@
 // Prueba de humo: el sistema abre, carga las tablas esperadas y NINGUNA pestaña lanza errores.
 // Todo con datos ficticios y un backend falso (nada sale a internet ni toca tu Supabase).
 const { test, expect } = require('@playwright/test');
-const { abrirSistema, TABLAS_LOADSTATE } = require('./helpers/backend-falso');
+const { abrirSistema, TABLAS_LOADSTATE, TABLAS_CAJA } = require('./helpers/backend-falso');
 const { entrarComoAdmin } = require('./helpers/sesion');
 
 const PESTANAS = ['ingresos', 'pendientes', 'fiados', 'diaadia', 'inventario', 'menu',
@@ -14,13 +14,24 @@ async function irA(page, id) {
   await page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
 }
 
-test('abre el sistema y pide exactamente las 16 tablas de loadState', async ({ page }) => {
-  const reg = await abrirSistema(page);
+test('como caja: pide solo las 12 tablas operativas (nada de finanzas ni auditoría)', async ({ page }) => {
+  const reg = await abrirSistema(page);   // por defecto: sesión de caja
   expect(reg.errores).toEqual([]);
-  expect([...new Set(reg.peticiones)].sort()).toEqual([...TABLAS_LOADSTATE].sort());
-  expect(reg.noManejadas).toEqual([]);   // nada fuera de /rest/v1/ de Supabase
+  expect([...new Set(reg.peticiones)].sort()).toEqual([...TABLAS_CAJA].sort());
+  expect(reg.noManejadas).toEqual([]);   // nada fuera de /rest/v1/ y /auth/v1/ de Supabase
   expect(reg.avisos).toEqual([]);        // todas las tablas tienen datos de ejemplo
   expect(reg.escrituras).toEqual([]);    // abrir el sistema no escribe nada
+  expect(reg.denegadas).toEqual([]);     // y no intenta nada que caja no pueda
+});
+
+test('como admin: pide las 16 tablas completas de loadState', async ({ page }) => {
+  const reg = await abrirSistema(page, { usuario: 'admin' });
+  expect(reg.errores).toEqual([]);
+  expect([...new Set(reg.peticiones)].sort()).toEqual([...TABLAS_LOADSTATE].sort());
+  expect(reg.noManejadas).toEqual([]);
+  expect(reg.avisos).toEqual([]);
+  expect(reg.escrituras).toEqual([]);
+  expect(reg.denegadas).toEqual([]);
 });
 
 test('las 12 pestañas existen', async ({ page }) => {

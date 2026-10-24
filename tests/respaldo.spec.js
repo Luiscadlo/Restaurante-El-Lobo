@@ -137,9 +137,10 @@ test.describe('botón Exportar', () => {
     // Abre el modal sin sesión…
     await page.getByRole('button', { name: /Exportar/ }).click();
     await expect(page.locator('#modal-respaldo')).toBeVisible();
-    // …y simula que el acceso de admin se concedió (la contraseña real nunca va en las pruebas).
+    // …y autoriza a un administrador de prueba (usuario ficticio del Auth falso).
     const descarga = page.waitForEvent('download');
-    await page.evaluate(() => { adminAutenticado = true; aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal); });
+    await entrarComoAdmin(page);   // autorización real contra el Auth falso
+    await page.evaluate(() => aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal));
     const d = await descarga;
     expect(d.suggestedFilename()).toBe('ElLobo_respaldo_completo_2026-10-20.json');
     await expect(page.locator('#modal-respaldo')).toBeHidden();
@@ -152,7 +153,8 @@ test.describe('respaldoCompleto', () => {
   async function respaldar(page) {
     const descarga = page.waitForEvent('download');
     await page.getByRole('button', { name: /Exportar/ }).click();   // abre el modal (sin sesión)
-    await page.evaluate(() => { adminAutenticado = true; aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal); });
+    await entrarComoAdmin(page);   // autorización real contra el Auth falso
+    await page.evaluate(() => aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal));
     const d = await descarga;
     return JSON.parse(fs.readFileSync(await d.path(), 'utf-8'));
   }
@@ -210,7 +212,8 @@ test.describe('respaldoCompleto', () => {
     let descargo = false;
     page.on('download', () => { descargo = true; });
     await page.getByRole('button', { name: /Exportar/ }).click();
-    await page.evaluate(() => { adminAutenticado = true; aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal); });
+    await entrarComoAdmin(page);   // autorización real contra el Auth falso
+    await page.evaluate(() => aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal));
     await expect(page.locator('.toast.warning', { hasText: 'El respaldo NO se completó' })).toBeVisible();
     // el motivo correcto: se bajaron 11 filas pero "Supabase" dijo 999 (no un error de otro tipo)
     await expect(page.locator('.toast.warning')).toContainText('"pedidos": se bajaron 11 filas pero Supabase reporta 999');
