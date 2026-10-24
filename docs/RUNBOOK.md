@@ -18,7 +18,7 @@ Si Supabase se cae, el sistema no abre (muestra el error de conexión). Si GitHu
 | Rol | Quién | Qué puede |
 |---|---|---|
 | `admin` | Cada dueño/familiar, con su **propio** correo | Todo. Entrando directo o autorizando desde caja. |
-| `caja` | Un usuario compartido, el del mostrador | Pedidos, Pendientes, Fiados, Día a día, Inventario, Menú. Lo demás pide autorización de un dueño. |
+| `caja` | Un usuario compartido, el del mostrador | Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario, Menú. Lo demás pide autorización de un dueño. |
 | `respaldo` | Solo el respaldo automático | Leer todo. No entra a la pantalla ni escribe. |
 
 Tabla completa de permisos: `docs/MATRIZ_PERMISOS.md`. **El rol vive en `app_metadata.rol` del usuario** (lo asigna un dueño en Supabase; el usuario no puede cambiarlo).
