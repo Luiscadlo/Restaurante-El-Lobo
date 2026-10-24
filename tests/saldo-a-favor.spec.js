@@ -158,6 +158,24 @@ test.describe('formulario «Registrar saldo a favor»', () => {
     expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(1);                     // el pedido se salda con el segundo abono
   });
 
+  test('tarjeta del cliente: tras abonar limpia monto y nota; si falla (sin monto) conserva lo escrito', async ({ page }) => {
+    const reg = await abrir(page);
+    const valor = id => page.evaluate(i => document.getElementById(i).value, id);
+    // (la tarjeta del cliente está plegada: se escribe y se pulsa Abonar directo, como en abonos-fiado.spec.js)
+    // sin monto: avisa, no escribe nada y NO borra la nota que ya se había escrito
+    await page.evaluate(async () => { document.getElementById('abono-nota-8').value = 'Pago de Marta'; await registrarAbonoFiado(8); });
+    await expect(ultimoToast(page)).toContainText('Ingresa un monto válido');
+    expect(await valor('abono-nota-8')).toBe('Pago de Marta');
+    expect(escritura(reg, 'POST', 'abonos_fiado')).toHaveLength(0);
+    // con monto: registra y deja la tarjeta limpia
+    await page.evaluate(async () => { document.getElementById('abono-monto-8').value = '4.000'; await registrarAbonoFiado(8); });
+    await expect.poll(() => escritura(reg, 'POST', 'abonos_fiado').length).toBe(1);
+    await expect(ultimoToast(page)).toContainText('Marta Pérez debe $8.000');
+    expect(escritura(reg, 'POST', 'abonos_fiado')[0].cuerpo.nota).toBe('Pago de Marta');
+    expect(await valor('abono-monto-8')).toBe('');
+    expect(await valor('abono-nota-8')).toBe('');
+  });
+
   test('el saldo a favor se gasta en el próximo fiado: «Aplicar saldo a favor» salda el pedido sin meter plata nueva', async ({ page }) => {
     const reg = await abrir(page);
     await llenar(page, { cliente: 7, monto: '5000' });
