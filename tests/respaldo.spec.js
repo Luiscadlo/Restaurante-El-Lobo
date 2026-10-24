@@ -23,37 +23,80 @@ test('TABLAS_RESPALDO cubre TODAS las tablas que usa el código (y nada más)', 
 
 // ── Aviso en pantalla ──────────────────────────────────────────────────────────
 test.describe('aviso de respaldo', () => {
-  const abrirConRespaldo = async (page, valor) => {
+  // `hoy`: fecha "de hoy" simulada (por defecto martes 20-oct). Domingos de la semana: 18 y 25 de octubre.
+  const abrirConRespaldo = async (page, valor, hoy) => {
     const datos = copia(DATOS_BASE);
     datos.config = valor === undefined ? [] : [{ clave: 'ultimo_respaldo', valor }];
-    const reg = await abrirSistema(page, { datos, usuario: 'admin' });   // el aviso es del administrador
-    return reg;
+    const opciones = { datos, usuario: 'admin' };   // el aviso es del administrador
+    if (hoy) opciones.fecha = new Date(`${hoy}T14:00:00-05:00`);
+    return abrirSistema(page, opciones);
   };
   const aviso = page => page.locator('#aviso-respaldo');
 
-  test('respaldo de hace 2 días → sin aviso', async ({ page }) => {
-    const reg = await abrirSistema(page, { usuario: 'admin' });
+  // ── El respaldo es semanal: el aviso sale desde cada DOMINGO y dura hasta que se exporte ──
+  test('martes con el respaldo hecho el domingo (hace 2 días) → sin aviso', async ({ page }) => {
+    const reg = await abrirConRespaldo(page, { fecha: '2026-10-18' });
     await expect(aviso(page)).toBeHidden();
     expect(reg.errores).toEqual([]);
   });
 
-  test('respaldo de hace exactamente 7 días → sin aviso (el aviso es con MÁS de 7)', async ({ page }) => {
-    await abrirConRespaldo(page, { fecha: '2026-10-13' });
-    await expect(aviso(page)).toBeHidden();
-  });
-
-  test('hace 8 días → aviso ámbar con el botón', async ({ page }) => {
-    await abrirConRespaldo(page, { fecha: '2026-10-12' });
+  test('martes con el respaldo del sábado anterior (hace 3 días, ANTES del domingo) → aviso ámbar "toca el respaldo semanal"', async ({ page }) => {
+    await abrirConRespaldo(page, { fecha: '2026-10-17' });
     await expect(aviso(page)).toBeVisible();
-    await expect(aviso(page)).toContainText('Hace 8 días');
+    await expect(aviso(page)).toContainText('Toca el respaldo semanal');
+    await expect(aviso(page)).toContainText('hace 3 días');
     await expect(aviso(page).locator('.alert.info')).toHaveCount(1);
     await expect(aviso(page).locator('.alert.warning')).toHaveCount(0);
     await expect(aviso(page).getByRole('button', { name: /Hacer respaldo ahora/ })).toBeVisible();
   });
 
-  test('hace 9 días → todavía ámbar; hace 10 días → rojo', async ({ page }) => {
+  test('el DOMINGO el aviso sale aunque el respaldo sea de ayer; si el respaldo es de ese mismo domingo, no', async ({ page }) => {
+    await abrirConRespaldo(page, { fecha: '2026-10-24' }, '2026-10-25');       // sábado → domingo
+    await expect(aviso(page)).toBeVisible();
+    await expect(aviso(page)).toContainText('hace 1 día.');                       // singular
+    const pagina2 = await page.context().newPage();
+    await abrirConRespaldo(pagina2, { fecha: '2026-10-25' }, '2026-10-25');       // ya lo hizo hoy domingo
+    await expect(pagina2.locator('#aviso-respaldo')).toBeHidden();
+  });
+
+  test('el sábado con el respaldo del domingo (hace 6) → sin aviso; con el del sábado anterior (hace 7) → ámbar', async ({ page }) => {
+    await abrirConRespaldo(page, { fecha: '2026-10-18' }, '2026-10-24');
+    await expect(aviso(page)).toBeHidden();
+    const pagina2 = await page.context().newPage();
+    await abrirConRespaldo(pagina2, { fecha: '2026-10-17' }, '2026-10-24');
+    await expect(pagina2.locator('#aviso-respaldo .alert.info')).toHaveCount(1);
+    await expect(pagina2.locator('#aviso-respaldo')).toContainText('hace 7 días');
+  });
+
+  test('el aviso se queda cada día hasta que el respaldo se haga bien, y entonces se apaga hasta el próximo domingo', async ({ page }) => {
+    // respaldo de la semana pasada; hoy es miércoles 21-oct y no se ha exportado desde el domingo
+    await abrirConRespaldo(page, { fecha: '2026-10-17' }, '2026-10-21');
+    await expect(aviso(page)).toBeVisible();
+    // se exporta (completo y verificado) → queda registrado → desaparece
+    const descarga = page.waitForEvent('download');
+    await page.getByRole('button', { name: /Exportar/ }).click();
+    await descarga;
+    await expect.poll(() => page.evaluate(() => ST.config.find(c => c.clave === 'ultimo_respaldo').valor.fecha)).toBe('2026-10-21');
+    await expect(aviso(page)).toBeHidden();
+    // y sigue apagado el resto de la semana; el siguiente domingo (25-oct) vuelve a salir
+    const n = await page.evaluate(() => ['2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25'].map(h => nivelAvisoRespaldo(diasDesdeFecha('2026-10-21', h), diaDeLaSemana(h))));
+    expect(n).toEqual([null, null, null, 'ambar']);
+  });
+
+  test('si el respaldo FALLA (faltan filas) no se registra y el aviso sigue', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-17' } }];
+    await abrirSistema(page, { datos, usuario: 'admin', totalesFalsos: { pedidos: 999 } });
+    await expect(aviso(page)).toBeVisible();
+    await page.getByRole('button', { name: /Exportar/ }).click();
+    await expect(page.locator('.toast.warning', { hasText: 'El respaldo NO se completó' })).toBeVisible();
+    await expect(aviso(page)).toBeVisible();
+  });
+
+  test('hace 9 días → ámbar; hace 10 días → rojo', async ({ page }) => {
     await abrirConRespaldo(page, { fecha: '2026-10-11' });
     await expect(aviso(page).locator('.alert.info')).toHaveCount(1);
+    await expect(aviso(page)).toContainText('hace 9 días');
     const pagina2 = await page.context().newPage();
     await abrirConRespaldo(pagina2, { fecha: '2026-10-10' });
     await expect(pagina2.locator('#aviso-respaldo .alert.warning')).toHaveCount(1);
@@ -109,20 +152,27 @@ test.describe('aviso de respaldo', () => {
 });
 
 test.describe('funciones del aviso', () => {
-  test('diasDesdeFecha y nivelAvisoRespaldo', async ({ page }) => {
+  test('diasDesdeFecha, diaDeLaSemana y nivelAvisoRespaldo', async ({ page }) => {
     await abrirSistema(page);
     const r = await page.evaluate(() => ({
       mismoDia: diasDesdeFecha('2026-10-20', '2026-10-20'),
       siete: diasDesdeFecha('2026-10-13', '2026-10-20'),
       cruceMes: diasDesdeFecha('2026-09-28', '2026-10-02'),
       cruceAnio: diasDesdeFecha('2025-12-30', '2026-01-02'),
-      niveles: [0, 7, 8, 9, 10, 25, null, NaN].map(nivelAvisoRespaldo),
+      semana: ['2026-10-25', '2026-10-26', '2026-10-20', '2026-10-24', '2026-01-01'].map(f => diaDeLaSemana(f)),
+      // martes (2): un respaldo de hace ≤2 días es de este domingo o posterior; de 3 en adelante es anterior
+      martes: [0, 1, 2, 3, 7, 9, 10, 25, null, NaN].map(d => nivelAvisoRespaldo(d, 2)),
+      domingo: [0, 1, 7].map(d => nivelAvisoRespaldo(d, 0)),
+      sabado: [0, 6, 7].map(d => nivelAvisoRespaldo(d, 6)),
     }));
     expect(r.mismoDia).toBe(0);
     expect(r.siete).toBe(7);
     expect(r.cruceMes).toBe(4);     // 28→30 sep = 2, +1 (1-oct) +1 (2-oct) = 4
     expect(r.cruceAnio).toBe(3);    // 30, 31 dic, 1, 2 ene → 3 días
-    expect(r.niveles).toEqual([null, null, 'ambar', 'ambar', 'rojo', 'rojo', 'ambar', 'ambar']);
+    expect(r.semana).toEqual([0, 1, 2, 6, 4]);   // dom 25-oct, lun, mar 20-oct, sáb 24-oct, jue 1-ene
+    expect(r.martes).toEqual([null, null, null, 'ambar', 'ambar', 'ambar', 'rojo', 'rojo', 'ambar', 'ambar']);
+    expect(r.domingo).toEqual([null, 'ambar', 'ambar']);
+    expect(r.sabado).toEqual([null, null, 'ambar']);
   });
 });
 

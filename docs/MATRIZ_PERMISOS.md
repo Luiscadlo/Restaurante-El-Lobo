@@ -58,5 +58,5 @@ Además: **sin sesión no se puede nada** (la llave pública que va en la págin
 - Caja **puede leer** `pedidos` y `cierres_dia`, así que alguien técnico con esa cuenta podría consultar todas las ventas históricas (no compras, gastos ni caja). Es inevitable si el mostrador cobra y cierra turno.
 - **Importar** y **Exportar** (los botones del encabezado) son solo de administrador y con caja ni se dibujan. Antes cualquiera podía importar.
 - **Eliminar un abono de fiado** (botón 🗑 en Fiados) es solo de administrador; la base ya limitaba ese borrado a admin.
-- El usuario `respaldo` es solo lectura. La tarea semanal de respaldo (la que hoy corre con la llave pública) **dejará de funcionar** el día que se activen las reglas y habrá que darle ese usuario (o hacer el respaldo a mano desde Datos → Exportar, que la pantalla recuerda con el aviso).
+- El usuario `respaldo` es solo lectura. La tarea semanal automática de respaldo (que corría con la llave pública) se **eliminó** al activar las reglas: el respaldo es a mano cada domingo con **Exportar**, y el aviso lo recuerda hasta que se haga (solo lo ve el administrador). El usuario `respaldo` queda disponible por si algún día se quiere automatizar.
 - Nada más en el repositorio usa la base: el Menú del día no la toca.
