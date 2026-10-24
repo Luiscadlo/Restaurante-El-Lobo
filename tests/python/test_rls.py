@@ -85,6 +85,22 @@ def base_con_seguridad(cluster, base):
     return base
 
 
+# Las reglas "allow all" que trae la base REAL de El Lobo (tomadas de su esquema el 2026-10-24): para todos
+# (rol "public", que incluye a los usuarios con sesión), todo permitido. Si el SQL de seguridad no las retira,
+# se SUMAN a las nuevas y dejan pasar a caja a tablas de dueños.
+TABLAS_CON_REGLA_VIEJA = ["aperturas_turno", "ingresos_extra", "movimientos_caja", "notas_dia", "pedidos_eliminados"]
+REGLAS_VIEJAS_SQL = "\n".join(
+    f'alter table public.{t} enable row level security;\n'
+    f'create policy "allow all {t}" on public.{t} as permissive for all to public using (true) with check (true);'
+    for t in TABLAS_CON_REGLA_VIEJA)
+
+
+@pytest.fixture()
+def base_con_reglas_viejas(cluster, base):
+    cluster.psql_ok(base, REGLAS_VIEJAS_SQL)
+    return base
+
+
 # ── Perfiles que se prueban ─────────────────────────────────────────────────
 PERFILES = {
     "admin":   ("authenticated", {"app_metadata": {"rol": "admin"}}),
@@ -294,9 +310,73 @@ def test_una_vista_no_es_una_puerta_trasera(cluster, base):
 
 def test_la_verificacion_final_da_lo_esperado(cluster, base):
     salida = cluster.psql_ok(base, SQL_APLICAR.read_text(encoding="utf-8"))
-    # la última consulta del script: tablas_sin_rls | vistas_sin_proteger | anon_con_permisos | politicas
-    ultima = [l for l in salida.strip().split("\n") if re.match(r"^\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*$", l)]
+    # la última consulta del script: tablas_sin_rls | vistas_sin_proteger | anon_con_permisos | politicas | reglas_ajenas_abiertas
+    ultima = [l for l in salida.strip().split("\n") if re.match(r"^\s*\d+(\s*\|\s*\d+){4}\s*$", l)]
     assert ultima, salida
-    sin_rls, vistas, anon, politicas = [int(x) for x in ultima[-1].split("|")]
-    assert (sin_rls, vistas, anon) == (0, 0, 0)
+    sin_rls, vistas, anon, politicas, ajenas = [int(x) for x in ultima[-1].split("|")]
+    assert (sin_rls, vistas, anon, ajenas) == (0, 0, 0, 0)
     assert politicas == 4 * len(TABLAS)
+
+
+# ── Reglas viejas "allow all" de la base real ────────────────────────────────
+def test_sin_retirarlas_las_reglas_viejas_abririan_tablas_a_caja(cluster, base_con_reglas_viejas):
+    """Control negativo: con las reglas viejas y SIN el SQL de seguridad, caja y la llave pública ven las tablas de dueños."""
+    obtenido = _resultados(cluster, base_con_reglas_viejas, ["caja", "llave_publica"], ["ingresos_extra", "movimientos_caja"], ["S"])
+    assert all(obtenido.values())
+
+
+def test_la_matriz_se_cumple_aunque_la_base_traiga_reglas_viejas_allow_all(cluster, base_con_reglas_viejas):
+    cluster.psql_ok(base_con_reglas_viejas, SQL_APLICAR.read_text(encoding="utf-8"))
+    obtenido = _resultados(cluster, base_con_reglas_viejas, list(PERFILES), TABLAS + ["tabla_desconocida"], OPERACIONES)
+    diferencias = [f"{p} {o} {t}: obtuvo {'PERMITIDO' if ok else 'negado'}, la matriz dice {'permitido' if _esperado(p, t, o) else 'negado'}"
+                   for (p, t, o), ok in sorted(obtenido.items()) if ok != _esperado(p, t, o)]
+    assert not diferencias, "\n".join(diferencias)
+
+
+def test_caja_sigue_sin_ver_las_finanzas_con_las_reglas_viejas(cluster, base_con_reglas_viejas):
+    cluster.psql_ok(base_con_reglas_viejas, SQL_APLICAR.read_text(encoding="utf-8"))
+    obtenido = _resultados(cluster, base_con_reglas_viejas, ["caja"], ["ingresos_extra", "movimientos_caja", "pedidos_eliminados"], OPERACIONES)
+    assert obtenido[("caja", "ingresos_extra", "S")] is False and obtenido[("caja", "movimientos_caja", "S")] is False
+    assert obtenido[("caja", "pedidos_eliminados", "S")] is False and obtenido[("caja", "pedidos_eliminados", "D")] is False
+    assert obtenido[("caja", "pedidos_eliminados", "I")] is True   # lo único que caja puede hacer ahí: dejar su rastro
+
+
+def test_las_reglas_retiradas_se_guardan_y_aplicar_dos_veces_no_las_pierde(cluster, base_con_reglas_viejas):
+    sql = SQL_APLICAR.read_text(encoding="utf-8")
+    cluster.psql_ok(base_con_reglas_viejas, sql)
+    cluster.psql_ok(base_con_reglas_viejas, sql)
+    guardadas = cluster.consulta(base_con_reglas_viejas, "select tabla || '|' || nombre from seguridad.politicas_previas order by 1")
+    assert guardadas == sorted(f"{t}|allow all {t}" for t in TABLAS_CON_REGLA_VIEJA)
+    # y ya no queda ninguna regla permisiva que no sea de lobo_*
+    assert cluster.consulta(base_con_reglas_viejas,
+        "select count(*) from pg_policies where schemaname = 'public' and permissive = 'PERMISSIVE' and policyname not like 'lobo\\_%'") == ["0"]
+
+
+def test_el_rollback_devuelve_las_reglas_viejas_tal_cual(cluster, base_con_reglas_viejas):
+    cluster.psql_ok(base_con_reglas_viejas, SQL_APLICAR.read_text(encoding="utf-8"))
+    cluster.psql_ok(base_con_reglas_viejas, SQL_REVERTIR.read_text(encoding="utf-8"))
+    filas = cluster.consulta(base_con_reglas_viejas,
+        "select tablename || '|' || policyname || '|' || cmd || '|' || permissive || '|' || array_to_string(roles, ',') || '|' || coalesce(qual, '-') || '|' || coalesce(with_check, '-') "
+        "from pg_policies where schemaname = 'public' order by 1")
+    assert filas == sorted(f"{t}|allow all {t}|ALL|PERMISSIVE|public|true|true" for t in TABLAS_CON_REGLA_VIEJA)
+    # y la llave pública vuelve a leer, como antes
+    assert _resultados(cluster, base_con_reglas_viejas, ["llave_publica"], ["pedidos", "ingresos_extra"], ["S"]).values() and \
+        all(_resultados(cluster, base_con_reglas_viejas, ["llave_publica"], ["pedidos", "ingresos_extra"], ["S"]).values())
+
+
+def test_una_regla_restrictiva_ajena_se_respeta(cluster, base_con_reglas_viejas):
+    """Una regla RESTRICTIVA solo recorta permisos: no abre nada, así que no se toca (ni se pierde al deshacer)."""
+    cluster.psql_ok(base_con_reglas_viejas,
+        'create policy "mi_restriccion" on public.pedidos as restrictive for select to authenticated using (true);')
+    cluster.psql_ok(base_con_reglas_viejas, SQL_APLICAR.read_text(encoding="utf-8"))
+    assert cluster.consulta(base_con_reglas_viejas, "select count(*) from pg_policies where policyname = 'mi_restriccion'") == ["1"]
+    cluster.psql_ok(base_con_reglas_viejas, SQL_REVERTIR.read_text(encoding="utf-8"))
+    assert cluster.consulta(base_con_reglas_viejas, "select count(*) from pg_policies where policyname = 'mi_restriccion'") == ["1"]
+
+
+def test_la_verificacion_final_cuenta_las_reglas_ajenas_abiertas(cluster, base_con_reglas_viejas):
+    _, salida, _ = cluster.psql(base_con_reglas_viejas, SQL_APLICAR.read_text(encoding="utf-8"))
+    filas = [f.strip() for f in salida.splitlines() if re.fullmatch(r"\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*", f)]
+    assert "reglas_ajenas_abiertas" in salida
+    assert filas and re.sub(r"\s+", "", filas[-1]) == f"0|0|0|{4 * len(TABLAS)}|0", salida[-500:]
+
