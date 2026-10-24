@@ -83,7 +83,7 @@ La base **todavía** está abierta a la llave pública (aún no corres el SQL de
 
 ## Paso 5 — Probar los usuarios (reglas todavía apagadas) 🌐
 
-- [ ] Entra con el usuario **caja**. Se ven Pedidos, Pendientes, Fiados, Día a día, Inventario y Menú. Las pestañas con candado (Tablero, Ingresos, Egresos, Caja, Auditoría, Datos) piden correo y contraseña de un dueño. **Importar** no aparece.
+- [ ] Entra con el usuario **caja**. Se ven Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Las pestañas con candado (Tablero, Ingresos, Egresos, Caja, Auditoría, Datos) piden correo y contraseña de un dueño. **Importar** no aparece.
 - [ ] En un candado, escribe el correo y la contraseña de un **dueño**: abre. Pulsa **🔒 Cerrar sesión** (dentro de esa pestaña): vuelve a caja.
 - [ ] Prueba con una contraseña equivocada y con el usuario de caja en un candado: debe rechazar.
 - [ ] Recarga la página con la sesión de caja: sigue en caja sin pedir clave. Con la autorización de dueño: al recargar vuelve a caja (por diseño).
