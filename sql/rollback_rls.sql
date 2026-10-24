@@ -5,6 +5,7 @@
 -- al estado anterior (la llave pública vuelve a abrir las tablas: es lo que había antes).
 --
 -- · Borra las políticas "lobo_*".
+-- · Vuelve a crear las reglas viejas que el SQL de seguridad retiró (seguridad.politicas_previas).
 -- · Deja RLS de cada tabla como estaba (según seguridad.estado_previo) y devuelve a anon
 --   el acceso en las tablas que lo tenían.
 -- · Las tablas creadas DESPUÉS de aplicar la seguridad se quedan con RLS activo (más seguro).
@@ -19,6 +20,27 @@ begin
     where schemaname = 'public' and policyname like 'lobo\_%'
   loop
     execute format('drop policy %I on %I.%I', p.policyname, p.schemaname, p.tablename);
+  end loop;
+end $$;
+
+do $$
+declare p record;
+begin
+  for p in select * from seguridad.politicas_previas loop
+    if exists (
+      select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relname = p.tabla and c.relkind in ('r', 'p')
+    ) and not exists (
+      select 1 from pg_policies where schemaname = 'public' and tablename = p.tabla and policyname = p.nombre
+    ) then
+      execute format(
+        'create policy %I on public.%I as permissive for %s to %s%s%s',
+        p.nombre, p.tabla, p.comando,
+        (select string_agg(case when r = 'public' then 'public' else quote_ident(r) end, ', ') from unnest(p.roles) r),
+        case when p.usando is not null then format(' using (%s)', p.usando) else '' end,
+        case when p.con_chequeo is not null then format(' with check (%s)', p.con_chequeo) else '' end
+      );
+    end if;
   end loop;
 end $$;
 

@@ -96,13 +96,14 @@ Si algo de esto no pasa, **no sigas**: cuéntame qué viste (ver "Si algo sale m
 
 1. Abre `sql/rls_seguridad.sql` del repositorio, copia **todo** su contenido.
 2. Supabase → **SQL Editor → New query** → pega → **Run**. Corre en una sola transacción: si algo falla, no queda nada a medias.
-3. Al final muestra una fila con cuatro números. Debe ser:
+3. Al final muestra una fila con cinco números. Debe ser:
 
-| tablas_sin_rls | vistas_sin_proteger | anon_con_permisos | politicas |
-|---|---|---|---|
-| 0 | 0 | 0 | 64 |
+| tablas_sin_rls | vistas_sin_proteger | anon_con_permisos | politicas | reglas_ajenas_abiertas |
+|---|---|---|---|---|
+| 0 | 0 | 0 | 64 | 0 |
 
    Si ves otra cosa, **no sigas** y pégame el resultado.
+   *(Tu base trae 5 reglas viejas «allow all» —aperturas_turno, ingresos_extra, movimientos_caja, notas_dia, pedidos_eliminados— que dejarían pasar a cualquiera con sesión por encima de las nuevas. Este SQL las retira solo y las guarda en `seguridad.politicas_previas`; por eso la última columna debe ser 0.)*
 4. 🌐 Recarga todos los equipos (el sistema viejo en memoria ya no funcionaría; el nuevo sí).
 
 ## Paso 7 — Verificar que todo funciona 🌐
@@ -142,7 +143,7 @@ La tarea programada "Respaldo semanal El Lobo" hoy entra con la llave pública. 
 
 **Primero** actúa, **después** investiga.
 
-1. 🗄 Corre `sql/rollback_rls.sql` (SQL Editor). Quita las reglas `lobo_*` y deja cada tabla como estaba. **El sistema nuevo sigue funcionando con usuarios**; solo queda sin la cerradura de la base.
+1. 🗄 Corre `sql/rollback_rls.sql` (SQL Editor). Quita las reglas `lobo_*`, vuelve a crear las reglas viejas que había y deja cada tabla como estaba. **El sistema nuevo sigue funcionando con usuarios**; solo queda sin la cerradura de la base.
 2. 🌐 Recarga los equipos y comprueba que se puede operar.
 3. Solo si necesitas volver también a la **pantalla anterior** (sin usuarios): 🖥 `git revert -m 1 <hash del merge de seguridad>` y push. El orden es ese: primero la base, luego la pantalla (la pantalla vieja con las reglas activas no funciona).
 4. 💬 Cuéntame qué falló.
