@@ -32,8 +32,8 @@ ESQUEMA_COMPLETO = RAIZ / "sql" / "esquema_completo.sql"
 RLS = RAIZ / "sql" / "rls_seguridad.sql"
 CONSULTA = RAIZ / "sql" / "consulta_esquema.sql"
 MATRIZ = json.loads((RAIZ / "sql" / "matriz_permisos.json").read_text(encoding="utf-8"))
-# La última fila del script de seguridad: tablas_sin_rls | vistas_sin_proteger | anon_con_permisos | politicas
-VERIFICACION_RLS = re.compile(r"^\s*0\s*\|\s*0\s*\|\s*0\s*\|\s*%d\s*$" % (4 * len(MATRIZ["tablas"])), re.M)
+# La última fila del script de seguridad: tablas_sin_rls | vistas_sin_proteger | anon_con_permisos | politicas | reglas_ajenas_abiertas
+VERIFICACION_RLS = re.compile(r"^\s*0\s*\|\s*0\s*\|\s*0\s*\|\s*%d\s*\|\s*0\s*$" % (4 * len(MATRIZ["tablas"])), re.M)
 
 
 @pytest.fixture(scope="module")
