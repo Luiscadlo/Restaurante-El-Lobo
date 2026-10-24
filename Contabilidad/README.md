@@ -78,3 +78,25 @@ manual pide confirmación aparte antes de tocarlo.
 - `exportarExcelCompleto()`: `Pedidos_Pagados`/`Pedidos_Pendientes` llevan
   `descuento`/`motivo_descuento`; hoja `Descuentos_Log` aparte si hay alguno en
   el período exportado.
+
+## Fiados: abonos y saldo a favor
+
+- **Abono** (tarjeta de cada cliente en la pestaña Fiados): la plata entra al
+  cierre del día/turno **real** en que se recibe (antes de las 9 am cuenta como
+  la cena del día anterior), en la columna de su cuenta (efectivo o
+  transferencia), y se reparte contra los fiados pendientes del cliente, del más
+  viejo al más nuevo, siempre por pedido completo.
+- **Saldo a favor** (formulario «💰 Registrar saldo a favor de un cliente», misma pestaña): para
+  un cliente que paga de más y **no debe nada**. Ejemplo: paga 20.000 una cuenta
+  de 15.000 → se cobra la cuenta normal (15.000) y aquí se registran los 5.000
+  sobrantes. Se elige un cliente de la lista o se escribe uno nuevo (si ya existe
+  uno con el mismo nombre —aunque cambien tildes o mayúsculas— se usa ese, no se
+  duplica). Por dentro es un abono normal, así que entra al cierre y a Caja igual.
+- **Cómo se gasta:** el próximo pedido del cliente se registra como fiado y se
+  pulsa «✔ Aplicar saldo a favor» (salda los pedidos fiados completos que alcance
+  a cubrir, sin meter plata nueva a Caja); o se cobra y se abona solo la diferencia.
+- **Si se registró por error:** solo el administrador puede eliminar el abono (🗑).
+  Si con ese abono ya se saldaron pedidos, no deja eliminarlo hasta devolver esos
+  pedidos a pendiente (↩); si el abono estaba en un cierre guardado, abre
+  «Corregir cierre».
+- Pruebas: `tests/saldo-a-favor.spec.js` y `tests/abonos-fiado.spec.js`.
