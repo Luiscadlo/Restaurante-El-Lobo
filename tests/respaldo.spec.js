@@ -7,6 +7,7 @@ const { datos: DATOS_BASE } = require('./fixtures/datos');
 const { entrarComoAdmin } = require('./helpers/sesion');
 
 const copia = x => JSON.parse(JSON.stringify(x));
+const irA = (page, id) => page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
 const HTML_TEXTO = fs.readFileSync(decodeURIComponent(new URL(URL_HTML).pathname), 'utf-8');
 
 // ── Que el respaldo no se olvide de ninguna tabla ──────────────────────────────
@@ -23,37 +24,80 @@ test('TABLAS_RESPALDO cubre TODAS las tablas que usa el código (y nada más)', 
 
 // ── Aviso en pantalla ──────────────────────────────────────────────────────────
 test.describe('aviso de respaldo', () => {
-  const abrirConRespaldo = async (page, valor) => {
+  // `hoy`: fecha "de hoy" simulada (por defecto martes 20-oct). Domingos de la semana: 18 y 25 de octubre.
+  const abrirConRespaldo = async (page, valor, hoy) => {
     const datos = copia(DATOS_BASE);
     datos.config = valor === undefined ? [] : [{ clave: 'ultimo_respaldo', valor }];
-    const reg = await abrirSistema(page, { datos });
-    return reg;
+    const opciones = { datos, usuario: 'admin' };   // el aviso es del administrador
+    if (hoy) opciones.fecha = new Date(`${hoy}T14:00:00-05:00`);
+    return abrirSistema(page, opciones);
   };
   const aviso = page => page.locator('#aviso-respaldo');
 
-  test('respaldo de hace 2 días → sin aviso', async ({ page }) => {
-    const reg = await abrirSistema(page);
+  // ── El respaldo es semanal: el aviso sale desde cada DOMINGO y dura hasta que se exporte ──
+  test('martes con el respaldo hecho el domingo (hace 2 días) → sin aviso', async ({ page }) => {
+    const reg = await abrirConRespaldo(page, { fecha: '2026-10-18' });
     await expect(aviso(page)).toBeHidden();
     expect(reg.errores).toEqual([]);
   });
 
-  test('respaldo de hace exactamente 7 días → sin aviso (el aviso es con MÁS de 7)', async ({ page }) => {
-    await abrirConRespaldo(page, { fecha: '2026-10-13' });
-    await expect(aviso(page)).toBeHidden();
-  });
-
-  test('hace 8 días → aviso ámbar con el botón', async ({ page }) => {
-    await abrirConRespaldo(page, { fecha: '2026-10-12' });
+  test('martes con el respaldo del sábado anterior (hace 3 días, ANTES del domingo) → aviso ámbar "toca el respaldo semanal"', async ({ page }) => {
+    await abrirConRespaldo(page, { fecha: '2026-10-17' });
     await expect(aviso(page)).toBeVisible();
-    await expect(aviso(page)).toContainText('Hace 8 días');
+    await expect(aviso(page)).toContainText('Toca el respaldo semanal');
+    await expect(aviso(page)).toContainText('hace 3 días');
     await expect(aviso(page).locator('.alert.info')).toHaveCount(1);
     await expect(aviso(page).locator('.alert.warning')).toHaveCount(0);
     await expect(aviso(page).getByRole('button', { name: /Hacer respaldo ahora/ })).toBeVisible();
   });
 
-  test('hace 9 días → todavía ámbar; hace 10 días → rojo', async ({ page }) => {
+  test('el DOMINGO el aviso sale aunque el respaldo sea de ayer; si el respaldo es de ese mismo domingo, no', async ({ page }) => {
+    await abrirConRespaldo(page, { fecha: '2026-10-24' }, '2026-10-25');       // sábado → domingo
+    await expect(aviso(page)).toBeVisible();
+    await expect(aviso(page)).toContainText('hace 1 día.');                       // singular
+    const pagina2 = await page.context().newPage();
+    await abrirConRespaldo(pagina2, { fecha: '2026-10-25' }, '2026-10-25');       // ya lo hizo hoy domingo
+    await expect(pagina2.locator('#aviso-respaldo')).toBeHidden();
+  });
+
+  test('el sábado con el respaldo del domingo (hace 6) → sin aviso; con el del sábado anterior (hace 7) → ámbar', async ({ page }) => {
+    await abrirConRespaldo(page, { fecha: '2026-10-18' }, '2026-10-24');
+    await expect(aviso(page)).toBeHidden();
+    const pagina2 = await page.context().newPage();
+    await abrirConRespaldo(pagina2, { fecha: '2026-10-17' }, '2026-10-24');
+    await expect(pagina2.locator('#aviso-respaldo .alert.info')).toHaveCount(1);
+    await expect(pagina2.locator('#aviso-respaldo')).toContainText('hace 7 días');
+  });
+
+  test('el aviso se queda cada día hasta que el respaldo se haga bien, y entonces se apaga hasta el próximo domingo', async ({ page }) => {
+    // respaldo de la semana pasada; hoy es miércoles 21-oct y no se ha exportado desde el domingo
+    await abrirConRespaldo(page, { fecha: '2026-10-17' }, '2026-10-21');
+    await expect(aviso(page)).toBeVisible();
+    // se exporta (completo y verificado) → queda registrado → desaparece
+    const descarga = page.waitForEvent('download');
+    await aviso(page).getByRole('button', { name: /Hacer respaldo ahora/ }).click();
+    await descarga;
+    await expect.poll(() => page.evaluate(() => ST.config.find(c => c.clave === 'ultimo_respaldo').valor.fecha)).toBe('2026-10-21');
+    await expect(aviso(page)).toBeHidden();
+    // y sigue apagado el resto de la semana; el siguiente domingo (25-oct) vuelve a salir
+    const n = await page.evaluate(() => ['2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25'].map(h => nivelAvisoRespaldo(diasDesdeFecha('2026-10-21', h), diaDeLaSemana(h))));
+    expect(n).toEqual([null, null, null, 'ambar']);
+  });
+
+  test('si el respaldo FALLA (faltan filas) no se registra y el aviso sigue', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-17' } }];
+    await abrirSistema(page, { datos, usuario: 'admin', totalesFalsos: { pedidos: 999 } });
+    await expect(aviso(page)).toBeVisible();
+    await aviso(page).getByRole('button', { name: /Hacer respaldo ahora/ }).click();
+    await expect(page.locator('.toast.warning', { hasText: 'El respaldo NO se completó' })).toBeVisible();
+    await expect(aviso(page)).toBeVisible();
+  });
+
+  test('hace 9 días → ámbar; hace 10 días → rojo', async ({ page }) => {
     await abrirConRespaldo(page, { fecha: '2026-10-11' });
     await expect(aviso(page).locator('.alert.info')).toHaveCount(1);
+    await expect(aviso(page)).toContainText('hace 9 días');
     const pagina2 = await page.context().newPage();
     await abrirConRespaldo(pagina2, { fecha: '2026-10-10' });
     await expect(pagina2.locator('#aviso-respaldo .alert.warning')).toHaveCount(1);
@@ -68,7 +112,7 @@ test.describe('aviso de respaldo', () => {
   });
 
   test('la tabla config no existe → el sistema NO falla; solo muestra un mensaje claro', async ({ page }) => {
-    const reg = await abrirSistema(page, { tablasFaltantes: ['config'] });
+    const reg = await abrirSistema(page, { tablasFaltantes: ['config'], usuario: 'admin' });
     expect(reg.errores.filter(e => !/404/.test(e))).toEqual([]);   // el 404 de la tabla falsa es esperado
     await expect(aviso(page)).toContainText('falta crear la tabla');
     await expect(aviso(page)).toContainText('sql/migracion_supabase_config.sql');
@@ -77,90 +121,155 @@ test.describe('aviso de respaldo', () => {
     expect(nPedidos).toBeGreaterThan(0);
   });
 
-  test('el aviso se ve desde cualquier pestaña y también sin sesión de admin', async ({ page }) => {
+  test('el administrador ve el aviso desde cualquier pestaña', async ({ page }) => {
     await abrirConRespaldo(page, { fecha: '2026-10-01' });
     for (const id of ['ingresos', 'fiados', 'diaadia']) {
       await page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
       await expect(aviso(page)).toBeVisible();
     }
   });
+
+  test('con caja el aviso NO aparece (hacer el respaldo es del administrador), ni el de "falta la tabla config"', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-01' } }];   // 19 días: con admin sería rojo
+    await abrirSistema(page, { datos });                                              // sesión de caja
+    await expect(aviso(page)).toBeHidden();
+    expect(await page.evaluate(() => document.getElementById('aviso-respaldo').innerHTML)).toBe('');
+    const pagina2 = await page.context().newPage();
+    await abrirSistema(pagina2, { tablasFaltantes: ['config'] });
+    await expect(pagina2.locator('#aviso-respaldo')).toBeHidden();
+  });
+
+  test('al entrar un administrador (autorizado en el sitio) el aviso aparece, y al salir desaparece', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-01' } }];
+    await abrirSistema(page, { datos });
+    await expect(aviso(page)).toBeHidden();
+    await entrarComoAdmin(page);
+    await expect(aviso(page)).toBeVisible();
+    await page.evaluate(() => cerrarSesionAdmin());
+    await expect(aviso(page)).toBeHidden();
+  });
 });
 
 test.describe('funciones del aviso', () => {
-  test('diasDesdeFecha y nivelAvisoRespaldo', async ({ page }) => {
+  test('diasDesdeFecha, diaDeLaSemana y nivelAvisoRespaldo', async ({ page }) => {
     await abrirSistema(page);
     const r = await page.evaluate(() => ({
       mismoDia: diasDesdeFecha('2026-10-20', '2026-10-20'),
       siete: diasDesdeFecha('2026-10-13', '2026-10-20'),
       cruceMes: diasDesdeFecha('2026-09-28', '2026-10-02'),
       cruceAnio: diasDesdeFecha('2025-12-30', '2026-01-02'),
-      niveles: [0, 7, 8, 9, 10, 25, null, NaN].map(nivelAvisoRespaldo),
+      semana: ['2026-10-25', '2026-10-26', '2026-10-20', '2026-10-24', '2026-01-01'].map(f => diaDeLaSemana(f)),
+      // martes (2): un respaldo de hace ≤2 días es de este domingo o posterior; de 3 en adelante es anterior
+      martes: [0, 1, 2, 3, 7, 9, 10, 25, null, NaN].map(d => nivelAvisoRespaldo(d, 2)),
+      domingo: [0, 1, 7].map(d => nivelAvisoRespaldo(d, 0)),
+      sabado: [0, 6, 7].map(d => nivelAvisoRespaldo(d, 6)),
     }));
     expect(r.mismoDia).toBe(0);
     expect(r.siete).toBe(7);
     expect(r.cruceMes).toBe(4);     // 28→30 sep = 2, +1 (1-oct) +1 (2-oct) = 4
     expect(r.cruceAnio).toBe(3);    // 30, 31 dic, 1, 2 ene → 3 días
-    expect(r.niveles).toEqual([null, null, 'ambar', 'ambar', 'rojo', 'rojo', 'ambar', 'ambar']);
+    expect(r.semana).toEqual([0, 1, 2, 6, 4]);   // dom 25-oct, lun, mar 20-oct, sáb 24-oct, jue 1-ene
+    expect(r.martes).toEqual([null, null, null, 'ambar', 'ambar', 'ambar', 'rojo', 'rojo', 'ambar', 'ambar']);
+    expect(r.domingo).toEqual([null, 'ambar', 'ambar']);
+    expect(r.sabado).toEqual([null, null, 'ambar']);
   });
 });
 
-// ── Botón Exportar: acceso de administrador ────────────────────────────────────
-test.describe('botón Exportar', () => {
-  test('sin acceso de admin abre el modal con la contraseña y NO descarga ni pide tablas de más', async ({ page }) => {
+// ── Respaldo completo: vive en la pestaña Datos (solo administrador) ─────────────────────────
+// El encabezado ya no tiene botones de Exportar ni de Importar (todo eso se hace desde Datos).
+test.describe('respaldo completo en la pestaña Datos', () => {
+  for (const [quien, opciones] of [['caja', {}], ['administrador', { usuario: 'admin' }]]) {
+    test(`el encabezado no tiene botones Exportar/Importar (con ${quien})`, async ({ page }) => {
+      await abrirSistema(page, opciones);
+      await expect(page.locator('#btn-exportar, #btn-importar')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Exportar|Importar/ })).toHaveCount(0);   // (con Pedidos abierta: Datos está cerrada)
+      await expect(page.locator('label', { hasText: /Importar/ })).toHaveCount(0);
+      expect(await page.evaluate(() => typeof importarDatos)).toBe('undefined');   // la importación vieja ya no existe
+    });
+  }
+
+  test('con caja la pestaña Datos ni se ve; si alguien llama la función a mano, se niega: no descarga ni pide tablas', async ({ page }) => {
     const reg = await abrirSistema(page);
+    await expect(page.locator('#tab-nav-datos')).toBeHidden();
+    await expect(page.locator('#btn-respaldo-completo')).toBeHidden();
     const peticionesAntes = reg.peticiones.length;
     let descargo = false;
     page.on('download', () => { descargo = true; });
-    await page.getByRole('button', { name: /Exportar/ }).click();
-    await expect(page.locator('#modal-respaldo')).toBeVisible();
-    await expect(page.locator('#respaldo-login')).toBeVisible();
-    await expect(page.locator('#respaldo-contenido')).toBeHidden();
-    // una contraseña incorrecta no abre nada
-    await page.fill('#respaldo-password', 'contraseña-incorrecta-de-prueba');
-    await page.evaluate(() => intentarAccesoRespaldo());
-    await expect(page.locator('#modal-respaldo')).toBeVisible();
+    await page.evaluate(() => pedirRespaldoCompleto());
+    await expect(page.locator('.toast.warning').last()).toContainText('solo para administradores');
+    expect(await page.evaluate(() => document.getElementById('modal-respaldo'))).toBeNull();   // ya no hay ventana de contraseña
     expect(descargo).toBe(false);
     expect(reg.peticiones.length).toBe(peticionesAntes);   // no bajó ninguna tabla
     expect(reg.escrituras).toEqual([]);
   });
 
-  test('al cerrar el modal se cancela el respaldo pendiente', async ({ page }) => {
-    await abrirSistema(page);
-    await page.getByRole('button', { name: /Exportar/ }).click();
-    await page.evaluate(() => cerrarModalRespaldo());
-    await expect(page.locator('#modal-respaldo')).toBeHidden();
-    expect(await page.evaluate(() => respaldoPendiente)).toBe(false);
-  });
-
-  test('con acceso de admin descarga el respaldo; tras pasar el modal también', async ({ page }) => {
-    const reg = await abrirSistema(page);
-    // Abre el modal sin sesión…
-    await page.getByRole('button', { name: /Exportar/ }).click();
-    await expect(page.locator('#modal-respaldo')).toBeVisible();
-    // …y autoriza a un administrador de prueba (usuario ficticio del Auth falso).
+  test('con administrador: Datos tiene la tarjeta «Respaldo completo» y el botón descarga directo, sin pedir contraseña', async ({ page }) => {
+    const reg = await abrirSistema(page, { usuario: 'admin' });
+    await irA(page, 'datos');
+    await expect(page.locator('#datos-contenido')).toContainText('Respaldo completo');
+    const boton = page.locator('#btn-respaldo-completo');
+    await expect(boton).toBeVisible();
     const descarga = page.waitForEvent('download');
-    await entrarComoAdmin(page);   // autorización real contra el Auth falso
-    await page.evaluate(() => aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal));
+    await boton.click();
     const d = await descarga;
     expect(d.suggestedFilename()).toBe('ElLobo_respaldo_completo_2026-10-20.json');
-    await expect(page.locator('#modal-respaldo')).toBeHidden();
     expect(reg.errores).toEqual([]);
+  });
+
+  test('un administrador autorizado en el sitio ve la tarjeta; al volver a caja desaparece', async ({ page }) => {
+    await abrirSistema(page);
+    await entrarComoAdmin(page);
+    await irA(page, 'datos');
+    await expect(page.locator('#btn-respaldo-completo')).toBeVisible();
+    await page.evaluate(() => cerrarSesionAdmin());
+    await expect(page.locator('#btn-respaldo-completo')).toBeHidden();
+  });
+
+  test('la tarjeta muestra cuándo fue el último respaldo y se actualiza al hacer uno nuevo', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-17' } }];
+    await abrirSistema(page, { datos, usuario: 'admin' });
+    await irA(page, 'datos');
+    const estado = page.locator('#datos-respaldo-estado');
+    await expect(estado).toContainText('Último respaldo completo: 2026-10-17');
+    await expect(estado).toContainText('hace 3 días');
+    await expect(estado).toContainText('Toca hacer uno');
+    const descarga = page.waitForEvent('download');
+    await page.locator('#btn-respaldo-completo').click();
+    await descarga;
+    await expect(estado).toContainText('Último respaldo completo: 2026-10-20');
+    await expect(estado).toContainText('hoy');
+    await expect(estado).toContainText('Al día');
+  });
+
+  test('si nunca se hizo un respaldo, la tarjeta lo dice; si falta la tabla config, lo explica', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [];
+    await abrirSistema(page, { datos, usuario: 'admin' });
+    await irA(page, 'datos');
+    await expect(page.locator('#datos-respaldo-estado')).toContainText('Todavía no se ha hecho ningún respaldo completo');
+    const pagina2 = await page.context().newPage();
+    await abrirSistema(pagina2, { tablasFaltantes: ['config'], usuario: 'admin' });
+    await irA(pagina2, 'datos');
+    await expect(pagina2.locator('#datos-respaldo-estado')).toContainText('falta crear la tabla config');
   });
 });
 
 // ── El respaldo en sí ──────────────────────────────────────────────────────────
 test.describe('respaldoCompleto', () => {
+  // (la página se abre con { usuario: 'admin' }: el respaldo es solo del administrador, desde la pestaña Datos)
   async function respaldar(page) {
+    await irA(page, 'datos');
     const descarga = page.waitForEvent('download');
-    await page.getByRole('button', { name: /Exportar/ }).click();   // abre el modal (sin sesión)
-    await entrarComoAdmin(page);   // autorización real contra el Auth falso
-    await page.evaluate(() => aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal));
+    await page.locator('#btn-respaldo-completo').click();
     const d = await descarga;
     return JSON.parse(fs.readFileSync(await d.path(), 'utf-8'));
   }
 
   test('baja las 16 tablas completas, con conteos que coinciden, y registra config.ultimo_respaldo', async ({ page }) => {
-    const reg = await abrirSistema(page);
+    const reg = await abrirSistema(page, { usuario: 'admin' });
     const archivo = await respaldar(page);
 
     expect(archivo.version).toBe(1);
@@ -189,7 +298,7 @@ test.describe('respaldoCompleto', () => {
   test('después del respaldo el aviso desaparece', async ({ page }) => {
     const datos = copia(DATOS_BASE);
     datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-01' } }];
-    await abrirSistema(page, { datos });
+    await abrirSistema(page, { datos, usuario: 'admin' });
     await expect(page.locator('#aviso-respaldo')).toBeVisible();
     await respaldar(page);
     await expect(page.locator('#aviso-respaldo')).toBeHidden();
@@ -198,7 +307,7 @@ test.describe('respaldoCompleto', () => {
   test('primer respaldo (config sin fila) → INSERT de ultimo_respaldo', async ({ page }) => {
     const datos = copia(DATOS_BASE);
     datos.config = [];
-    const reg = await abrirSistema(page, { datos });
+    const reg = await abrirSistema(page, { datos, usuario: 'admin' });
     const archivo = await respaldar(page);
     expect(archivo.tablas.config).toEqual([]);
     await expect.poll(() => reg.escrituras.filter(e => e.tabla === 'config').length).toBe(1);
@@ -208,12 +317,11 @@ test.describe('respaldoCompleto', () => {
   });
 
   test('si falta una fila (el total no coincide) el respaldo ABORTA: no descarga ni marca el respaldo', async ({ page }) => {
-    const reg = await abrirSistema(page, { totalesFalsos: { pedidos: 999 } });
+    const reg = await abrirSistema(page, { totalesFalsos: { pedidos: 999 }, usuario: 'admin' });
     let descargo = false;
     page.on('download', () => { descargo = true; });
-    await page.getByRole('button', { name: /Exportar/ }).click();
-    await entrarComoAdmin(page);   // autorización real contra el Auth falso
-    await page.evaluate(() => aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal));
+    await irA(page, 'datos');
+    await page.locator('#btn-respaldo-completo').click();
     await expect(page.locator('.toast.warning', { hasText: 'El respaldo NO se completó' })).toBeVisible();
     // el motivo correcto: se bajaron 11 filas pero "Supabase" dijo 999 (no un error de otro tipo)
     await expect(page.locator('.toast.warning')).toContainText('"pedidos": se bajaron 11 filas pero Supabase reporta 999');
@@ -223,7 +331,7 @@ test.describe('respaldoCompleto', () => {
   });
 
   test('si la tabla config no existe: omite config, descarga igual y avisa que no quedó registrado', async ({ page }) => {
-    const reg = await abrirSistema(page, { tablasFaltantes: ['config'] });
+    const reg = await abrirSistema(page, { tablasFaltantes: ['config'], usuario: 'admin' });
     const archivo = await respaldar(page);
     expect(Object.keys(archivo.tablas)).not.toContain('config');
     expect(Object.keys(archivo.tablas).length).toBe(15);

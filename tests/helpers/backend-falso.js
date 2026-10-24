@@ -35,6 +35,7 @@ const USUARIOS = {
   'caja@elobo.test':     { password: 'clave-caja',     rol: 'caja' },
   'dueno1@elobo.test':   { password: 'clave-dueno1',   rol: 'admin' },
   'dueno2@elobo.test':   { password: 'clave-dueno2',   rol: 'admin' },
+  'admin@elobo.test':    { password: 'clave-admin',    rol: 'admin' },   // el usuario genérico «admin» (la insignia dice solo «👑 Admin»)
   'respaldo@elobo.test': { password: 'clave-respaldo', rol: 'respaldo' },
   'sinrol@elobo.test':   { password: 'clave-sinrol',   rol: null },
 };
