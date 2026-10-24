@@ -6,6 +6,13 @@
 >
 > **Límites honestos:** (1) lo que el código escribe se detectó leyendo cada llamada a la base; unas pocas escrituras se arman en variables y pueden faltar. (2) Lo que el código *lee* se midió abriendo las 12 pestañas con datos de ejemplo; un campo que solo se lee en un modal poco común puede no aparecer. (3) **La lista de columnas es lo que el código necesita; el esquema real de Supabase se confirma en el Prompt H** (`sql/esquema_completo.sql`, que aún no existe): ahí se comparan una contra la otra.
 
+> **Actualización del 24-oct-2026 (después de escribirlo).** Desde que se midió este inventario entraron cambios que lo dejan parcialmente desfasado:
+> (1) **los números de línea** entre paréntesis (y el tamaño del archivo, ahora ≈ 10.300 líneas) **ya no coinciden**: sirven de pista, busca siempre por el nombre de la función;
+> (2) **el encabezado ya no tiene Exportar/Importar**: el respaldo es **Datos → 💾 Respaldo completo** (manual, cada domingo), `importarDatos` y la importación de Excel **ya no existen**, y el Excel de Datos es solo para análisis;
+> (3) nuevas piezas: aviso semanal de respaldo (`nivelAvisoRespaldo`), filtro por día en Auditoría (`fAuditoria`) y, en Fiados, el formulario «Registrar saldo a favor» (`registrarSaldoAFavor`, que comparte con la tarjeta del cliente el núcleo `registrarAbonoDeCliente`);
+> (4) **la seguridad (RLS) ya está activa en producción** con los roles `admin` y `caja`; los conteos de funciones y de llamadas a la base que aparecen abajo son los de entonces (cambiaron poco);
+> (5) el número de pruebas de la sección 7 es el de ese momento: el vigente se ve con `npx playwright test` (ver `tests/LEEME.md`).
+
 ## Resumen en 10 líneas
 
 1. Es **un solo HTML** con 339 funciones globales, 84 variables globales y 353 manejadores en línea (`onclick=`, `onchange=`…) dentro del marcado. Sin módulos ni paso de compilación.
@@ -15,7 +22,7 @@
 5. La base tiene **16 tablas**; el sistema habla con ellas por **5 funciones** de acceso (`sbGetAll`, `sbInsert`, `sbInsertConCuenta`, `sbPatch`, `sbDelete`) con 112 llamadas en total.
 6. Las reglas de plata viven repartidas entre `calcularTotalPedido`, `repartirDescuento`, `recalcularResultadoCierre`, `calcularVentasFijas`, `calcularSaldoFiado` y `renderTablero`; de esas, solo algunas tienen prueba que las nombre (sección 7).
 7. Los **domingos no laborables y los festivos de Colombia** solo existen en el motor Python; el sistema web no tiene esa regla.
-8. Dependencias de internet: **una librería** (`xlsx`, para exportar/importar Excel) y **una hoja de fuentes** de Google, además de Supabase y GitHub Pages. No hay *service worker* ni *manifest*: **no es una PWA instalable y no funciona sin conexión**.
+8. Dependencias de internet: **una librería** (`xlsx`, para exportar a Excel) y **una hoja de fuentes** de Google, además de Supabase y GitHub Pages. No hay *service worker* ni *manifest*: **no es una PWA instalable y no funciona sin conexión**.
 9. Para el producto, la parte más costosa de generalizar es el **catálogo de platos y los turnos**; la menos costosa, nombres y textos.
 10. Riesgos técnicos principales (sección 6): funciones de 330 y 260 líneas, `renderAll()` que redibuja todo en cada acción, y 86 asignaciones a `innerHTML` con escape de textos solo parcial.
 
@@ -136,7 +143,7 @@ Los formularios y ventanas (registro de pedidos, mapa de mesas, clientes de fiad
 
 Todas pasan por `sbFetch` (token del usuario, un reintento con renovación si la respuesta es 401).
 
-**Cruce con los permisos (`sql/matriz_permisos.json`).** Las únicas operaciones que el código hace y que el rol `caja` **no** tiene son 12 combinaciones de operación y tabla, y todas son de pestañas de administrador: `registrarUltimoRespaldo` (escribe `config`), `importarDatos` (inserta `egresos`), `agregarEgreso`/`guardarEdicionEgreso`/`eliminarEgreso`, `agregarIngresoExtra`/`guardarEdicionIngresoExtra`/`eliminarIngresoExtra`, `agregarMovimientoCaja`/`guardarEdicionMovimientoCaja`/`eliminarMovimientoCaja` y, dentro de `aplicarDescuentoGrupo`, el borrado de un egreso "Otro" (para caja la lista de candidatos viene solo de `gastos_dia`, ver decisión 2 de `docs/MATRIZ_PERMISOS.md`).
+**Cruce con los permisos (`sql/matriz_permisos.json`).** Las únicas operaciones que el código hace y que el rol `caja` **no** tiene son 11 combinaciones de operación y tabla, y todas son de pestañas de administrador: `registrarUltimoRespaldo` (escribe `config`), `agregarEgreso`/`guardarEdicionEgreso`/`eliminarEgreso`, `agregarIngresoExtra`/`guardarEdicionIngresoExtra`/`eliminarIngresoExtra`, `agregarMovimientoCaja`/`guardarEdicionMovimientoCaja`/`eliminarMovimientoCaja` y, dentro de `aplicarDescuentoGrupo`, el borrado de un egreso "Otro" (para caja la lista de candidatos viene solo de `gastos_dia`, ver decisión 2 de `docs/MATRIZ_PERMISOS.md`).
 
 ### 2.5 Tablas y columnas que el código realmente usa
 
@@ -203,7 +210,7 @@ Si cambia el nombre de una hoja o columna en el sistema, el motor se rompe en si
 
 | Dependencia | Dónde | Qué pasa sin internet |
 |---|---|---|
-| `xlsx@0.18.5` desde `cdn.jsdelivr.net` (línea 9) | Exportar a Excel (Datos) e Importar | El botón de Excel falla (`XLSX` no está definido); el respaldo JSON, no. |
+| `xlsx@0.18.5` desde `cdn.jsdelivr.net` (línea 9) | Exportar a Excel (Datos) | El botón de Excel falla (`XLSX` no está definido); el respaldo JSON, no. |
 | Google Fonts (Syne, DM Mono; línea 8) | Tipografía | Cae a la fuente del sistema; solo cambia el aspecto. |
 | Google Fonts (Playfair Display, Nunito) en el generador de menú | Tipografía del menú | Igual. |
 | Supabase (`https://arxyfcquvsmfoxmbifne.supabase.co`) | Datos y usuarios (REST + Auth) | No abre / "Sin conexión con Supabase". Una sesión de caja guardada se intenta usar, pero sin datos no hay pantalla útil. |
