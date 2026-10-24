@@ -107,11 +107,16 @@ const pedidos_descuentos = [
   { id: 1, created_at: `${FECHA_HOY}T12:31:00-05:00`, pedido_id: 104, fecha: FECHA_HOY, descuento: 2000, motivo: 'Cortesía (prueba)' },
 ];
 
+// Configuración (clave/valor). Último respaldo hace 2 días → el aviso NO se muestra.
+const config = [
+  { clave: 'ultimo_respaldo', valor: { generado_en: '2026-10-18T22:00:00.000Z', fecha: '2026-10-18', conteos: { pedidos: 11 } }, actualizado_en: '2026-10-18T22:00:00-05:00' },
+];
+
 module.exports = {
   FECHA_HOY,
   datos: {
     pedidos, egresos, inventario, consumos: [], gastos_dia, mesas, cierres_dia, aperturas_turno,
     notas_dia: [], movimientos_caja: [], ingresos_extra: [], pedidos_eliminados, clientes_fiado,
-    abonos_fiado, pedidos_descuentos,
+    abonos_fiado, pedidos_descuentos, config,
   },
 };
