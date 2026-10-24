@@ -404,8 +404,8 @@
   <form id="login-form" class="panel" style="width:100%;max-width:340px;padding:20px;" onsubmit="enviarLogin(event)" novalidate>
     <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Ingresa con tu usuario para usar el sistema.</div>
     <div class="form-group mb">
-      <label for="login-email">Correo</label>
-      <input type="email" id="login-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com">
+      <label for="login-email">Usuario</label>
+      <input type="text" id="login-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario">
     </div>
     <div class="form-group mb">
       <label for="login-password">Contraseña</label>
@@ -463,7 +463,7 @@
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">El tablero muestra el estado financiero completo del negocio.</div>
       <div class="form-group mb">
         <label>Correo de administrador</label>
-        <input type="email" id="tablero-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('tablero-password').focus()">
+        <input type="text" id="tablero-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('tablero-password').focus()">
       </div>
       <div class="form-group mb">
         <label>Contraseña</label>
@@ -941,7 +941,7 @@
     <div class="panel-body">
       <div class="form-group mb">
         <label>Correo de administrador</label>
-        <input type="email" id="egresos-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('egresos-password').focus()">
+        <input type="text" id="egresos-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('egresos-password').focus()">
       </div>
       <div class="form-group mb">
         <label>Contraseña</label>
@@ -1159,7 +1159,7 @@
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Ingresos totales del negocio, tomados de los cierres guardados.</div>
       <div class="form-group mb">
         <label>Correo de administrador</label>
-        <input type="email" id="ingfin-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('ingfin-password').focus()">
+        <input type="text" id="ingfin-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('ingfin-password').focus()">
       </div>
       <div class="form-group mb">
         <label>Contraseña</label>
@@ -1474,9 +1474,9 @@
   <div class="panel">
     <div class="panel-header"><div class="panel-title">🔒 Historial completo de cierres</div></div>
     <div class="panel-body" id="dd-historial-login">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Para ver o corregir cierres de otros días necesitas autorización de un administrador (correo y contraseña).</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Para ver o corregir cierres de otros días necesitas autorización de un administrador (usuario y contraseña).</div>
       <div style="display:flex;flex-direction:column;gap:8px;max-width:400px;">
-        <input type="email" id="dd-historial-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo de administrador" onkeydown="if(event.key==='Enter')document.getElementById('dd-historial-password').focus()">
+        <input type="text" id="dd-historial-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario de administrador" onkeydown="if(event.key==='Enter')document.getElementById('dd-historial-password').focus()">
         <div style="display:flex;gap:8px;">
           <input type="password" id="dd-historial-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('dd-historial-password')">
           <button class="btn btn-primary" onclick="intentarAccesoAdmin('dd-historial-password')">Entrar</button>
@@ -1505,7 +1505,7 @@
     <div class="panel-body">
       <div class="form-group mb">
         <label>Correo de administrador</label>
-        <input type="email" id="caja-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('caja-password').focus()">
+        <input type="text" id="caja-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('caja-password').focus()">
       </div>
       <div class="form-group mb">
         <label>Contraseña</label>
@@ -1593,7 +1593,7 @@
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Esta sección muestra todos los ajustes manuales hechos en los cierres.</div>
       <div class="form-group mb">
         <label>Correo de administrador</label>
-        <input type="email" id="auditoria-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('auditoria-password').focus()">
+        <input type="text" id="auditoria-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('auditoria-password').focus()">
       </div>
       <div class="form-group mb">
         <label>Contraseña</label>
@@ -1649,7 +1649,7 @@
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Exportación completa de datos para análisis externo (Excel/Python).</div>
       <div class="form-group mb">
         <label>Correo de administrador</label>
-        <input type="email" id="datos-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')document.getElementById('datos-password').focus()">
+        <input type="text" id="datos-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('datos-password').focus()">
       </div>
       <div class="form-group mb">
         <label>Contraseña</label>
@@ -1743,9 +1743,9 @@
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:18px;">💾 Respaldo completo</div>
 
     <div id="respaldo-login">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Descargar el respaldo completo de todas las tablas requiere autorización de un administrador (correo y contraseña).</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Descargar el respaldo completo de todas las tablas requiere autorización de un administrador (usuario y contraseña).</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        <input type="email" id="respaldo-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo de administrador" onkeydown="if(event.key==='Enter')document.getElementById('respaldo-password').focus()">
+        <input type="text" id="respaldo-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario de administrador" onkeydown="if(event.key==='Enter')document.getElementById('respaldo-password').focus()">
         <div style="display:flex;gap:8px;">
           <input type="password" id="respaldo-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoRespaldo()">
           <button class="btn btn-primary" onclick="intentarAccesoRespaldo()">Entrar</button>
@@ -1766,9 +1766,9 @@
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:18px;">✍️ Cierre manual</div>
 
     <div id="cierremanual-login">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Cargar un cierre a mano requiere autorización de un administrador (correo y contraseña).</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Cargar un cierre a mano requiere autorización de un administrador (usuario y contraseña).</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
-        <input type="email" id="cierremanual-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="correo de administrador" onkeydown="if(event.key==='Enter')document.getElementById('cierremanual-password').focus()">
+        <input type="text" id="cierremanual-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario de administrador" onkeydown="if(event.key==='Enter')document.getElementById('cierremanual-password').focus()">
         <div style="display:flex;gap:8px;">
           <input type="password" id="cierremanual-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoCierreManual()">
           <button class="btn btn-primary" onclick="intentarAccesoCierreManual()">Entrar</button>
@@ -2162,7 +2162,7 @@ const SB_URL = 'https://arxyfcquvsmfoxmbifne.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyeHlmY3F1dnNtZm94bWJpZm5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzkwMTcsImV4cCI6MjA5NzcxNTAxN30.2s8SgF_YlLy3eyI9Wz1TD48VTFPDHo4xMw8J7J9YL4w';
 
 // ── Sesión (Supabase Auth) ─────────────────────────────────────────────
-// Cada persona entra con SU usuario (correo + contraseña). Supabase devuelve un
+// Cada persona entra con SU usuario (usuario + contraseña). Supabase devuelve un
 // token firmado (JWT) que lleva el ROL (app_metadata.rol): 'admin', 'caja' o
 // 'respaldo'. Ese token es lo que usa cada petición a la base de datos: la llave
 // pública de abajo (SB_KEY) sola ya no da acceso a nada.
@@ -2174,7 +2174,7 @@ const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 //   (localStorage) para no pedir la clave en cada recarga.
 // · Admin (cada dueño con su propio usuario): NUNCA se guarda; si recargas la
 //   página hay que volver a entrar. También puede "autorizarse en el sitio"
-//   desde una sesión de caja (correo + contraseña en una pestaña con candado):
+//   desde una sesión de caja (usuario + contraseña en una pestaña con candado):
 //   esa sesión elevada vive solo en memoria y se pierde al recargar o al pulsar
 //   "Cerrar sesión".
 const ROLES_APP = ['admin', 'caja'];     // 'respaldo' es solo para el respaldo automático: no entra a la pantalla
@@ -2186,6 +2186,22 @@ let sesionAdmin = null;                  // admin autorizado en el sitio sobre u
 const ahoraSeg = () => Math.floor(Date.now() / 1000);
 
 function errorAuth(mensaje, tipo) { return Object.assign(new Error(mensaje), { tipo }); }
+
+// Usuarios cortos: la gente escribe "caja" o "luiscadlo" y por detrás se completa el correo con el
+// dominio de El Lobo. Supabase pide que el usuario tenga forma de correo; este dominio es inventado
+// (nunca se envía nada). Si lo escrito ya trae «@», se usa tal cual (por si algún usuario tiene un
+// correo completo). OJO: este dominio debe ser el mismo con el que se crearon los usuarios en Supabase.
+const DOMINIO_USUARIOS = 'elobo.test';
+function correoDeUsuario(texto) {
+  const t = String(texto || '').trim().toLowerCase();
+  if (!t) return '';
+  return t.includes('@') ? t : `${t}@${DOMINIO_USUARIOS}`;
+}
+function nombreDeUsuario(correo) {
+  const c = String(correo || '');
+  const fin = '@' + DOMINIO_USUARIOS;
+  return c.toLowerCase().endsWith(fin) ? c.slice(0, -fin.length) : c;
+}
 
 // Lee el contenido (payload) de un JWT. No verifica la firma — eso lo hace el servidor en cada petición.
 function decodificarJWT(token) {
@@ -2224,13 +2240,13 @@ async function authPost(ruta, cuerpo, token) {
   if (!r.ok) {
     if (r.status === 429) throw errorAuth('Demasiados intentos seguidos. Espera un minuto e intenta de nuevo.', 'limite');
     if (r.status >= 500) throw errorAuth('El servicio de acceso no responde. Intenta de nuevo en un momento.', 'servidor');
-    throw errorAuth('Correo o contraseña incorrectos.', 'credenciales');
+    throw errorAuth('Usuario o contraseña incorrectos.', 'credenciales');
   }
   return datos;
 }
 
 async function iniciarSesion(email, password) {
-  const sesion = sesionDeRespuesta(await authPost('token?grant_type=password', { email, password }));
+  const sesion = sesionDeRespuesta(await authPost('token?grant_type=password', { email: correoDeUsuario(email), password }));
   return sesion;
 }
 
@@ -2330,7 +2346,7 @@ async function sbFetch(url, init = {}) {
 function sesionPerdida(sesion) {
   if (sesion && sesion === sesionAdmin) {
     quitarAdmin();
-    showToast('🔒 La autorización de administrador venció — vuelve a ingresar el correo y la contraseña', 'warning');
+    showToast('🔒 La autorización de administrador venció — vuelve a ingresar el usuario y la contraseña', 'warning');
     return;
   }
   if (!sesionBase) return;               // ya se avisó
@@ -2369,7 +2385,7 @@ async function enviarLogin(ev) {
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const btn = document.getElementById('login-btn');
-  if (!email || !password) { mostrarLogin('Escribe tu correo y tu contraseña.'); return; }
+  if (!email || !password) { mostrarLogin('Escribe tu usuario y tu contraseña.'); return; }
   ingresando = true;
   btn.disabled = true;
   let sesion;
@@ -2420,8 +2436,8 @@ function sincronizarSesion() {
   if (!badge || !salir) return;
   if (!sesionBase) { badge.style.display = 'none'; salir.style.display = 'none'; return; }
   let texto;
-  if (sesionBase.rol === 'admin') texto = `👑 Admin · ${sesionBase.email}`;
-  else if (sesionAdmin) texto = `👤 Caja · 🔓 ${sesionAdmin.email}`;
+  if (sesionBase.rol === 'admin') texto = `👑 Admin · ${nombreDeUsuario(sesionBase.email)}`;
+  else if (sesionAdmin) texto = `👤 Caja · 🔓 ${nombreDeUsuario(sesionAdmin.email)}`;
   else texto = '👤 Caja';
   badge.textContent = texto;
   badge.style.display = '';
@@ -9677,7 +9693,7 @@ function renderCaja() {
 // el historial completo de cierres, el respaldo y el cierre manual son solo
 // para el rol "admin" (cada dueño tiene su propio usuario).
 // · Si se entró con un usuario admin, todo esto ya está abierto.
-// · Si se entró como caja, al abrir una de estas secciones se pide el correo y
+// · Si se entró como caja, al abrir una de estas secciones se pide el usuario y
 //   la contraseña de un administrador ("autorizar en el sitio"). Autorizarse en
 //   una abre las demás hasta pulsar "Cerrar sesión" o recargar la página.
 // El candado de pantalla es solo comodidad: el servidor (RLS) es quien realmente
@@ -9685,7 +9701,7 @@ function renderCaja() {
 // ══════════════════════════════════════════════════════════════════════
 let adminAutenticado = false;   // lo calcula sincronizarSesion() a partir del rol del token
 
-// Botón "Entrar" de cada candado: lee el correo (campo "-email" junto a la contraseña) y la clave.
+// Botón "Entrar" de cada candado: lee el usuario (campo "-email" junto a la contraseña) y la clave.
 async function intentarAccesoAdmin(inputId) {
   const input = document.getElementById(inputId);
   if (!input) return false;
@@ -9693,7 +9709,7 @@ async function intentarAccesoAdmin(inputId) {
   const email = campoEmail ? campoEmail.value.trim() : '';
   const password = input.value;
   if (!email || !password) {
-    showToast('⚠ Escribe el correo y la contraseña de un administrador', 'warning');
+    showToast('⚠ Escribe el usuario y la contraseña de un administrador', 'warning');
     return false;
   }
   input.value = '';
