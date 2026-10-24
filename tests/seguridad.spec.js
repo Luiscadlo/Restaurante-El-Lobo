@@ -464,6 +464,87 @@ test.describe('caja y autorización de administrador', () => {
 });
 
 // ── Numerito de Auditoría ────────────────────────────────────────────────────
+// ── Funciones de administrador DENTRO de las pestañas que caja sí ve ──────────────────────
+// Con caja: sin Exportar, sin Importar, sin Cierre manual, sin Historial de cierres, sin aviso de
+// respaldo y ninguna cajita de usuario/contraseña de administrador. Para todo eso: Salir e ingresar
+// como administrador. (Ocultar es comodidad; la seguridad real son las reglas de la base.)
+test.describe('funciones de administrador ocultas para caja', () => {
+  const PESTANAS_CAJA = ['ingresos', 'pendientes', 'fiados', 'diaadia', 'inventario', 'menu'];
+  const ENCABEZADO_ADMIN = ['#btn-exportar', '#btn-importar'];                // en el encabezado: se ven en cualquier pestaña
+  const CIERRE_ADMIN = ['#btn-cierre-manual', '#dd-historial-panel'];       // dentro de la pestaña Cierre
+  // Se comprueba en la pestaña donde viven (si no, "oculto" sería trivial: la pestaña misma está cerrada).
+  async function controlesAdmin(page, visibles) {
+    const chequear = visibles ? sel => expect(page.locator(sel), sel).toBeVisible() : sel => expect(page.locator(sel), sel).toBeHidden();
+    await irA(page, 'ingresos');
+    for (const sel of ENCABEZADO_ADMIN) await chequear(sel);
+    await irA(page, 'diaadia');
+    for (const sel of CIERRE_ADMIN) await chequear(sel);
+  }
+
+  test('caja: en ninguna de sus 6 pestañas aparece un control de administrador ni una cajita de contraseña', async ({ page }) => {
+    const datos = JSON.parse(JSON.stringify(require('./fixtures/datos').datos));
+    datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-09-01' } }];   // respaldo viejo: al admin le saldría el aviso rojo
+    await abrirSistema(page, { datos });
+    await controlesAdmin(page, false);
+    for (const id of PESTANAS_CAJA) {
+      await irA(page, id);
+      const visible = await page.evaluate(() => {
+        const vis = el => { for (let n = el; n; n = n.parentElement) { if (getComputedStyle(n).display === 'none') return false; } return true; };
+        const textoVisible = [...document.querySelectorAll('body *')].filter(e => vis(e) && e.children.length === 0).map(e => e.textContent).join(' | ');
+        return {
+          claves: [...document.querySelectorAll('input[type=password]')].filter(vis).map(e => e.id),
+          texto: /administrador|Historial completo|Cierre manual|Exportar|Importar|respaldo/i.test(textoVisible)
+            ? (textoVisible.match(/[^|]*(administrador|Historial completo|Cierre manual|Exportar|Importar|respaldo)[^|]*/i) || [''])[0].trim() : '',
+        };
+      });
+      expect(visible.claves, `cajitas de contraseña visibles en ${id}`).toEqual([]);
+      expect(visible.texto, `texto de administrador visible en ${id}`).toBe('');
+    }
+    await expect(page.locator('#aviso-respaldo')).toBeHidden();
+  });
+
+  test('arrancan ocultos: antes de saber quién entró (pantalla de entrada) no asoma ningún control de administrador', async ({ page }) => {
+    await abrirSistema(page, { usuario: null });
+    const estilos = await page.evaluate(sels => sels.map(s => [s, getComputedStyle(document.querySelector(s)).display]), [...ENCABEZADO_ADMIN, ...CIERRE_ADMIN]);
+    for (const [sel, display] of estilos) expect(display, sel).toBe('none');
+  });
+
+  test('admin: los ve todos y el Historial de cierres muestra su contenido (sin candado)', async ({ page }) => {
+    await abrirSistema(page, { usuario: 'admin' });
+    await controlesAdmin(page, true);
+    await expect(page.locator('#dd-historial-contenido')).toBeVisible();
+    await expect(page.locator('#dd-historial-login')).toBeHidden();
+  });
+
+  test('un administrador autorizado en el sitio los ve; al volver a caja desaparecen', async ({ page }) => {
+    await abrirSistema(page);
+    await entrarComoAdmin(page);
+    await controlesAdmin(page, true);
+    await page.evaluate(() => cerrarSesionAdmin());
+    await controlesAdmin(page, false);
+  });
+
+  test('si caja llama a mano el cierre manual (abrir o corregir), se niega: no abre ventana ni pide contraseña', async ({ page }) => {
+    await abrirSistema(page);
+    await page.evaluate(() => abrirModalCierreManual());
+    await expect(page.locator('.toast.warning').last()).toContainText('solo para administradores');
+    await expect(page.locator('#modal-cierre-manual')).toBeHidden();
+    await page.evaluate(() => editarCierreManual('2026-10-05', 'almuerzo'));
+    await expect(page.locator('#modal-cierre-manual')).toBeHidden();
+  });
+
+  test('un cierre de otro día ya guardado: caja ve el aviso de "ingresar como administrador", sin botón de corregir', async ({ page }) => {
+    await abrirSistema(page);
+    await irA(page, 'diaadia');
+    await page.evaluate(() => { document.getElementById('dd-fecha').value = '2026-10-18'; ddTurno = 'almuerzo'; onFechaCierreChange(); });
+    await expect(page.locator('#dd-cerrado-mensaje')).toContainText('ingresa como administrador');
+    await expect(page.locator('#dd-cerrado-mensaje')).not.toContainText('Historial');
+    await expect(page.locator('#btn-corregir-cierre')).toBeHidden();
+    await page.evaluate(() => corregirCierreActual());
+    await expect(page.locator('.toast.warning').last()).toContainText('ingresa como administrador');
+  });
+});
+
 test.describe('numerito de novedades en Auditoría', () => {
   const VISTOS = 'elLobo_auditoria_vistos';
 

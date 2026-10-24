@@ -26,13 +26,13 @@ test.describe('aviso de respaldo', () => {
   const abrirConRespaldo = async (page, valor) => {
     const datos = copia(DATOS_BASE);
     datos.config = valor === undefined ? [] : [{ clave: 'ultimo_respaldo', valor }];
-    const reg = await abrirSistema(page, { datos });
+    const reg = await abrirSistema(page, { datos, usuario: 'admin' });   // el aviso es del administrador
     return reg;
   };
   const aviso = page => page.locator('#aviso-respaldo');
 
   test('respaldo de hace 2 días → sin aviso', async ({ page }) => {
-    const reg = await abrirSistema(page);
+    const reg = await abrirSistema(page, { usuario: 'admin' });
     await expect(aviso(page)).toBeHidden();
     expect(reg.errores).toEqual([]);
   });
@@ -68,7 +68,7 @@ test.describe('aviso de respaldo', () => {
   });
 
   test('la tabla config no existe → el sistema NO falla; solo muestra un mensaje claro', async ({ page }) => {
-    const reg = await abrirSistema(page, { tablasFaltantes: ['config'] });
+    const reg = await abrirSistema(page, { tablasFaltantes: ['config'], usuario: 'admin' });
     expect(reg.errores.filter(e => !/404/.test(e))).toEqual([]);   // el 404 de la tabla falsa es esperado
     await expect(aviso(page)).toContainText('falta crear la tabla');
     await expect(aviso(page)).toContainText('sql/migracion_supabase_config.sql');
@@ -77,12 +77,34 @@ test.describe('aviso de respaldo', () => {
     expect(nPedidos).toBeGreaterThan(0);
   });
 
-  test('el aviso se ve desde cualquier pestaña y también sin sesión de admin', async ({ page }) => {
+  test('el administrador ve el aviso desde cualquier pestaña', async ({ page }) => {
     await abrirConRespaldo(page, { fecha: '2026-10-01' });
     for (const id of ['ingresos', 'fiados', 'diaadia']) {
       await page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
       await expect(aviso(page)).toBeVisible();
     }
+  });
+
+  test('con caja el aviso NO aparece (hacer el respaldo es del administrador), ni el de "falta la tabla config"', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-01' } }];   // 19 días: con admin sería rojo
+    await abrirSistema(page, { datos });                                              // sesión de caja
+    await expect(aviso(page)).toBeHidden();
+    expect(await page.evaluate(() => document.getElementById('aviso-respaldo').innerHTML)).toBe('');
+    const pagina2 = await page.context().newPage();
+    await abrirSistema(pagina2, { tablasFaltantes: ['config'] });
+    await expect(pagina2.locator('#aviso-respaldo')).toBeHidden();
+  });
+
+  test('al entrar un administrador (autorizado en el sitio) el aviso aparece, y al salir desaparece', async ({ page }) => {
+    const datos = copia(DATOS_BASE);
+    datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-01' } }];
+    await abrirSistema(page, { datos });
+    await expect(aviso(page)).toBeHidden();
+    await entrarComoAdmin(page);
+    await expect(aviso(page)).toBeVisible();
+    await page.evaluate(() => cerrarSesionAdmin());
+    await expect(aviso(page)).toBeHidden();
   });
 });
 
@@ -104,63 +126,55 @@ test.describe('funciones del aviso', () => {
   });
 });
 
-// ── Botón Exportar: acceso de administrador ────────────────────────────────────
+// ── Botón Exportar: solo administrador ────────────────────────────────────────
 test.describe('botón Exportar', () => {
-  test('sin acceso de admin abre el modal con la contraseña y NO descarga ni pide tablas de más', async ({ page }) => {
+  test('con caja ni se ve; si alguien llama la función a mano, se niega: no descarga ni pide tablas', async ({ page }) => {
     const reg = await abrirSistema(page);
+    await expect(page.getByRole('button', { name: /Exportar/ })).toBeHidden();
+    await expect(page.locator('#btn-importar')).toBeHidden();
     const peticionesAntes = reg.peticiones.length;
     let descargo = false;
     page.on('download', () => { descargo = true; });
-    await page.getByRole('button', { name: /Exportar/ }).click();
-    await expect(page.locator('#modal-respaldo')).toBeVisible();
-    await expect(page.locator('#respaldo-login')).toBeVisible();
-    await expect(page.locator('#respaldo-contenido')).toBeHidden();
-    // una contraseña incorrecta no abre nada
-    await page.fill('#respaldo-password', 'contraseña-incorrecta-de-prueba');
-    await page.evaluate(() => intentarAccesoRespaldo());
-    await expect(page.locator('#modal-respaldo')).toBeVisible();
+    await page.evaluate(() => pedirRespaldoCompleto());
+    await expect(page.locator('.toast.warning').last()).toContainText('solo para administradores');
+    expect(await page.evaluate(() => document.getElementById('modal-respaldo'))).toBeNull();   // ya no hay ventana de contraseña
     expect(descargo).toBe(false);
     expect(reg.peticiones.length).toBe(peticionesAntes);   // no bajó ninguna tabla
     expect(reg.escrituras).toEqual([]);
   });
 
-  test('al cerrar el modal se cancela el respaldo pendiente', async ({ page }) => {
-    await abrirSistema(page);
-    await page.getByRole('button', { name: /Exportar/ }).click();
-    await page.evaluate(() => cerrarModalRespaldo());
-    await expect(page.locator('#modal-respaldo')).toBeHidden();
-    expect(await page.evaluate(() => respaldoPendiente)).toBe(false);
-  });
-
-  test('con acceso de admin descarga el respaldo; tras pasar el modal también', async ({ page }) => {
-    const reg = await abrirSistema(page);
-    // Abre el modal sin sesión…
-    await page.getByRole('button', { name: /Exportar/ }).click();
-    await expect(page.locator('#modal-respaldo')).toBeVisible();
-    // …y autoriza a un administrador de prueba (usuario ficticio del Auth falso).
+  test('con administrador se ve y descarga directo, sin pedir contraseña', async ({ page }) => {
+    const reg = await abrirSistema(page, { usuario: 'admin' });
+    const boton = page.getByRole('button', { name: /Exportar/ });
+    await expect(boton).toBeVisible();
     const descarga = page.waitForEvent('download');
-    await entrarComoAdmin(page);   // autorización real contra el Auth falso
-    await page.evaluate(() => aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal));
+    await boton.click();
     const d = await descarga;
     expect(d.suggestedFilename()).toBe('ElLobo_respaldo_completo_2026-10-20.json');
-    await expect(page.locator('#modal-respaldo')).toBeHidden();
     expect(reg.errores).toEqual([]);
+  });
+
+  test('un administrador autorizado en el sitio lo ve; al volver a caja se oculta de nuevo', async ({ page }) => {
+    await abrirSistema(page);
+    await entrarComoAdmin(page);
+    await expect(page.getByRole('button', { name: /Exportar/ })).toBeVisible();
+    await page.evaluate(() => cerrarSesionAdmin());
+    await expect(page.getByRole('button', { name: /Exportar/ })).toBeHidden();
   });
 });
 
 // ── El respaldo en sí ──────────────────────────────────────────────────────────
 test.describe('respaldoCompleto', () => {
+  // (la página se abre con { usuario: 'admin' }: el botón Exportar es solo del administrador)
   async function respaldar(page) {
     const descarga = page.waitForEvent('download');
-    await page.getByRole('button', { name: /Exportar/ }).click();   // abre el modal (sin sesión)
-    await entrarComoAdmin(page);   // autorización real contra el Auth falso
-    await page.evaluate(() => aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal));
+    await page.getByRole('button', { name: /Exportar/ }).click();
     const d = await descarga;
     return JSON.parse(fs.readFileSync(await d.path(), 'utf-8'));
   }
 
   test('baja las 16 tablas completas, con conteos que coinciden, y registra config.ultimo_respaldo', async ({ page }) => {
-    const reg = await abrirSistema(page);
+    const reg = await abrirSistema(page, { usuario: 'admin' });
     const archivo = await respaldar(page);
 
     expect(archivo.version).toBe(1);
@@ -189,7 +203,7 @@ test.describe('respaldoCompleto', () => {
   test('después del respaldo el aviso desaparece', async ({ page }) => {
     const datos = copia(DATOS_BASE);
     datos.config = [{ clave: 'ultimo_respaldo', valor: { fecha: '2026-10-01' } }];
-    await abrirSistema(page, { datos });
+    await abrirSistema(page, { datos, usuario: 'admin' });
     await expect(page.locator('#aviso-respaldo')).toBeVisible();
     await respaldar(page);
     await expect(page.locator('#aviso-respaldo')).toBeHidden();
@@ -198,7 +212,7 @@ test.describe('respaldoCompleto', () => {
   test('primer respaldo (config sin fila) → INSERT de ultimo_respaldo', async ({ page }) => {
     const datos = copia(DATOS_BASE);
     datos.config = [];
-    const reg = await abrirSistema(page, { datos });
+    const reg = await abrirSistema(page, { datos, usuario: 'admin' });
     const archivo = await respaldar(page);
     expect(archivo.tablas.config).toEqual([]);
     await expect.poll(() => reg.escrituras.filter(e => e.tabla === 'config').length).toBe(1);
@@ -208,12 +222,10 @@ test.describe('respaldoCompleto', () => {
   });
 
   test('si falta una fila (el total no coincide) el respaldo ABORTA: no descarga ni marca el respaldo', async ({ page }) => {
-    const reg = await abrirSistema(page, { totalesFalsos: { pedidos: 999 } });
+    const reg = await abrirSistema(page, { totalesFalsos: { pedidos: 999 }, usuario: 'admin' });
     let descargo = false;
     page.on('download', () => { descargo = true; });
     await page.getByRole('button', { name: /Exportar/ }).click();
-    await entrarComoAdmin(page);   // autorización real contra el Auth falso
-    await page.evaluate(() => aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal));
     await expect(page.locator('.toast.warning', { hasText: 'El respaldo NO se completó' })).toBeVisible();
     // el motivo correcto: se bajaron 11 filas pero "Supabase" dijo 999 (no un error de otro tipo)
     await expect(page.locator('.toast.warning')).toContainText('"pedidos": se bajaron 11 filas pero Supabase reporta 999');
@@ -223,7 +235,7 @@ test.describe('respaldoCompleto', () => {
   });
 
   test('si la tabla config no existe: omite config, descarga igual y avisa que no quedó registrado', async ({ page }) => {
-    const reg = await abrirSistema(page, { tablasFaltantes: ['config'] });
+    const reg = await abrirSistema(page, { tablasFaltantes: ['config'], usuario: 'admin' });
     const archivo = await respaldar(page);
     expect(Object.keys(archivo.tablas)).not.toContain('config');
     expect(Object.keys(archivo.tablas).length).toBe(15);
