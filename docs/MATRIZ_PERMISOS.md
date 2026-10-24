@@ -1,7 +1,7 @@
 # Matriz de permisos — quién puede hacer qué
 
-> **Estado: borrador para tu OK.** Todavía NO existe el SQL que lo aplica en Supabase; se escribe solo cuando apruebes esto.
-> La misma matriz, en formato que leen las pruebas automáticas, está en `tests/helpers/permisos.js` (si cambias una, cambia la otra).
+> **Estado: pendiente de tu OK en las 3 decisiones de abajo** (mientras no respondas, valen las opciones A).
+> La fuente única de esta matriz, en formato máquina, es `sql/matriz_permisos.json`: de ahí salen el SQL de Supabase (`sql/rls_seguridad.sql`), las pruebas web y las pruebas contra Postgres. Si cambias una decisión, cambia el JSON, corre `python herramientas/generar_rls.py` y actualiza esta tabla. El despliegue está en `docs/DESPLIEGUE_SEGURIDAD.md`.
 
 ## En una frase
 

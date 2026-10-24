@@ -21,7 +21,7 @@ Cada vez que quieras comprobar que todo está bien:
 
 ```
 npm test              # el sistema web (humo + reglas de plata)
-npm run test:motor    # el motor Python (modelo financiero)
+npm run test:motor    # el motor Python (modelo financiero) y la seguridad de la base (test_rls.py)
 ```
 
 Si todo está bien verás `passed` en verde. Si algo falla, copia el mensaje y pégaselo a Claude.
@@ -36,6 +36,7 @@ Si todo está bien verás `passed` en verde. Si algo falla, copia el mensaje y p
 | `tests/reglas.spec.js` | Las reglas de plata: reparto de descuentos, cuánto aporta cada pedido a efectivo y transferencia, saldo de fiados, ajustes y abonos de los cierres, ventas fijas de cada turno, fechas y formato de pesos. Los valores esperados están calculados a mano y comentados. |
 | `tests/seguridad.spec.js` | **Acceso y roles:** pantalla de entrada (clave mala, sin rol, usuario de respaldo, servicio caído); la sesión de caja se recuerda y la de admin nunca; renovación del token (una sola aunque haya muchas peticiones; adopta la de otra pestaña); "Salir"; autorizar un dueño desde caja (cualquiera de los dos, con su propio usuario); que la autorización no se guarda y se borra de memoria al cerrarla; que forzar el candado por consola no da datos (el servidor manda); que el archivo no trae contraseñas ni llaves de servicio. |
 | `tests/flujos-caja.spec.js` | **El mostrador completo con permisos mínimos de caja:** tomar y cobrar pedidos, cancelar, eliminar cobrados, descuentos, gastos del turno, abrir/cerrar/reabrir turno, notas, inventario, abonos de fiado. En cada flujo el servidor falso no debe negar nada (`denegadas` vacío) y las tablas de auditoría se escriben "a ciegas". |
+| `tests/python/test_rls.py` | **La seguridad contra un Postgres de verdad:** aplica `sql/rls_seguridad.sql` en una base desechable que imita a Supabase y comprueba, para 9 perfiles (admin, caja, respaldo, sin rol, rol inventado, rol en `user_metadata`, llave pública…) × 17 tablas × 5 operaciones, que se cumple EXACTAMENTE la matriz; que las vistas no se saltan las reglas; que aplicar dos veces es seguro y que el rollback deja todo como estaba. Si no hay PostgreSQL instalado, se salta sola. |
 | `tests/python/test_motor.py` | El motor del modelo financiero corre en modo demo sin errores, genera el Excel esperado y no deja archivos dentro del repo. |
 
 Ayudas (no son pruebas): `tests/helpers/backend-falso.js` (el Supabase falso: base **y** Auth con usuarios
@@ -68,8 +69,9 @@ de ejemplo, vuelve a calcularlas.
 ## Lo que estas pruebas NO hacen
 
 - No prueban cómo se ve el sistema en un celular real.
-- No prueban las políticas de seguridad de Supabase (RLS) **reales**: el backend falso hace cumplir
-  la misma matriz, pero la prueba contra el Supabase de verdad se hace aparte, en un proyecto de pruebas.
+- No prueban tu Supabase **real**: `test_rls.py` aplica el SQL en un Postgres desechable que imita a
+  Supabase (misma lógica de reglas, roles y token), y el backend falso de las pruebas web hace cumplir
+  la misma matriz. La comprobación en tu proyecto real es el Paso 7 de `docs/DESPLIEGUE_SEGURIDAD.md`.
 - Los flujos con guardado (vender, cobrar, cerrar) comprueban que se hagan las escrituras correctas y
   que los permisos alcancen, pero la base falsa responde "ok" y no las recuerda: no verifican cómo
   queda la pantalla después de recargar.
