@@ -34,8 +34,8 @@ Además: **sin sesión no se puede nada** (la llave pública que va en la págin
 
 ## Qué ve cada uno en pantalla
 
-- **Caja:** Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Las pestañas con candado (Tablero, Ingresos, Egresos, Caja, Auditoría, Datos), el historial completo de cierres, el respaldo, el cierre manual y **Importar** piden autorización de un administrador.
-- **Autorizar en el sitio:** desde la sesión de caja, un dueño escribe **su correo y su contraseña** en cualquier candado. Se abre todo lo de administrador; no se guarda en el equipo (si recargas o pulsas "Cerrar sesión", vuelve a caja).
+- **Caja:** Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Las secciones de dueño (Tablero, Ingresos, Egresos, Caja, Auditoría, Datos) **no aparecen** con caja; tampoco aparece **nada** de administrador dentro de sus pestañas: ni **Exportar**, ni **Importar**, ni el **Cierre manual**, ni el **Historial completo de cierres**, ni el aviso de respaldo, ni cajitas de usuario y contraseña. Un cierre de otro día ya guardado solo dice «sal e ingresa como administrador» para verlo o corregirlo.
+- **Ver las secciones de dueño o usar sus funciones:** pulsar **Salir** y entrar como administrador. Ya no hay candados con usuario y contraseña a la vista dentro de las pestañas de caja.
 - **Admin entrando directo:** todo abierto; no se recuerda (al recargar hay que volver a entrar).
 - **Caja entrando directo:** se recuerda en ese equipo para no pedir la clave en cada recarga. "Salir" la borra.
 
@@ -56,7 +56,7 @@ Además: **sin sesión no se puede nada** (la llave pública que va en la págin
 ## Otras cosas que conviene que sepas
 
 - Caja **puede leer** `pedidos` y `cierres_dia`, así que alguien técnico con esa cuenta podría consultar todas las ventas históricas (no compras, gastos ni caja). Es inevitable si el mostrador cobra y cierra turno.
-- **Importar** (el botón del encabezado) ahora es solo de administrador. Antes cualquiera podía.
-- La autorización de administrador en el sitio **no vence sola**; dura hasta "Cerrar sesión" o recargar. Se puede agregar cierre por inactividad si lo quieres.
+- **Importar** y **Exportar** (los botones del encabezado) son solo de administrador y con caja ni se dibujan. Antes cualquiera podía importar.
+- **Eliminar un abono de fiado** (botón 🗑 en Fiados) es solo de administrador; la base ya limitaba ese borrado a admin.
 - El usuario `respaldo` es solo lectura. La tarea semanal de respaldo (la que hoy corre con la llave pública) **dejará de funcionar** el día que se activen las reglas y habrá que darle ese usuario (o hacer el respaldo a mano desde Datos → Exportar, que la pantalla recuerda con el aviso).
 - Nada más en el repositorio usa la base: el Menú del día no la toca.

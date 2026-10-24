@@ -84,11 +84,10 @@ La base **todavía** está abierta a la llave pública (aún no corres el SQL de
 
 ## Paso 5 — Probar los usuarios (reglas todavía apagadas) 🌐
 
-- [ ] Entra con el usuario **caja**. Se ven Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Las pestañas con candado (Tablero, Ingresos, Egresos, Caja, Auditoría, Datos) piden correo y contraseña de un dueño. **Importar** no aparece.
-- [ ] En un candado, escribe el usuario (p. ej. `luiscadlo`) y la contraseña de un **dueño**: abre. Pulsa **🔒 Cerrar sesión** (dentro de esa pestaña): vuelve a caja.
-- [ ] Prueba con una contraseña equivocada y con el usuario de caja en un candado: debe rechazar.
-- [ ] Recarga la página con la sesión de caja: sigue en caja sin pedir clave. Con la autorización de dueño: al recargar vuelve a caja (por diseño).
-- [ ] Sal (**Salir**) y entra directo con un **dueño**: todo abierto.
+- [ ] Entra con el usuario **caja**. Se ven Pedidos, Pendientes, Fiados, Cierre (Día a día), Inventario y Menú. Tablero, Ingresos, Egresos, Caja, Auditoría y Datos **no aparecen**. **Importar**, **Exportar**, **Cierre manual**, **Historial completo de cierres** ni el aviso de respaldo tampoco aparecen, y no hay ninguna cajita de usuario o contraseña a la vista.
+- [ ] Pulsa **Salir** y entra como **dueño** (p. ej. `luiscadlo`): aparecen las seis secciones, además de Exportar, Importar, Cierre manual y el Historial completo de cierres.
+- [ ] Prueba con una contraseña equivocada: debe rechazar.
+- [ ] Recarga la página con la sesión de caja: sigue en caja sin pedir clave. El dueño entra directo y no se recuerda: al recargar hay que volver a entrar (por diseño).
 - [ ] El usuario **respaldo** en la pantalla de entrada: debe decir que no entra a la pantalla.
 
 Si algo de esto no pasa, **no sigas**: cuéntame qué viste (ver "Si algo sale mal").
@@ -171,6 +170,5 @@ update auth.users set encrypted_password = crypt('NUEVA-CLAVE-LARGA', gen_salt('
 
 - **Caja puede leer `pedidos` y `cierres_dia`** (hace falta para cobrar y cerrar turno): alguien técnico con esa cuenta podría consultar las ventas históricas. No ve compras, gastos ni caja.
 - **Las restricciones de "días anteriores"** (solo admin corrige otros días) siguen siendo de pantalla, no del servidor (decisión 3).
-- **La autorización de dueño en el sitio no vence sola**; dura hasta cerrar sesión o recargar.
 - El plan gratuito de Supabase **no incluye** copias de seguridad diarias propias: por eso el respaldo semanal (Paso 8) es importante.
 - Las contraseñas viejas del código siguen en el historial de GitHub (el repositorio es público): si alguna se usa en otro sitio, **cámbiala allá**.

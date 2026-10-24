@@ -424,8 +424,8 @@
   <div class="header-right">
     <div id="syncBadge" style="border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid rgba(232,184,75,0.4);background:rgba(232,184,75,0.1);color:var(--accent);">🔄 Sincronizando…</div>
     <button class="btn-abrir-turno" id="btn-abrir-turno-header" onclick="abrirModalTurno()" title="Registrar caja inicial del turno">🔓 Abrir turno</button>
-    <button class="btn btn-outline" onclick="pedirRespaldoCompleto()" style="font-size:11px;padding:6px 12px;" title="Respaldo completo de todas las tablas (pide acceso de administrador)">⬇ <span class="btn-label">Exportar</span></button>
-    <label id="btn-importar" class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;display:none;" title="Importar (solo administrador; limitado: ingresos, egresos, inventario y gastos del día)">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
+    <button class="btn btn-outline" id="btn-exportar" data-solo-admin onclick="pedirRespaldoCompleto()" style="font-size:11px;padding:6px 12px;display:none;" title="Respaldo completo de todas las tablas (solo administrador)">⬇ <span class="btn-label">Exportar</span></button>
+    <label id="btn-importar" data-solo-admin class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;display:none;" title="Importar (solo administrador; limitado: ingresos, egresos, inventario y gastos del día)">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
     <div id="rolBadge" style="display:none;border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);" title="Usuario con el que se inició sesión"></div>
     <button class="btn btn-outline" id="btn-salir" onclick="salirDelSistema()" style="font-size:11px;padding:6px 12px;display:none;" title="Cerrar la sesión de este equipo">🚪 <span class="btn-label">Salir</span></button>
     <div class="turno-badge turno-almuerzo" id="turnoBadge">☀️ Almuerzo</div>
@@ -441,16 +441,16 @@
   <div class="tab" onclick="showTab('diaadia',this)">Cierre</div>
   <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
   <div class="tab" onclick="showTab('menu',this)">Menú</div>
-  <!-- Administrativas — solo rol admin (en caja piden autorización de un administrador) -->
-  <div class="tab" onclick="showTab('dashboard',this)">🔒 Tablero</div>
-  <div class="tab" onclick="showTab('ingfin',this)">🔒 Ingresos</div>
-  <div class="tab" onclick="showTab('egresos',this)">🔒 Egresos</div>
-  <div class="tab" onclick="showTab('caja',this)">🔒 Caja</div>
-  <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
-  <div class="tab" onclick="showTab('datos',this)">🔒 Datos</div>
+  <!-- Administrativas — solo rol admin: con caja NO aparecen (sincronizarSesion() las muestra u oculta). Para verlas: Salir y entrar como administrador. -->
+  <div class="tab tab-admin" id="tab-nav-dashboard" style="display:none;" onclick="showTab('dashboard',this)">Tablero</div>
+  <div class="tab tab-admin" id="tab-nav-ingfin" style="display:none;" onclick="showTab('ingfin',this)">Ingresos</div>
+  <div class="tab tab-admin" id="tab-nav-egresos" style="display:none;" onclick="showTab('egresos',this)">Egresos</div>
+  <div class="tab tab-admin" id="tab-nav-caja" style="display:none;" onclick="showTab('caja',this)">Caja</div>
+  <div class="tab tab-admin" id="tab-nav-auditoria" style="display:none;" onclick="showTab('auditoria',this)">Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
+  <div class="tab tab-admin" id="tab-nav-datos" style="display:none;" onclick="showTab('datos',this)">Datos</div>
 </nav>
 
-<!-- Aviso de respaldo (se llena con renderAvisoRespaldo; visible para todos) -->
+<!-- Aviso de respaldo (se llena con renderAvisoRespaldo; solo lo ve el administrador) -->
 <div id="aviso-respaldo" style="display:none;padding:12px 24px 0;"></div>
 
 <main>
@@ -1351,7 +1351,7 @@
   <div class="panel" style="margin-bottom:20px;">
     <div class="panel-header">
       <div class="panel-title">Cierre del día</div>
-      <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="abrirModalCierreManual()">✍️ Cierre manual</button>
+      <button type="button" class="btn btn-outline" id="btn-cierre-manual" data-solo-admin style="padding:6px 12px;font-size:12px;display:none;" onclick="abrirModalCierreManual()">✍️ Cierre manual</button>
     </div>
     <div class="panel-body">
       <div class="form-row">
@@ -1471,7 +1471,8 @@
       </div>
     </div>
   </div>
-  <div class="panel">
+  <!-- Historial completo de cierres — solo administrador: con caja ni se dibuja (sincronizarSesion() lo muestra u oculta). -->
+  <div class="panel" id="dd-historial-panel" data-solo-admin style="display:none;">
     <div class="panel-header"><div class="panel-title">🔒 Historial completo de cierres</div></div>
     <div class="panel-body" id="dd-historial-login">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Para ver o corregir cierres de otros días necesitas autorización de un administrador (usuario y contraseña).</div>
@@ -1733,29 +1734,6 @@
     </div>
 
     <button class="btn btn-success" id="apertura-btn-guardar" style="width:100%;" onclick="guardarAperturaTurno()">✅ Abrir turno</button>
-  </div>
-</div>
-
-<!-- Modal: Respaldo completo (pide acceso de administrador) -->
-<div id="modal-respaldo" class="modal-overlay" style="display:none;" onclick="cerrarModalRespaldoClick(event)">
-  <div class="modal-box">
-    <button class="modal-close" onclick="cerrarModalRespaldo()">✕</button>
-    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:18px;">💾 Respaldo completo</div>
-
-    <div id="respaldo-login">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Descargar el respaldo completo de todas las tablas requiere autorización de un administrador (usuario y contraseña).</div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <input type="text" id="respaldo-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario de administrador" onkeydown="if(event.key==='Enter')document.getElementById('respaldo-password').focus()">
-        <div style="display:flex;gap:8px;">
-          <input type="password" id="respaldo-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoRespaldo()">
-          <button class="btn btn-primary" onclick="intentarAccesoRespaldo()">Entrar</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="respaldo-contenido" style="display:none;">
-      <div style="font-size:12px;color:var(--text3);">Acceso concedido. Preparando el respaldo…</div>
-    </div>
   </div>
 </div>
 
@@ -2426,13 +2404,29 @@ async function salirDelSistema() {
   location.reload();
 }
 
-// Rol efectivo → bandera que usa la pantalla (adminAutenticado) + encabezado.
+// Secciones solo para administradores: con caja no aparecen en la barra (orden de la barra).
+const TABS_ADMIN = ['dashboard', 'ingfin', 'egresos', 'caja', 'auditoria', 'datos'];
+
+// Rol efectivo → bandera que usa la pantalla (adminAutenticado) + encabezado + barra de secciones.
+// OJO: ocultar secciones es solo comodidad; lo que protege los datos son las reglas de la base (sql/).
 function sincronizarSesion() {
   adminAutenticado = esAdminActivo();
+  TABS_ADMIN.forEach(id => {
+    const t = document.getElementById('tab-nav-' + id);
+    if (t) t.style.display = adminAutenticado ? '' : 'none';
+  });
+  if (!adminAutenticado) {
+    // Si estaba mirando una sección de administrador y ya no lo es, vuelve a Pedidos.
+    const abierta = document.querySelector('.section.active');
+    if (abierta && TABS_ADMIN.some(id => abierta.id === 'tab-' + id)) {
+      showTab('ingresos', document.querySelector(`.tab[onclick*="showTab('ingresos'"]`));
+    }
+  }
   const badge = document.getElementById('rolBadge');
   const salir = document.getElementById('btn-salir');
-  const importar = document.getElementById('btn-importar');
-  if (importar) importar.style.display = adminAutenticado ? '' : 'none';
+  // Funciones de administrador dentro de las pestañas que caja sí ve (Exportar, Importar, Cierre manual,
+  // Historial de cierres…): marcadas con data-solo-admin, con caja ni se dibujan.
+  document.querySelectorAll('[data-solo-admin]').forEach(el => { el.style.display = adminAutenticado ? '' : 'none'; });
   if (!badge || !salir) return;
   if (!sesionBase) { badge.style.display = 'none'; salir.style.display = 'none'; return; }
   let texto;
@@ -3135,32 +3129,11 @@ async function respaldoCompleto() {
   }
 }
 
-// El botón "Exportar" del encabezado: el respaldo completo siempre pasa por el acceso de
-// administrador (aplicarGateAdmin/intentarAccesoAdmin, igual que el cierre manual).
-let respaldoPendiente = false;
+// El botón "Exportar" del encabezado y el botón del aviso de respaldo: son solo del administrador
+// (con caja ni se dibujan). Si alguien lo llama a mano con caja, se niega — no hay ventana de contraseña.
 function pedirRespaldoCompleto() {
-  if (adminAutenticado) { respaldoCompleto(); return; }
-  respaldoPendiente = true;
-  document.getElementById('respaldo-password').value = '';
-  document.getElementById('modal-respaldo').style.display = 'flex';
-  aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal);
-}
-function iniciarRespaldoDesdeModal() {
-  if (!respaldoPendiente) return;
-  respaldoPendiente = false;
-  cerrarModalRespaldo();
+  if (!adminAutenticado) { showToast('🔒 El respaldo completo es solo para administradores', 'warning'); return; }
   respaldoCompleto();
-}
-async function intentarAccesoRespaldo() {
-  await intentarAccesoAdmin('respaldo-password');
-  aplicarGateAdmin('respaldo', iniciarRespaldoDesdeModal);
-}
-function cerrarModalRespaldo() {
-  respaldoPendiente = false;
-  document.getElementById('modal-respaldo').style.display = 'none';
-}
-function cerrarModalRespaldoClick(e) {
-  if (e.target.id === 'modal-respaldo') cerrarModalRespaldo();
 }
 // Nombre anterior (sigue existiendo por si algo lo llama).
 function exportarDatos() { pedirRespaldoCompleto(); }
@@ -3180,6 +3153,8 @@ function nivelAvisoRespaldo(dias) {
 function renderAvisoRespaldo() {
   const el = document.getElementById('aviso-respaldo');
   if (!el) return;
+  // Hacer el respaldo es del administrador: con caja el aviso ni aparece (no puede hacer nada con él).
+  if (!adminAutenticado) { el.style.display = 'none'; el.innerHTML = ''; return; }
   if (ST.config === undefined) { el.style.display = 'none'; el.innerHTML = ''; return; } // aún no cargó
   if (ST.config === null) {
     el.innerHTML = `<div class="alert info"><div style="flex:1;">ℹ️ El aviso de respaldo está desactivado: falta crear la tabla <b>config</b> en Supabase (archivo sql/migracion_supabase_config.sql).</div></div>`;
@@ -5138,7 +5113,7 @@ function abrirModalDescuento(ids) {
   // día solo se puede tocar con la contraseña de administrador — cambiar su
   // monto equivale a corregir un cierre de otro día.
   if (primero.estado === 'pagado' && primero.fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, autorízate como administrador en Auditoría o en el historial de cierres', 'warning');
+    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, sal e ingresa como administrador', 'warning');
     return;
   }
   descuentoModalIds = idArr;
@@ -6195,7 +6170,7 @@ async function saldarFiadosConSaldoAFavor(clienteId, metodo, fechaPago, turnoPag
 
 // Lleva a "Corregir cierre" de una fecha/turno ya guardado (para que incluya
 // un abono recibido después de cerrarlo). Mismas reglas que el botón del
-// banner: el de hoy se corrige libre; el de otro día pide la contraseña.
+// banner: el de hoy se corrige libre; el de otro día pide ser administrador.
 function abrirCorreccionCierre(fecha, turno) {
   document.getElementById('dd-fecha').value = fecha;
   ddTurno = turno;
@@ -6494,6 +6469,14 @@ function cerrarModalTurnoClick(e) {
   if (e.target.id === 'modal-turno') cerrarModalTurno();
 }
 
+// Funciones solo de administrador: con caja los botones ni se dibujan; esto es el segundo seguro si
+// alguien las llama a mano. Devuelve true si hay administrador activo; si no, avisa y devuelve false.
+function avisarSiNoEsAdmin(que) {
+  if (adminAutenticado) return true;
+  showToast(`🔒 ${que} es solo para administradores — sal e ingresa como administrador`, 'warning');
+  return false;
+}
+
 // ── Cierre manual: respaldo por si el sistema no se pudo usar ese día y las
 // cuentas se llevaron aparte. Solo administrador. ──
 let cierreManualTurno = 'almuerzo';
@@ -6511,6 +6494,7 @@ let cierreManualEditando = null;
 let cierreManualPendiente = null;
 
 function abrirModalCierreManual() {
+  if (!avisarSiNoEsAdmin('Cargar un cierre a mano')) return;
   cierreManualPendiente = null;
   document.getElementById('modal-cierre-manual').style.display = 'flex';
   document.getElementById('cierremanual-password').value = '';
@@ -6522,6 +6506,7 @@ function abrirModalCierreManual() {
 // el botón "Editar" del historial y desde "Corregir cierre" cuando el cierre
 // del turno actual es manual.
 function editarCierreManual(fecha, turno) {
+  if (!avisarSiNoEsAdmin('Corregir un cierre cargado a mano')) return;
   cierreManualPendiente = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno) || null;
   document.getElementById('modal-cierre-manual').style.display = 'flex';
   document.getElementById('cierremanual-password').value = '';
@@ -9333,14 +9318,14 @@ function renderDiaADia() {
     document.getElementById('dd-transferencia').textContent = '$0';
 
     // Solo se puede corregir libremente el cierre de HOY. Para uno de otro
-    // día hace falta la contraseña (misma del historial completo, abajo).
+    // día hace falta ser administrador (con caja: Salir e ingresar como administrador).
     const puedeCorregir = fecha === today() || adminAutenticado;
     const msgEl = document.getElementById('dd-cerrado-mensaje');
     const btnCorregir = document.getElementById('btn-corregir-cierre');
     if (btnCorregir) btnCorregir.style.display = puedeCorregir ? '' : 'none';
     if (msgEl) msgEl.textContent = puedeCorregir
       ? '🔒 Este turno ya está cerrado. Los valores quedaron guardados.'
-      : '🔒 Este cierre es de otro día — autorízate como administrador en "Historial completo de cierres" (más abajo) para verlo o corregirlo.';
+      : '🔒 Este cierre es de otro día — para verlo o corregirlo, sal e ingresa como administrador.';
 
     renderNotasCierre(fecha);
     aplicarGateAdmin('dd-historial', renderHistorialCierres);
@@ -9426,11 +9411,11 @@ function irADiaADia(fecha, turno) {
 // Botón "Corregir cierre" del banner de turno cerrado — reabre en modo edición
 // el cierre del turno/fecha que se está viendo ahora mismo (sin contraseña,
 // es parte del flujo normal del día). Para ver/editar OTROS días hace falta
-// la contraseña del historial completo, más abajo en esta misma pestaña.
+// sesión de administrador (el Historial completo de cierres solo se dibuja para él).
 function corregirCierreActual() {
   const fecha = document.getElementById('dd-fecha').value || today();
   if (fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para corregir un cierre de otro día, autorízate como administrador en "Historial completo de cierres"', 'warning');
+    showToast('🔒 Para corregir un cierre de otro día, sal e ingresa como administrador', 'warning');
     return;
   }
   // Un cierre manual no tiene pedidos reales detrás — corregirlo por la vía
