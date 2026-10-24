@@ -102,6 +102,14 @@ test.describe('formulario «Registrar saldo a favor»', () => {
     expect(await page.inputValue('#saf-nuevo')).toBe('');
   });
 
+  test('el cliente nuevo queda en su lugar alfabético en la lista del formulario', async ({ page }) => {
+    await abrir(page);
+    await llenar(page, { nuevo: 'Ana Ruiz', monto: '2000' });
+    await registrar(page);
+    await expect.poll(() => page.evaluate(() => ST.clientesFiado.some(c => c.nombre === 'Ana Ruiz'))).toBe(true);
+    await expect(page.locator('#saf-cliente option')).toHaveText(['— Elegir cliente —', 'Ana Ruiz', 'Luisca', 'Marta Pérez']);
+  });
+
   test('si escribes un nombre que ya existe (otras tildes o mayúsculas) usa ese cliente y NO crea otro', async ({ page }) => {
     const reg = await abrir(page);
     await llenar(page, { nuevo: 'marta perez', monto: '2000' });
