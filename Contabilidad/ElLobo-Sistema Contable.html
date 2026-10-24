@@ -5913,13 +5913,21 @@ function renderFiados() {
 
   // Solo clientes con saldo > 0 estorban la vista — los que ya quedaron en
   // $0 no se muestran (ni colapsados: simplemente no tienen nada pendiente).
-  // Excepción: si tienen pedidos pendientes cubiertos por saldo a favor (p.
-  // ej. tras revertir un pago vía abono, saldo = 0) sí se muestran, para
-  // poder usar "Aplicar saldo a favor".
-  const clientesConSaldo = ST.clientesFiado
+  // Excepciones, que SÍ se muestran:
+  //  · pedidos pendientes cubiertos por saldo a favor (p. ej. tras revertir un
+  //    pago vía abono, saldo = 0), para poder usar "Aplicar saldo a favor";
+  //  · saldo a favor sin ningún pedido pendiente (abonó de más, o se canceló
+  //    el pedido que había abonado): esa plata ya entró al cierre, así que no
+  //    puede quedar invisible — y es desde aquí que un administrador puede
+  //    eliminar un abono hecho por error.
+  const todosConSaldo = ST.clientesFiado
     .map(c => ({ cliente: c, ...calcularSaldoFiado(c.id) }))
-    .filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5)
+    .filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5 || x.sobrante > 0.5)
     .sort((a,b) => b.saldo - a.saldo);
+  // Los que solo tienen saldo a favor no deben contarse en la insignia de
+  // "fiados por cobrar" de la pestaña.
+  const clientesConSaldo = todosConSaldo;
+  const porCobrar = todosConSaldo.filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5);
 
   // Huérfanos: fiados sin cliente_fiado_id, invisibles en cualquier otro
   // lado (ni Pendientes ni el listado por cliente de arriba los agarra).
@@ -5929,7 +5937,7 @@ function renderFiados() {
 
   const badge = document.getElementById('fiados-badge');
   if (badge) {
-    const total = clientesConSaldo.length + huerfanos.length;
+    const total = porCobrar.length + huerfanos.length;
     badge.textContent = total;
     badge.style.display = total > 0 ? 'inline' : 'none';
     badge.style.background = huerfanos.length > 0 ? 'var(--red, #e05c5c)' : 'var(--orange)';
@@ -6005,14 +6013,18 @@ function renderFiados() {
         }).join('')
       : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin pedidos pendientes — el saldo viene de un abono todavía sin aplicar del todo.</div></td></tr>`;
 
+    // Eliminar un abono (por error o de prueba) es solo de administrador:
+    // la plata ya entró al cierre de su día, así que corregirlo no es cosa
+    // del mostrador. Con caja la columna ni se dibuja.
     const filasAbonos = abonos.length
       ? abonos.map(a => `<tr>
           <td>${a.fecha}${a.turno ? ` · ${a.turno === 'cena' ? '🌙' : '☀️'}` : ''}</td>
           <td class="amount-pos">${fmt(a.monto)}</td>
           <td><span class="badge ${a.cuenta==='efectivo'?'badge-green':'badge-blue'}">${a.cuenta==='efectivo'?'💵 Efectivo':'📲 Transferencia'}</span></td>
           <td style="color:var(--text3);font-size:11px;">${a.nota||'—'}</td>
+          ${adminAutenticado ? `<td><button class="btn btn-danger" onclick="eliminarAbonoFiado(${a.id})" title="Eliminar este abono (solo administrador)">🗑</button></td>` : ''}
         </tr>`).join('')
-      : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin abonos registrados todavía.</div></td></tr>`;
+      : `<tr><td colspan="${adminAutenticado ? 5 : 4}"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin abonos registrados todavía.</div></td></tr>`;
 
     // Pedidos de este cliente ya saldados vía abono — mismo filtro que usa
     // calcularSaldoFiado() para totalPagadoViaAbono. Vive en ST.ingresos
@@ -6037,7 +6049,9 @@ function renderFiados() {
           <div class="pending-group-title" style="color:var(--purple);">📒 ${cliente.nombre}</div>
           <div class="pending-group-sub">${grupos.length} pedido(s) pendiente(s) · ${abonos.length} abono(s)${sobrante > 0.5 ? ` · saldo a favor ${fmt(sobrante)}` : ''} — ${abierto ? 'clic para colapsar' : 'clic para ver detalle'}</div>
         </div>
-        <div class="pending-group-total">${fmt(saldo)}</div>
+        ${saldo < -0.5
+          ? `<div class="pending-group-total" style="color:var(--green);" title="Abonó más de lo que debe: esa plata ya entró al cierre">a favor ${fmt(-saldo)}</div>`
+          : `<div class="pending-group-total">${fmt(saldo)}</div>`}
       </div>
       <div style="${abierto ? '' : 'display:none;'}">
         <div class="table-wrap">
@@ -6048,7 +6062,7 @@ function renderFiados() {
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Abono</th><th>Monto</th><th>Cuenta</th><th>Nota</th></tr></thead>
+            <thead><tr><th>Abono</th><th>Monto</th><th>Cuenta</th><th>Nota</th>${adminAutenticado ? '<th></th>' : ''}</tr></thead>
             <tbody>${filasAbonos}</tbody>
           </table>
         </div>
@@ -6249,6 +6263,47 @@ async function registrarAbonoFiado(clienteId) {
   } catch (e) {
     console.error(e);
     showToast(`⚠ Error al registrar el abono: ${(e.message||'').slice(0,160)}`, 'warning');
+  }
+}
+
+// Elimina UN abono (registrado por error, o de prueba). Solo administrador:
+// la plata del abono ya entró al cierre de su día/turno, y ese cierre —si ya
+// se guardó— es una foto que no se recalcula sola.
+// Regla de saldo (la misma que protege eliminarGrupoIngreso): lo abonado tiene
+// que seguir cubriendo los pedidos que ya se saldaron con abonos. Si no los
+// cubre, se avisa qué hacer (↩ devolver esos pedidos a pendiente) en vez de
+// dejar el saldo del cliente descuadrado.
+async function eliminarAbonoFiado(abonoId) {
+  if (!adminAutenticado) { showToast('🔒 Eliminar un abono es solo para administradores', 'warning'); return; }
+  const abono = ST.abonosFiado.find(a => a.id === abonoId);
+  if (!abono) return;
+  const cliente = ST.clientesFiado.find(c => c.id === abono.cliente_fiado_id);
+  const nombre = cliente ? cliente.nombre : 'el cliente';
+
+  const { totalAbonos, totalPagadoViaAbono } = calcularSaldoFiado(abono.cliente_fiado_id);
+  if (totalAbonos - (abono.monto || 0) + 0.01 < totalPagadoViaAbono) {
+    showToast(`🔒 No se puede eliminar este abono: con él se saldaron pedidos de ${nombre} por ${fmt(totalPagadoViaAbono)} y sin él el saldo quedaría descuadrado. Primero devuelve esos pedidos a pendiente con ↩ (Ingresos) y luego elimina el abono.`, 'warning');
+    return;
+  }
+
+  const cierre = abono.turno ? ST.cierresDia.find(c => c.fecha === abono.fecha && c.turno === abono.turno) : null;
+  const nombreTurno = abono.turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas';
+  if (!confirm(
+    `¿Eliminar el abono de ${nombre} por ${fmt(abono.monto)} (${abono.fecha}${abono.turno ? ', ' + nombreTurno : ''})?\n\n` +
+    `Deja de contarse como plata recibida en ese cierre y se resta de lo que ${nombre} tiene abonado.` +
+    (cierre ? `\n\nEl cierre de ${nombreTurno} del ${fechaCorta(abono.fecha)} ya está guardado y lo incluye: se abrirá "Corregir cierre" para volver a guardarlo sin este abono.` : '')
+  )) return;
+
+  try {
+    await sbDelete('abonos_fiado', `id=eq.${abonoId}`);
+    ST.abonosFiado = ST.abonosFiado.filter(a => a.id !== abonoId);
+    setSyncBadge('ok');
+    showToast(`🗑 Abono de ${fmt(abono.monto)} eliminado`, 'info');
+    renderAll();
+    if (cierre) abrirCorreccionCierre(abono.fecha, abono.turno);
+  } catch (e) {
+    console.error(e);
+    showToast(`⚠ Error al eliminar el abono: ${(e.message||'').slice(0,160)}`, 'warning');
   }
 }
 
