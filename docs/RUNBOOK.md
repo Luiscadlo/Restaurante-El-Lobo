@@ -100,7 +100,7 @@ Todo en verde antes de fusionar. Si algo falla, copia el mensaje completo y pás
 ## Cierre del día y datos
 
 - Los pendientes se cierran el mismo día; los fiados se pagan dentro del mismo mes (regla del negocio, ver `Contabilidad/README.md`).
-- Si un cierre quedó mal: solo un administrador puede corregir cierres o pedidos de días anteriores (restricción **de pantalla**; ver las limitaciones en `docs/MATRIZ_PERMISOS.md`).
+- Si un cierre quedó mal: solo un administrador puede corregir cierres o pedidos de días anteriores. La pantalla se lo pide y, con el **candado de días** activado (`sql/candado_dias.sql`), la base también lo rechaza para el usuario de caja. El día de negocio cambia a las **9:00 a. m.** (hora de Bogotá): la cena que pasa de medianoche se sigue cerrando como «de hoy» hasta las 8:59 a. m.; pasada esa hora, cerrarla le toca a un administrador. Si caja ve el aviso «Caja solo puede cambiar lo de hoy…», es el candado y no una falla: entra como administrador. Detalle en `docs/MATRIZ_PERMISOS.md`.
 - Todo lo que se elimina o se descuenta queda en **Auditoría** (solo administradores).
 
 ## Si algo falla — guía rápida

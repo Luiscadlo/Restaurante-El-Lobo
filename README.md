@@ -16,7 +16,7 @@ Sistema propio del restaurante El Lobo (Montería, Colombia): pedidos, cobros, f
 | `Contabilidad/README.md` | Notas del módulo de descuentos y de las migraciones ya aplicadas. |
 | `Contabildad/` | **Solo redirección** del enlace viejo (escrito con "d" por error): lleva al sistema al instante, sin pantalla en medio. Pesa casi nada; si se borra, quien tenga guardado el enlace viejo dejará de poder abrirlo. |
 | `Menu/` | Solo el generador del menú del día (`Menú diario-El Lobo.html`, un HTML autónomo que la pestaña Menú del sistema carga en un iframe: **no se puede quitar**). Los materiales de diseño que había junto a él ya no se suben (están en `.gitignore`). |
-| `sql/` | Scripts para Supabase: `rls_seguridad.sql` (reglas de acceso), `rollback_rls.sql` (deshacerlas), `matriz_permisos.json` (fuente de esas reglas), `consulta_esquema.sql` (saca la estructura de la base, solo lectura) y migraciones. |
+| `sql/` | Scripts para Supabase: `rls_seguridad.sql` (reglas de acceso), `rollback_rls.sql` (deshacerlas), `candado_dias.sql` (caja solo puede cambiar lo de hoy) y `rollback_candado.sql` (quitarlo), `matriz_permisos.json` (fuente de esas reglas), `consulta_esquema.sql` (saca la estructura de la base, solo lectura) y migraciones. |
 | `herramientas/` | `generar_rls.py` (SQL de seguridad desde la matriz de permisos) y las de restauración: `esquema_a_sql.py`, `respaldo_a_sql.py`, `restaurar_respaldo.py` (ver `docs/RESTAURAR.md`). |
 | `tests/` | Pruebas automáticas (ver `tests/LEEME.md`). No se publican ni tocan datos reales. |
 | `docs/` | Documentación: `RUNBOOK.md` (operación diaria), `RESTAURAR.md` (restaurar un respaldo), `DESPLIEGUE_SEGURIDAD.md`, `MATRIZ_PERMISOS.md`, `ESPECIFICO_EL_LOBO.md`. |
@@ -28,7 +28,7 @@ GitHub Pages publica la rama `main` tal cual. Cada cambio llega a `main` por un 
 
 ## Cómo se entra
 
-Con usuario y contraseña (Supabase Auth). Hay tres roles: **admin** (cada dueño con su usuario), **caja** (un usuario compartido para el mostrador) y **respaldo** (solo lectura, reservado por si algún día el respaldo se automatiza; no entra a la pantalla). Las reglas las hace cumplir la base de datos (RLS), no la pantalla. Detalle en `docs/MATRIZ_PERMISOS.md`.
+Con usuario y contraseña (Supabase Auth). Hay tres roles: **admin** (cada dueño con su usuario), **caja** (un usuario compartido para el mostrador) y **respaldo** (solo lectura, reservado por si algún día el respaldo se automatiza; no entra a la pantalla). Las reglas las hace cumplir la base de datos (RLS), no la pantalla; además, un **candado de días** (`sql/candado_dias.sql`) impide que caja cambie datos de días anteriores. Detalle en `docs/MATRIZ_PERMISOS.md`.
 
 ## Pruebas
 
