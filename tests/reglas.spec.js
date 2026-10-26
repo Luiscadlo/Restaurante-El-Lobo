@@ -324,3 +324,138 @@ test.describe('fechas y formato', () => {
     expect(r).toEqual(['$1.234.567', '$5.000', '− $5.000', '$5.000', '+ $5.000', '− $5.000', '$0']);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Antigüedad de fiados y pendientes (Prompt B). "Hoy" en las pruebas = martes 2026-10-20 y
+// las 14:00. Todos los valores esperados salen de contar los días en el calendario a mano.
+// ─────────────────────────────────────────────────────────────────────────────
+test.describe('antiguedadDias', () => {
+  const dias = (page, fecha, hoy) => page.evaluate(([f, h]) => antiguedadDias(f, h), [fecha, hoy]);
+
+  test('mismo día → 0 y día anterior → 1', async ({ page }) => {
+    expect(await dias(page, '2026-10-20', '2026-10-20')).toBe(0);
+    expect(await dias(page, '2026-10-19', '2026-10-20')).toBe(1);
+  });
+
+  test('sin segundo argumento usa el día de hoy (20-oct): del 10-oct son 10 días', async ({ page }) => {
+    expect(await page.evaluate(() => antiguedadDias('2026-10-10'))).toBe(10);
+  });
+
+  test('cruce de mes: del 30-sep al 2-oct son 2 días; del 25-sep al 3-oct son 8 (5 + 3)', async ({ page }) => {
+    expect(await dias(page, '2026-09-30', '2026-10-02')).toBe(2);
+    expect(await dias(page, '2026-09-25', '2026-10-03')).toBe(8);
+  });
+
+  test('cruce de año y febrero (2026 no es bisiesto, 2028 sí)', async ({ page }) => {
+    expect(await dias(page, '2025-12-30', '2026-01-02')).toBe(3);
+    expect(await dias(page, '2026-02-28', '2026-03-01')).toBe(1);
+    expect(await dias(page, '2028-02-28', '2028-03-01')).toBe(2);
+  });
+
+  test('fecha futura → número negativo', async ({ page }) => {
+    expect(await dias(page, '2026-10-22', '2026-10-20')).toBe(-2);
+  });
+
+  test('fecha vacía, mal escrita o inexistente → null', async ({ page }) => {
+    for (const mala of ['', null, undefined, 'abc', '20261020', '2026-13-01', '2026-02-31', '2026-10-5']) {
+      expect(await dias(page, mala, '2026-10-20'), `fecha ${JSON.stringify(mala)}`).toBeNull();
+    }
+    expect(await dias(page, '2026-10-10', 'mañana')).toBeNull();
+  });
+});
+
+test.describe('clasePorAntiguedad y claseFiado', () => {
+  const clase = (page, d) => page.evaluate(x => clasePorAntiguedad(x), d);
+  const claseF = (page, fecha, hoy) => page.evaluate(([f, h]) => claseFiado(f, h), [fecha, hoy]);
+
+  test('los umbrales por defecto son 8, 15 y 25 días', async ({ page }) => {
+    expect(await page.evaluate(() => [FIADO_AMARILLO_DIAS, FIADO_NARANJA_DIAS, FIADO_ROJO_DIAS])).toEqual([8, 15, 25]);
+  });
+
+  test('el día exacto del umbral ya cuenta en el color siguiente (7/8, 14/15, 24/25)', async ({ page }) => {
+    expect(await clase(page, 0)).toBe('reciente');
+    expect(await clase(page, 7)).toBe('reciente');
+    expect(await clase(page, 8)).toBe('amarillo');
+    expect(await clase(page, 14)).toBe('amarillo');
+    expect(await clase(page, 15)).toBe('naranja');
+    expect(await clase(page, 24)).toBe('naranja');
+    expect(await clase(page, 25)).toBe('rojo');
+    expect(await clase(page, 90)).toBe('rojo');
+  });
+
+  test('días negativos son "reciente"; sin número válido no se pinta nada (null)', async ({ page }) => {
+    expect(await clase(page, -3)).toBe('reciente');
+    for (const malo of [null, undefined, NaN, 'ocho']) {
+      expect(await clase(page, malo), `dias ${String(malo)}`).toBeNull();
+    }
+  });
+
+  test('claseFiado por fecha, dentro del mismo mes', async ({ page }) => {
+    expect(await claseF(page, '2026-10-20', '2026-10-20')).toBe('reciente');
+    expect(await claseF(page, '2026-10-12', '2026-10-20')).toBe('amarillo');   // 8 días
+    expect(await claseF(page, '2026-10-05', '2026-10-20')).toBe('naranja');    // 15 días
+    expect(await claseF(page, '2026-10-01', '2026-10-26')).toBe('rojo');       // 25 días
+  });
+
+  test('un fiado de un mes anterior es rojo aunque lleve pocos días (30-sep visto el 1-oct)', async ({ page }) => {
+    expect(await claseF(page, '2026-09-30', '2026-10-01')).toBe('rojo');       // 1 día
+    expect(await claseF(page, '2025-12-31', '2026-01-02')).toBe('rojo');       // cruce de año
+    expect(await claseF(page, '2026-10-01', '2026-10-01')).toBe('reciente');   // mismo mes, mismo día
+  });
+
+  test('claseFiado con fecha vacía o inválida → null', async ({ page }) => {
+    expect(await claseF(page, '', '2026-10-20')).toBeNull();
+    expect(await claseF(page, '2026-02-31', '2026-10-20')).toBeNull();
+  });
+});
+
+test.describe('tiempo abierto y chips', () => {
+  test('minutosAbierto: hora del pedido → hora actual, nunca negativo, null si no es HH:MM', async ({ page }) => {
+    const r = await page.evaluate(() => [
+      minutosAbierto('12:30', '14:00'), minutosAbierto('9:05', '09:35'), minutosAbierto('14:00', '14:00'),
+      minutosAbierto('15:00', '14:00'), minutosAbierto('', '14:00'), minutosAbierto('abc', '14:00'), minutosAbierto(null, '14:00'),
+    ]);
+    expect(r).toEqual([90, 30, 0, 0, null, null, null]);
+  });
+
+  test('textoTiempoAbierto', async ({ page }) => {
+    const r = await page.evaluate(() => [0, 45, 60, 90, 125].map(textoTiempoAbierto));
+    expect(r).toEqual(['0 min', '45 min', '1 h', '1 h 30 min', '2 h 5 min']);
+  });
+
+  test('chipFiadoHTML: texto y color según los días', async ({ page }) => {
+    const chip = (f) => page.evaluate(x => chipFiadoHTML(x, '2026-10-20'), f);
+    const hoy = await chip('2026-10-20');
+    expect(hoy).toContain('de hoy');            expect(hoy).toContain('badge-green');
+    const ayer = await chip('2026-10-19');
+    expect(ayer).toContain('de ayer');          expect(ayer).toContain('badge-green');
+    const doce = await chip('2026-10-08');      // 12 días → amarillo
+    expect(doce).toContain('hace 12 días');     expect(doce).toContain('badge-accent');
+    const quince = await chip('2026-10-05');    // 15 días → naranja
+    expect(quince).toContain('hace 15 días');   expect(quince).toContain('badge-orange');
+    const mesAnt = await chip('2026-09-29');    // 21 días y de otro mes → rojo
+    expect(mesAnt).toContain('hace 21 días');   expect(mesAnt).toContain('badge-red'); expect(mesAnt).toContain('mes anterior');
+    expect(await chip('')).toBe('');
+  });
+
+  test('chipPendienteHTML: de hoy → tiempo abierto; de ayer / de otro día → rojo', async ({ page }) => {
+    const chip = (orders) => page.evaluate(o => chipPendienteHTML(o, '2026-10-20', '14:00'), orders);
+    const hoy = await chip([{ fecha: '2026-10-20', hora: '12:30' }]);          // 90 min
+    expect(hoy).toContain('1 h 30 min');  expect(hoy).toContain('badge-gray');
+    // varios platos: cuenta desde el primero (hora más temprana): 13:20 → 40 min
+    expect(await chip([{ fecha: '2026-10-20', hora: '13:40' }, { fecha: '2026-10-20', hora: '13:20' }])).toContain('40 min');
+    const ayer = await chip([{ fecha: '2026-10-19', hora: '13:00' }]);
+    expect(ayer).toContain('de ayer');    expect(ayer).toContain('badge-red');
+    const otro = await chip([{ fecha: '2026-10-14', hora: '13:00' }]);
+    expect(otro).toContain('de 14-10');   expect(otro).toContain('badge-red');
+    expect(await chip([{ fecha: '2026-09-03', hora: '13:00' }])).toContain('de 03-09');
+  });
+
+  test('chipPendienteHTML: sin hora, sin fecha o fecha futura → sin chip', async ({ page }) => {
+    const chip = (orders) => page.evaluate(o => chipPendienteHTML(o, '2026-10-20', '14:00'), orders);
+    expect(await chip([{ fecha: '2026-10-20' }])).toBe('');
+    expect(await chip([{ hora: '12:00' }])).toBe('');
+    expect(await chip([{ fecha: '2026-10-25', hora: '12:00' }])).toBe('');
+    expect(await chip([])).toBe('');
+  });
+});
