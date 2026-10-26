@@ -279,7 +279,7 @@ test.describe('sesión guardada (caja)', () => {
     await page.getByRole('button', { name: /Salir/ }).click();
     await esperarEntrada(page);
     expect(await guardado(page)).toBeNull();
-    expect(reg.auth).toContain('logout');
+    await expect.poll(() => reg.auth.includes('logout')).toBe(true);   // la entrada aparece antes de que termine de avisarle al servidor
     expect(reg.logoutScopes).toEqual(['local']);   // solo ESTA sesión: no saca a otros equipos con el mismo usuario
     // y recargando tampoco entra solo
     await page.reload();

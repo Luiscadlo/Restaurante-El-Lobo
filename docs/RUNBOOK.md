@@ -107,7 +107,7 @@ Todo en verde antes de fusionar. Si algo falla, copia el mensaje completo y pás
 
 | Síntoma | Qué hacer |
 |---|---|
-| El enlace viejo (`Contabildad`) muestra "Este enlace cambió" | Normal: guardar el enlace nuevo de la raíz y borrar el viejo de favoritos. |
+| Con el enlace viejo (`Contabildad`) la pantalla tarda un instante en cargar | Es solo una redirección al sistema. Para saltarla, guarda el enlace nuevo (la raíz del sitio: `https://luiscadlo.github.io/Restaurante-El-Lobo/`) y borra el viejo de favoritos. |
 | Pantalla de entrada no deja pasar a nadie | ¿Se activó RLS sin crear usuarios con rol? Revisa el `select email, raw_app_meta_data ->> 'rol' from auth.users`. Último recurso: `sql/rollback_rls.sql`. |
 | La caja no puede cobrar tras un cambio | Puede ser un permiso faltante. Abre la consola (F12) y busca peticiones con error 403; pásaselas a Claude. Reversa: arriba. |
 | El aviso de respaldo sigue en pantalla | Entra como administrador → **Datos → Respaldo completo**. El aviso solo se apaga cuando bajaron **todas** las filas de todas las tablas; si sale un error de conteo, ese archivo no sirve: repite el respaldo y, si vuelve a fallar, pásale el mensaje a Claude. |
