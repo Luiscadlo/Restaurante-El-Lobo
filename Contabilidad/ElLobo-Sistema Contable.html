@@ -2622,6 +2622,7 @@ function sincronizarSesion() {
   // Funciones de administrador dentro de las pestañas que caja sí ve (Cierre manual,
   // Historial de cierres…): marcadas con data-solo-admin, con caja ni se dibujan.
   document.querySelectorAll('[data-solo-admin]').forEach(el => { el.style.display = adminAutenticado ? '' : 'none'; });
+  aplicarLimiteFechaCierre();
   if (!badge || !salir) return;
   if (!sesionBase) { badge.style.display = 'none'; salir.style.display = 'none'; return; }
   let texto;
@@ -2968,6 +2969,10 @@ function toLocalDateStr(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 const today    = () => toLocalDateStr(new Date());
+// «Día de negocio»: igual que el candado de la base (sql/candado_dias.sql), el día NO cambia a medianoche sino a las
+// 9:00 a. m. (se le restan 9 horas al reloj del equipo). Así la cena (5 pm–2 am) sigue siendo del día en que empezó,
+// aunque ya pasara la medianoche. today() sigue siendo el día del calendario (lo usan los formularios de «hoy»).
+const diaNegocio = () => toLocalDateStr(new Date(Date.now() - 9 * 60 * 60 * 1000));
 const nowTime  = () => { const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
 
 // ── Formato de miles en campos de dinero (100000 → 100.000 mientras se escribe) ─
@@ -5308,11 +5313,12 @@ function abrirModalDescuento(ids) {
   const saldadoConAbonos = todas.find(cobradoViaAbonos);
   if (saldadoConAbonos) { avisoBloqueoCobradoViaAbonos(saldadoConAbonos, 'cambiar su monto'); return; }
   const primero = todas[0];
-  // Mismo candado que corregirCierreActual(): un pedido YA PAGADO de otro
-  // día solo se puede tocar con la contraseña de administrador — cambiar su
-  // monto equivale a corregir un cierre de otro día.
-  if (primero.estado === 'pagado' && primero.fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, sal e ingresa como administrador', 'warning');
+  // Mismo candado que corregirCierreActual(): un pedido YA PAGADO de un día
+  // anterior (día de negocio, como el candado de la base: fecha de cobro, o la del
+  // pedido si no tiene) solo lo toca el administrador — cambiar su monto equivale
+  // a corregir un cierre de un día anterior.
+  if (primero.estado === 'pagado' && (primero.fecha_pago || primero.fecha) < diaNegocio() && !adminAutenticado) {
+    showToast('🔒 Para aplicar un descuento a un pedido pagado de un día anterior, sal e ingresa como administrador', 'warning');
     return;
   }
   descuentoModalIds = idArr;
@@ -6373,7 +6379,7 @@ async function saldarFiadosConSaldoAFavor(clienteId, metodo, fechaPago, turnoPag
 
 // Lleva a "Corregir cierre" de una fecha/turno ya guardado (para que incluya
 // un abono recibido después de cerrarlo). Mismas reglas que el botón del
-// banner: el de hoy se corrige libre; el de otro día pide ser administrador.
+// banner: el del día en curso se corrige libre; el de un día anterior pide ser administrador.
 function abrirCorreccionCierre(fecha, turno) {
   document.getElementById('dd-fecha').value = fecha;
   ddTurno = turno;
@@ -9058,6 +9064,15 @@ function setDDTurno(t, btn) {
   renderDiaADia();
 }
 
+// Caja solo trabaja el día de negocio en curso: en el selector de fecha del Cierre el calendario no deja escoger días
+// anteriores (el administrador no tiene límite). Es comodidad: lo que realmente lo impide es el candado de la base.
+function aplicarLimiteFechaCierre() {
+  const el = document.getElementById('dd-fecha');
+  if (!el) return;
+  if (adminAutenticado) el.removeAttribute('min');
+  else el.min = diaNegocio();
+}
+
 function onFechaCierreChange() {
   viendoHistorialCierre = false;
   resetearCamposAjusteCierre();
@@ -9570,9 +9585,13 @@ function renderDiaADia() {
   const fechaEl = document.getElementById('dd-fecha');
   if (!fechaEl) return;
   const fecha = fechaEl.value || today();
+  aplicarLimiteFechaCierre();
 
   const cierreExistente = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
-  const mostrarCerrado  = !!cierreExistente && !viendoHistorialCierre;
+  // Caja solo trabaja el día de negocio en curso (hoy, o ayer mientras no pasen las 9:00 a. m.): un día anterior se
+  // muestra bloqueado —haya cierre o no— y para verlo o corregirlo hay que ingresar como administrador.
+  const diaAnteriorParaCaja = !adminAutenticado && fecha < diaNegocio();
+  const mostrarCerrado  = (!!cierreExistente && !viendoHistorialCierre) || diaAnteriorParaCaja;
 
   const banner     = document.getElementById('dd-cerrado-banner');
   const formActivo = document.getElementById('dd-form-activo');
@@ -9582,28 +9601,28 @@ function renderDiaADia() {
     if (banner)     banner.style.display = 'flex';
     if (formActivo) formActivo.style.display = 'none';
     document.getElementById('dd-total').textContent         = '$0';
-    document.getElementById('dd-turno-label').textContent   = 'Abre un turno nuevo para empezar';
+    document.getElementById('dd-turno-label').textContent   = diaAnteriorParaCaja ? 'Día anterior: solo administrador' : 'Abre un turno nuevo para empezar';
     document.getElementById('dd-efectivo').textContent      = '$0';
     document.getElementById('dd-transferencia').textContent = '$0';
 
-    // Solo se puede corregir libremente el cierre de HOY. Para uno de otro
-    // día hace falta ser administrador (con caja: Salir e ingresar como administrador).
-    const puedeCorregir = fecha === today() || adminAutenticado;
-    const esOtroDia = fecha !== today();
+    // Solo se puede corregir libremente el cierre del día de negocio en curso. Uno de un día anterior es cosa del
+    // administrador (con caja: Salir e ingresar como administrador).
+    const puedeCorregir = !diaAnteriorParaCaja;
+    const esDiaAnterior = fecha < diaNegocio();
     const msgEl = document.getElementById('dd-cerrado-mensaje');
     const btnCorregir = document.getElementById('btn-corregir-cierre');
     if (btnCorregir) {
       btnCorregir.style.display = puedeCorregir ? '' : 'none';
-      // Un turno de otro día es cosa del administrador: se «edita»; el de hoy se «corrige» como siempre.
-      btnCorregir.textContent = esOtroDia ? '✏️ Editar turno' : '✏️ Corregir cierre';
+      // Un turno de un día anterior es cosa del administrador: se «edita»; el del día en curso se «corrige» como siempre.
+      btnCorregir.textContent = esDiaAnterior ? '✏️ Editar turno' : '✏️ Corregir cierre';
     }
-    // «Abrir turno» siempre actúa sobre el turno de HOY: no tiene sentido mientras se mira (o edita) un día anterior,
-    // ni para caja ni para el administrador. Solo se ofrece cuando el cierre mostrado es el de hoy.
+    // «Abrir turno» siempre actúa sobre el turno de HOY (día del calendario): no tiene sentido mientras se mira (o
+    // edita) otro día, ni para caja ni para el administrador. Solo se ofrece cuando la fecha mostrada es la de hoy.
     const btnAbrir = document.getElementById('btn-abrir-turno-cierre');
-    if (btnAbrir) btnAbrir.style.display = esOtroDia ? 'none' : '';
+    if (btnAbrir) btnAbrir.style.display = fecha !== today() ? 'none' : '';
     if (msgEl) msgEl.textContent = puedeCorregir
       ? '🔒 Este turno ya está cerrado. Los valores quedaron guardados.'
-      : '🔒 Este cierre es de otro día — para verlo o corregirlo, sal e ingresa como administrador.';
+      : '🔒 Este día ya pasó: Caja solo trabaja el día en curso. Para verlo o corregirlo, sal e ingresa como administrador.';
 
     renderNotasCierre(fecha);
     aplicarGateAdmin('dd-historial', renderHistorialCierres);
@@ -9692,8 +9711,8 @@ function irADiaADia(fecha, turno) {
 // sesión de administrador (el Historial completo de cierres solo se dibuja para él).
 function corregirCierreActual() {
   const fecha = document.getElementById('dd-fecha').value || today();
-  if (fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para corregir un cierre de otro día, sal e ingresa como administrador', 'warning');
+  if (fecha < diaNegocio() && !adminAutenticado) {
+    showToast('🔒 Para corregir un cierre de un día anterior, sal e ingresa como administrador', 'warning');
     return;
   }
   // Un cierre manual no tiene pedidos reales detrás — corregirlo por la vía
