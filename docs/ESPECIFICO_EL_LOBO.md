@@ -232,7 +232,7 @@ No hay otras librerías ni frameworks. El generador de menú es autosuficiente: 
 | `Menu/platos.xlsx` y `Menu/Menu/platos.xlsx` | 10 KB cada una — **byte a byte idénticas** | No |
 | `QR del lobo .docx` | 0,7 MB | No (contiene QR de pago) |
 
-`Menu/` pesa 26,9 MB de los ≈ 28,7 MB de archivos versionados; `Contabilidad/` pesa 0,9 MB. La propuesta de limpieza (sin borrar nada todavía) está en la descripción del pull request correspondiente. El historial de git conserva además cosas viejas (una contraseña ya quemada, dos SQL de correcciones de datos y un respaldo de prueba); **no deben viajar al producto** (se exporta una copia limpia de la etiqueta, sin historial).
+`Menu/` pesaba 26,9 MB de los ≈ 28,7 MB de archivos versionados; `Contabilidad/` pesa 0,9 MB. **Resuelto el 25-oct-2026 (decisión del dueño):** de `Menu/` solo se sigue versionando el generador (`Menú diario-El Lobo.html`, que la pestaña Menú necesita); todo lo demás de la tabla de arriba quedó fuera del repositorio (`.gitignore`) y sus archivos no se borraron del computador del dueño. Una prueba (`tests/menu-publicado.spec.js`) vigila que el generador nunca se excluya por accidente. El historial de git conserva además cosas viejas (una contraseña ya quemada, dos SQL de correcciones de datos y un respaldo de prueba); **no deben viajar al producto** (se exporta una copia limpia de la etiqueta, sin historial).
 
 ---
 

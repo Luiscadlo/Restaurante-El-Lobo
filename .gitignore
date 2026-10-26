@@ -6,10 +6,14 @@
 *.xlsm
 ~$*
 
-# Excepción: catálogo público de productos del Menú (ya estaba en el repo;
-# código/nombre/categoría, sin datos del negocio). Ver Menu/.
-!Menu/platos.xlsx
-!Menu/Menu/platos.xlsx
+# Menu/: SOLO el generador (Menu/Menú diario-El Lobo.html) va en el repositorio: la pestaña
+# Menú del sistema lo carga en un iframe. El resto de la carpeta (plantilla, tipografías,
+# presentación y catálogo de platos) no lo usa el sistema y pesaba ~22 MB: se queda en el
+# computador del dueño pero NO se sube (sigue en la historia de git si algún día hace falta).
+Menu/Fonts/
+Menu/Menu/
+Menu/plantilla.png
+Menu/platos.xlsx
 
 # Otros archivos con datos del negocio que genera el sistema: el respaldo JSON del
 # botón "Exportar" del encabezado (ElLobo_respaldo_AAAA-MM-DD.json) y cualquier

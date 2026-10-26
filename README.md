@@ -15,7 +15,7 @@ Sistema propio del restaurante El Lobo (Montería, Colombia): pedidos, cobros, f
 | `Contabilidad/modelo-financiero/` | Motor en Python que arma el modelo financiero (Excel) con un export de datos. Se corre a mano en el computador; no es parte del sitio. Tiene su propio README. |
 | `Contabilidad/README.md` | Notas del módulo de descuentos y de las migraciones ya aplicadas. |
 | `Contabildad/` | **Solo avisos** del enlace viejo (escrito con "d" por error). Muestran el enlace nuevo y redirigen a los 8 segundos. Se borra cuando nadie lo use (Prompt E2). |
-| `Menu/` | Generador del menú del día (un HTML autónomo, el sistema lo muestra en la pestaña Menú) y materiales de diseño. |
+| `Menu/` | Solo el generador del menú del día (`Menú diario-El Lobo.html`, un HTML autónomo que la pestaña Menú del sistema carga en un iframe: **no se puede quitar**). Los materiales de diseño que había junto a él ya no se suben (están en `.gitignore`). |
 | `sql/` | Scripts para Supabase: `rls_seguridad.sql` (reglas de acceso), `rollback_rls.sql` (deshacerlas), `matriz_permisos.json` (fuente de esas reglas), `consulta_esquema.sql` (saca la estructura de la base, solo lectura) y migraciones. |
 | `herramientas/` | `generar_rls.py` (SQL de seguridad desde la matriz de permisos) y las de restauración: `esquema_a_sql.py`, `respaldo_a_sql.py`, `restaurar_respaldo.py` (ver `docs/RESTAURAR.md`). |
 | `tests/` | Pruebas automáticas (ver `tests/LEEME.md`). No se publican ni tocan datos reales. |
@@ -43,7 +43,7 @@ Correr `npm test` **antes de fusionar cualquier cambio a `main`**. Qué cubre ca
 
 ## Qué NO se sube (el repositorio es público)
 
-- Archivos `.xlsx` / `.xls` con datos del negocio (exports del sistema, modelos generados). La única excepción es `Menu/platos.xlsx` (catálogo de platos).
+- Archivos `.xlsx` / `.xls` con datos del negocio (exports del sistema, modelos generados), sin excepciones.
 - Respaldos `.json` (`ElLobo_respaldo_*.json`) y exports (`ElLobo_datos_*`, `datos_*.json`). Guárdalos **fuera** del repositorio.
 - Contraseñas, y cualquier llave de Supabase distinta de la **pública** (`anon`, que va en el HTML por diseño). **Nunca** la llave `service_role`.
 - Archivos de entorno (`.env`) o claves de usuarios.
