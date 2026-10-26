@@ -930,6 +930,33 @@
       <div id="fiados-clientes-zone"></div>
     </div>
   </div>
+
+  <!-- Saldo a favor: plata que un cliente deja de más (o por adelantado) sin tener deuda -->
+  <div class="panel" id="saf-panel" style="margin-top:20px;">
+    <div class="panel-header">
+      <div class="panel-title">💰 Registrar saldo a favor de un cliente</div>
+    </div>
+    <div class="panel-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">
+        Úsalo cuando un cliente te deja plata de más y no se la puedes devolver (o la deja por adelantado). Entra a la caja del turno como un abono y el cliente queda con <b>saldo a favor</b>.
+        <br><b>Ejemplo:</b> te pagan con 20.000 una cuenta de 15.000 y no hay cambio → cobra la cuenta normal (15.000) y registra aquí los 5.000.
+        <br>Para gastarlo: en su próximo pedido regístralo como <b>fiado</b> a su nombre y pulsa <b>✔ Aplicar saldo a favor</b> en su tarjeta (o abona la diferencia).
+      </div>
+      <div class="pending-pay-bar" style="padding:0;background:none;border:none;">
+        <select id="saf-cliente" title="Cliente que ya existe">
+          <option value="">— Elegir cliente —</option>
+        </select>
+        <input type="text" id="saf-nuevo" placeholder="o escribe un cliente nuevo…" style="max-width:190px;">
+        <input type="text" inputmode="numeric" id="saf-monto" placeholder="Monto a favor" class="vuelto-inline" oninput="formatMilesInput(this)">
+        <select id="saf-cuenta">
+          <option value="efectivo">💵 Efectivo</option>
+          <option value="transferencia">📲 Transferencia</option>
+        </select>
+        <input type="text" id="saf-nota" placeholder="Nota (opcional)" style="max-width:220px;">
+        <button class="btn btn-primary" id="btn-saf" onclick="registrarSaldoAFavor()">+ Registrar saldo a favor</button>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- ===== EGRESOS (acceso con contraseña) ===== -->
@@ -5892,6 +5919,7 @@ function toggleFiadoCliente(clienteId) {
 function renderFiados() {
   const zone = document.getElementById('fiados-clientes-zone');
   if (!zone) return;
+  renderSaldoAFavorForm();
 
   // Solo clientes con saldo > 0 estorban la vista — los que ya quedaron en
   // $0 no se muestran (ni colapsados: simplemente no tienen nada pendiente).
@@ -6199,7 +6227,22 @@ async function registrarAbonoFiado(clienteId) {
   const notaEl   = document.getElementById(`abono-nota-${clienteId}`);
   const cuenta = cuentaEl ? cuentaEl.value : 'efectivo';
   const nota   = notaEl ? notaEl.value.trim() : '';
-  if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
+  const ok = await registrarAbonoDeCliente(cliente, monto, cuenta, nota);
+  if (!ok) return;
+  const montoEl = document.getElementById(`abono-monto-${clienteId}`);
+  if (montoEl) montoEl.value = '';
+  if (notaEl) notaEl.value = '';
+}
+
+// Núcleo del abono (lo usan la tarjeta del cliente y el formulario «Registrar saldo
+// a favor»): inserta el abono en el día/turno real, salda los pedidos fiados que
+// alcance a cubrir y avisa. Devuelve true si el abono quedó guardado (false si faltó
+// el monto, se canceló la confirmación del cierre o falló la base).
+async function registrarAbonoDeCliente(cliente, monto, cuenta, nota) {
+  const clienteId = cliente.id;
+  if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return false; }
+  // ¿Tenía deuda antes de abonar? Si no, es un saldo a favor puro (otro mensaje).
+  const teniaDeuda = calcularSaldoFiado(clienteId).totalPendiente > 0.5;
 
   const { fecha, turno } = fechaTurnoDeCobro();
   const nombreTurno = turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas';
@@ -6210,7 +6253,7 @@ async function registrarAbonoFiado(clienteId) {
     `El cierre de ${nombreTurno} del ${fechaCorta(fecha)} ya está guardado.\n\n` +
     `El abono de ${fmt(monto)} pertenece a ese turno, pero el cierre guardado no lo incluye todavía. ` +
     `Si continúas, se registra el abono y se abre "Corregir cierre" para volver a guardarlo con el abono incluido.\n\n¿Continuar?`
-  )) return;
+  )) return false;
 
   try {
     const [abonoRow] = await sbInsertConCuenta('abonos_fiado', {
@@ -6229,23 +6272,69 @@ async function registrarAbonoFiado(clienteId) {
     }
 
     setSyncBadge('ok');
-    const montoEl = document.getElementById(`abono-monto-${clienteId}`);
-    if (montoEl) montoEl.value = '';
-    if (notaEl) notaEl.value = '';
-
-    const saldoFinal = calcularSaldoFiado(clienteId).saldo;
+    const { saldo: saldoFinal, sobrante } = calcularSaldoFiado(clienteId);
     showToast(
-      saldoFinal <= 0.5
-        ? `✅ Fiado de ${cliente.nombre} saldado por completo`
-        : `✅ Abono de ${fmt(monto)} registrado${pagados.length ? ` (${pagados.length} pedido(s) saldado(s))` : ''} — ${cliente.nombre} debe ${fmt(saldoFinal)}`,
+      !teniaDeuda
+        ? `✅ Saldo a favor registrado: ${cliente.nombre} tiene ${fmt(Math.max(sobrante, 0))} a favor`
+        : saldoFinal <= 0.5
+          ? `✅ Fiado de ${cliente.nombre} saldado por completo`
+          : `✅ Abono de ${fmt(monto)} registrado${pagados.length ? ` (${pagados.length} pedido(s) saldado(s))` : ''} — ${cliente.nombre} debe ${fmt(saldoFinal)}`,
       'ok'
     );
     renderAll();
     if (cierre && abonoRow.turno) abrirCorreccionCierre(fecha, turno);
+    return true;
   } catch (e) {
     console.error(e);
     showToast(`⚠ Error al registrar el abono: ${(e.message||'').slice(0,160)}`, 'warning');
+    return false;
   }
+}
+
+// Formulario «Registrar saldo a favor»: para un cliente que no debe nada (o que no está
+// en la lista todavía). Elegir de la lista O escribir un nombre nuevo (si ya existe uno
+// igual, aunque cambien tildes/mayúsculas, se usa ese y no se crea otro).
+async function registrarSaldoAFavor() {
+  const sel = document.getElementById('saf-cliente');
+  const nuevoEl = document.getElementById('saf-nuevo');
+  const idElegido = sel && sel.value ? parseInt(sel.value, 10) : 0;
+  const nombreNuevo = nuevoEl ? nuevoEl.value.trim().replace(/\s+/g, ' ') : '';
+  const monto = valMiles('saf-monto');
+  const cuenta = document.getElementById('saf-cuenta').value;
+  const nota = document.getElementById('saf-nota').value.trim();
+
+  if (idElegido && nombreNuevo) { showToast('⚠ Elige un cliente de la lista O escribe uno nuevo, no los dos', 'warning'); return; }
+  if (!idElegido && !nombreNuevo) { showToast('⚠ Elige un cliente de la lista o escribe el nombre de uno nuevo', 'warning'); return; }
+  if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
+
+  let cliente = idElegido ? ST.clientesFiado.find(c => c.id === idElegido) : clienteFiadoPorNombre(nombreNuevo);
+  if (!cliente) {
+    try {
+      const [row] = await sbInsert('clientes_fiado', { nombre: nombreNuevo });
+      ST.clientesFiado.push(row);
+      ST.clientesFiado.sort((a,b) => a.nombre.localeCompare(b.nombre));
+      cliente = row;
+    } catch (e) {
+      console.error(e);
+      showToast('⚠ No se pudo crear el cliente — ¿ya creaste la tabla clientes_fiado en Supabase?', 'warning');
+      return;
+    }
+  }
+  const ok = await registrarAbonoDeCliente(cliente, monto, cuenta, nota);
+  if (!ok) return;
+  ['saf-nuevo', 'saf-monto', 'saf-nota'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  if (sel) sel.value = '';
+}
+
+// Llena la lista de clientes del formulario (todos, también los que no deben nada),
+// conservando lo que estaba elegido aunque la pantalla se redibuje.
+function renderSaldoAFavorForm() {
+  const sel = document.getElementById('saf-cliente');
+  if (!sel) return;
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">— Elegir cliente —</option>' +
+    ST.clientesFiado.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  if (actual && ST.clientesFiado.some(c => String(c.id) === actual)) sel.value = actual;
 }
 
 // Elimina UN abono (registrado por error, o de prueba). Solo administrador:
