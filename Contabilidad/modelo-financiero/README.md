@@ -239,10 +239,12 @@ tarjetas quedan en blanco en vez de mostrar una comparación inventada.
   almuerzo. Como los ingresos del modelo salen de los **cierres** (incluyen desayuno, ajustes y
   cierres manuales), el *Revenue Schedule* de `Model` los concilia por turno, en este orden:
   1. *Ventas por pedidos* (valor calculado por el script);
-  2. *Ingresos de cierre sin pedido asociado (ajustes y cierres manuales)* = (ingresos del
-     turno − desayuno) − ventas por pedidos. Debajo, tres filas informativas que **suman exactamente**
-     esa fila: *Ajustes de cierre (efectivo y transferencia)*, *Cierres manuales* y *Diferencia entre
-     pedidos y cierre (fiados no cobrados u otros)* (el residual; el script también lo imprime en consola);
+  2. *Ingresos de cierre sin pedido asociado (ajustes, cierres manuales y abonos de fiado)* = (ingresos del
+     turno − desayuno) − ventas por pedidos. Debajo, cinco filas informativas que **suman exactamente**
+     esa fila: *Ajustes de cierre (efectivo y transferencia)*, *Cierres manuales*, *Abonos de fiado
+     recibidos* (plata de fiados de otros días: entra al cierre del día del abono), *Fiados saldados con
+     abonos* (negativo: su valor ya cuenta como venta en su día de consumo, pero su plata llegó con los
+     abonos) y *Diferencia entre pedidos y cierre (otros)* (el residual; el script también lo imprime en consola);
   3. *Pedidos registrados* (cantidad real);
   4. *Ticket promedio* = fila 1 ÷ fila 3;
   5. *Pedidos equivalentes por ingresos sin pedido (ESTIMADO)* = fila 2 ÷ ticket (0 si la fila 2
@@ -257,6 +259,19 @@ tarjetas quedan en blanco en vez de mostrar una comparación inventada.
   Los gráficos de comportamiento de clientes (#8, #9, #19 y los que cuentan pedidos) y el consumo
   familiar usan solo los pedidos registrados y el ticket; nunca los pedidos equivalentes. Al terminar,
   el script imprime *"Ticket almuerzo del mes en foco: $X (debe coincidir con el Tablero)"*.
+
+- **Descuentos** (desde el 3-oct): un descuento es plata que **no ingresó**; `monto_total` ya viene neto, así que
+  **los ingresos, las ventas y la utilidad no cambian**. El script lee `descuento` / `motivo_descuento` de
+  `Pedidos_Pagados` (0 si el export es anterior) y la hoja `Descuentos_Log` (**opcional**: si no existe, todo
+  sigue funcionando; solo se usa para cruzar el total en consola). En `Model → Revenue Schedule` quedan tres filas
+  **informativas** (no alimentan ninguna otra): *Descuentos otorgados*, *Pedidos con descuento* y *Ventas a
+  precio de lista* = ventas por pedidos + desayuno + descuentos (la misma cuenta del Tablero). Los descuentos
+  cuentan igual que el Tablero: turnos cerrados y sin Gratis.
+- **Abonos de fiado** (desde el 16-oct): los abonos entran al cierre del día en que se reciben y **ya vienen dentro**
+  de `efectivo` / `transferencia` (`abonos_efectivo` / `abonos_transferencia` solo explican cuánto es abono): el
+  ingreso del cierre sigue siendo efectivo + transferencia + ajustes, igual que el KPI de Ingresos del Tablero, y
+  los abonos **no se suman otra vez**. Un fiado saldado con abonos conserva su fecha y turno de **consumo** (ahí
+  cuentan sus unidades y su valor como venta); su plata llegó con los abonos, en otros cierres.
 
 ### Cómo verificar el resultado
 
