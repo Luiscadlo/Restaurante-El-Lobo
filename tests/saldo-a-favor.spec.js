@@ -114,6 +114,7 @@ test.describe('formulario «Registrar saldo a favor»', () => {
     const reg = await abrir(page);
     await llenar(page, { nuevo: 'marta perez', monto: '2000' });
     await registrar(page);
+    await expect.poll(() => escritura(reg, 'POST', 'abonos_fiado').length).toBe(1);   // espera a que termine de guardar
     expect(escritura(reg, 'POST', 'clientes_fiado')).toHaveLength(0);
     const abono = escritura(reg, 'POST', 'abonos_fiado');
     expect(abono).toHaveLength(1);
