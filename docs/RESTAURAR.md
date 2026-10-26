@@ -59,7 +59,7 @@ El programa se niega, sin tocar nada, si: la llave es la pública, es del proyec
 
 ## Paso 4 — Comprobar que el sistema funciona con los datos restaurados  *(opcional, recomendado)*
 
-1. 🗄 Corre `sql/rls_seguridad.sql` en el proyecto de pruebas y crea un usuario `admin` (ver `docs/DESPLIEGUE_SEGURIDAD.md`, pasos 1 y 2).
+1. 🗄 Corre `sql/rls_seguridad.sql` y después `sql/candado_dias.sql` en el proyecto de pruebas, y crea un usuario `admin` (ver `docs/DESPLIEGUE_SEGURIDAD.md`, pasos 1, 2 y 6b). Los datos ya están cargados: el candado de días solo limita al rol `caja`, no a la restauración.
 2. 💬 Pídele a Claude una copia del sistema apuntando al proyecto de pruebas (cambia solo `SB_URL` y la llave **pública** de ese proyecto). Guárdala **fuera** del repositorio y ábrela en tu computador. 🖥
 3. Compara con producción: el **Tablero** de un mes (ingresos, egresos, resultado) y 2–3 cierres de días concretos deben dar **las mismas cifras**.
 
@@ -73,7 +73,7 @@ El programa se niega, sin tocar nada, si: la llave es la pública, es del proyec
 
 1. 🗄 Crea un proyecto **nuevo** (el nombre y la dirección serán distintos).
 2. Pasos 2 y 3 de arriba en el proyecto nuevo, con el **último respaldo** que tengas.
-3. 🗄 Corre `sql/rls_seguridad.sql` y recrea los usuarios (`admin` de cada dueño, `caja`, `respaldo`) con `docs/DESPLIEGUE_SEGURIDAD.md`. **Los usuarios y contraseñas NO están en el respaldo**: hay que crearlos de nuevo.
+3. 🗄 Corre `sql/rls_seguridad.sql`, luego `sql/candado_dias.sql` (el candado de días), y recrea los usuarios (`admin` de cada dueño, `caja`, `respaldo`) con `docs/DESPLIEGUE_SEGURIDAD.md`. **Los usuarios y contraseñas NO están en el respaldo**: hay que crearlos de nuevo.
 4. 💬 Claude actualiza la dirección y la llave **pública** en el sistema (`SB_URL`, `SB_KEY`) con un pull request, y el enlace permanente vuelve a funcionar. También actualiza la constante `REF_PRODUCCION` de `herramientas/restaurar_respaldo.py`.
 5. Se pierde lo ocurrido **después del último respaldo**: por eso el aviso en pantalla insiste en respaldar cada semana.
 
