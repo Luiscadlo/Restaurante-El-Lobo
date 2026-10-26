@@ -1,6 +1,6 @@
 # Matriz de permisos — quién puede hacer qué
 
-> **Estado: pendiente de tu OK en las 3 decisiones de abajo** (mientras no respondas, valen las opciones A).
+> **Estado: las 3 decisiones están tomadas** (25-oct: 1 = A, 2 = A, 3 = B, el candado de días en el servidor; detalle más abajo). El candado de días se activa corriendo `sql/candado_dias.sql` (Paso 6b de `docs/DESPLIEGUE_SEGURIDAD.md`).
 > La fuente única de esta matriz, en formato máquina, es `sql/matriz_permisos.json`: de ahí salen el SQL de Supabase (`sql/rls_seguridad.sql`), las pruebas web y las pruebas contra Postgres. Si cambias una decisión, cambia el JSON, corre `python herramientas/generar_rls.py` y actualiza esta tabla. El despliegue está en `docs/DESPLIEGUE_SEGURIDAD.md`.
 
 ## En una frase
@@ -30,6 +30,8 @@ Cada persona entra con **su** usuario. Hay tres roles: **admin** (los dueños, c
 | `movimientos_caja` | Todo | **Nada** | Ver |
 | `ingresos_extra` | Todo | **Nada** | Ver |
 
+**Candado de días:** en `pedidos` (lo ya cobrado), `cierres_dia`, `gastos_dia`, `aperturas_turno`, `notas_dia`, `abonos_fiado` y `consumos`, caja solo puede crear, cambiar o borrar registros de **hoy** (el día cambia a las 9:00 a. m., hora de Bogotá). Ver «Candado de días» más abajo.
+
 Además: **sin sesión no se puede nada** (la llave pública que va en la página deja de abrir la base).
 
 ## Qué ve cada uno en pantalla
@@ -39,19 +41,38 @@ Además: **sin sesión no se puede nada** (la llave pública que va en la págin
 - **Admin entrando directo:** todo abierto; no se recuerda (al recargar hay que volver a entrar).
 - **Caja entrando directo:** se recuerda en ese equipo para no pedir la clave en cada recarga. "Salir" la borra.
 
-## Decisiones que necesito de ti
+## Decisiones (todas tomadas el 25-oct)
 
-**1. ¿Caja puede eliminar pedidos YA COBRADOS?** (hoy cualquiera puede)
-- **A (propuesto):** sí, como hoy. Cada eliminación queda en Auditoría y caja no puede borrar ni leer ese rastro. Tú revisas Auditoría (al autorizarte, la pestaña muestra cuántas novedades hay desde la última vez; con el usuario de caja ese numerito no se ve).
-- **B:** solo admin puede eliminar cobrados; caja solo cancela pendientes. Es más estricto, pero requiere pedir autorización cada vez que haya que corregir un error en el mostrador, y algo más de código.
+**1. ¿Caja puede eliminar pedidos YA COBRADOS?** → **Sí (opción A, como hoy).** Si el empleado se equivoca puede corregirlo en el mostrador; cada eliminación queda en Auditoría y caja no puede borrar ni leer ese rastro. Tú revisas Auditoría (al autorizarte, la pestaña muestra cuántas novedades hay desde la última vez; con el usuario de caja ese numerito no se ve).
+- *(B, descartada: solo admin elimina cobrados. Más estricto, pero obligaría a pedir autorización cada vez que haya que corregir un error en el mostrador.)*
 
-**2. Descuentos y el gasto "Otro" de Egresos.** Al aplicar un descuento, el sistema ofrece borrar el gasto "Otro" que alguien anotó a mano para compensarlo (para no contarlo doble). Caja ya no puede ver `egresos` (es finanzas), así que **solo le ofrecerá los gastos "Otro" del cierre del turno**, no los de la pestaña Egresos.
-- **A (propuesto):** aceptar. Si un descuento se anotó en Egresos, lo corrige un admin.
-- **B:** dejar que caja lea `egresos` (entonces ve todos los gastos del negocio).
+**2. Descuentos y el gasto "Otro" de Egresos.** → **Opción A.** Al aplicar un descuento, el sistema ofrece borrar el gasto "Otro" que alguien anotó a mano para compensarlo (para no contarlo doble). Caja ya no puede ver `egresos` (es finanzas), así que **solo le ofrece los gastos "Otro" del cierre del turno**, no los de la pestaña Egresos. Si un descuento se anotó en Egresos, lo corrige un admin.
+- *(B, descartada: dejar que caja lea `egresos`, y entonces vería todos los gastos del negocio.)*
 
-**3. Cambios en días anteriores.** Hoy la pantalla ya exige administrador para corregir cierres o pedidos de otros días. Esa restricción **sigue siendo solo de pantalla**: quien sepa manipular la página con el usuario de caja podría tocar datos de días pasados. Hacerlo cumplir en el servidor requiere reglas más complejas (y más riesgo de bloquear algo del mostrador).
-- **A (propuesto):** dejarlo así por ahora y revisarlo después de una semana de operación.
-- **B:** exigirlo en el servidor desde ya.
+**3. Cambios en días anteriores.** → **Opción B: lo exige el servidor.** La pantalla ya le pedía administrador a caja para corregir cierres o pedidos de otros días, pero eso era solo de pantalla: quien supiera manipular la página con el usuario de caja podía tocar datos pasados. Ahora la base de datos lo rechaza (ver «Candado de días» abajo; se activa corriendo `sql/candado_dias.sql`, Paso 6b de `docs/DESPLIEGUE_SEGURIDAD.md`).
+- *(A, descartada: dejarlo solo en pantalla y revisarlo tras una semana de operación.)*
+
+## Candado de días (lo exige el servidor)
+
+**Idea simple:** el usuario `caja` solo puede cambiar lo de **hoy**. Si algo es de un día anterior (un cierre, un gasto, una apertura, un pedido ya cobrado…), la base de datos lo **rechaza con un aviso claro** («Caja solo puede cambiar lo de hoy. Este registro es del 19/10/2026: pídele el cambio al administrador.»), no lo ignora en silencio. El administrador, el usuario de respaldo y las herramientas de restauración **no tienen candado**.
+
+**Qué es «hoy»:** el día de negocio en hora de Bogotá. El día **cambia a las 9:00 a. m.**, no a medianoche, porque la cena puede terminar pasada la medianoche y se sigue registrando y cerrando con la fecha del día en que empezó. Ejemplo: a las 12:30 a. m. del 21 todavía es «hoy 20»; a las 9:00 a. m. del 21 ya es «hoy 21» y lo del 20 queda cerrado para caja. Solo se mira hacia el pasado: fechas de hoy o futuras no se bloquean.
+
+| Tabla | Lo que caja NO puede hacer con registros de días anteriores |
+|---|---|
+| `cierres_dia`, `gastos_dia`, `aperturas_turno`, `notas_dia`, `abonos_fiado`, `consumos` | Crearlos, cambiarlos ni borrarlos. Tampoco *mover* un registro de hoy hacia el pasado ni traer uno viejo a hoy. |
+| `pedidos` **ya cobrados** | Cambiarlos ni borrarlos (si el cobro fue en un día anterior), ni crear un pedido cobrado con fecha anterior, ni mover su fecha o su fecha de cobro al pasado. |
+| `pedidos` **pendientes** (mesas, domicilios, fiados) | **Sí puede** cobrarlos, editarlos, cancelarlos o agregarles productos aunque sean de días atrás (así se cobra un fiado viejo). Al cobrarlos, el pedido pasa a ser de hoy, y «↩ Deshacer» le devuelve su fecha original. |
+
+**Lo que SÍ sigue funcionando en el mostrador** (probado en `tests/candado-reglas.spec.js` y contra un Postgres de verdad): cobrar un fiado de hace semanas, abonar y saldar fiados antiguos, agregar un producto a un fiado/mesa pendiente de ayer, cancelar un pendiente viejo, registrar pedidos y cerrar la cena después de medianoche (hasta las 8:59 a. m.), y leer cualquier día (ver el historial, consultar un cierre pasado).
+
+**Limitaciones aceptadas (poco frecuentes; resolverlas toma un minuto con el administrador):**
+- **Cena sin cerrar pasadas las 9:00 a. m.:** si al día siguiente, ya después de las 9:00, falta registrar o cerrar algo de la cena de anoche, caja no puede; lo hace el administrador.
+- **«↩ Deshacer» de un pendiente viejo ya cobrado hoy:** si se cobra hoy un domicilio o mesa pendiente de ayer y se intenta deshacer el cobro, queda cobrado en un día cerrado y caja ya no puede devolverlo a pendiente (con fiados sí se puede: recuperan su fecha original). El sistema muestra el aviso del candado.
+- **Pendientes con fecha vieja:** un pedido pendiente puede conservar su fecha de días atrás (así funciona un fiado). Eso es intencional: en cuanto se cobra, pasa a ser de hoy.
+- **Fecha de la pantalla vs. reloj del servidor:** el candado usa el reloj del servidor (hora de Bogotá), no el del celular o computador del mostrador; si ese equipo tiene la hora mal, el servidor manda.
+
+**Para verificarlo (además de las pruebas automáticas):** ver «Paso 6b» en `docs/DESPLIEGUE_SEGURIDAD.md`. Para quitarlo: `sql/rollback_candado.sql` (deja todo como antes del candado).
 
 ## Otras cosas que conviene que sepas
 

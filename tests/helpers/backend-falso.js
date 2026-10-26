@@ -10,6 +10,10 @@
 //     · lectura sin permiso → 200 con lista vacía;  · crear sin permiso → 403;
 //     · modificar/borrar sin permiso → 200 sin tocar nada (0 filas).
 //   Todo lo denegado queda en `denegadas`: un flujo normal de un rol NUNCA debe dejar nada ahí.
+// - CANDADO DE DÍAS (helpers/candado.js, copia en JS de sql/candado_dias.sql): caja no puede cambiar datos de días
+//   anteriores. El servidor falso lo hace cumplir (403 con el mismo mensaje) sobre una «sombra» de las tablas con
+//   candado que se va actualizando con las escrituras; también queda en `denegadas`. El reloj del candado es
+//   `reg.control.ahora` (por defecto la fecha de la prueba); `reg.fijarReloj(fecha)` mueve el del candado y el del navegador.
 // - GET devuelve la tabla completa (respeta limit/offset y manda Content-Range como
 //   PostgREST). NO aplica filtros (eq., in., ...): para esta red de pruebas basta.
 // - POST/PATCH/DELETE responden con éxito y quedan registrados en `escrituras`.
@@ -17,6 +21,7 @@ const path = require('path');
 const { pathToFileURL } = require('url');
 const { datos: DATOS_BASE, FECHA_HOY } = require('../fixtures/datos');
 const { OPERACION_HTTP, puede } = require('./permisos');
+const { evaluarCandado, TABLAS_CON_CANDADO } = require('./candado');
 
 const HTML = path.resolve(__dirname, '../../Contabilidad/ElLobo-Sistema Contable.html');
 const URL_HTML = pathToFileURL(HTML).href;
@@ -60,7 +65,7 @@ const b64url = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
  * @param opciones.rechazarRefresh true → toda renovación de token es rechazada (sesión revocada)
  * @param opciones.tablasFaltantes  tablas que "no existen" en Supabase (responden 404), p. ej. ['config']
  * @param opciones.totalesFalsos    { tabla: n } → el header Content-Range de esa tabla dice n (para simular filas que faltan)
- * @returns { errores, peticiones, escrituras, noManejadas, avisos, auth, rest, denegadas, intentos401 }
+ * @returns { errores, peticiones, escrituras, noManejadas, avisos, auth, rest, denegadas, intentos401, control, fijarReloj }
  */
 async function abrirSistema(page, opciones = {}) {
   const datos = opciones.datos || copiaProfunda(DATOS_BASE);
@@ -76,7 +81,19 @@ async function abrirSistema(page, opciones = {}) {
     logoutScopes: [], // 'local' = cierra solo esta sesión (no saca a otros equipos)
     tokens: {},      // lo último emitido por correo (para inspeccionar)
     // Interruptores que una prueba puede mover EN MEDIO de la prueba:
-    control: { rechazarRefresh: !!opciones.rechazarRefresh, authFalla: opciones.authFalla || null },
+    control: { rechazarRefresh: !!opciones.rechazarRefresh, authFalla: opciones.authFalla || null, ahora: fecha },
+  };
+  // Estado de las tablas con candado tal como lo dejan las escrituras (el GET sigue devolviendo los datos de la prueba).
+  const sombra = {};
+  for (const t of TABLAS_CON_CANDADO) sombra[t] = copiaProfunda(datos[t] || []);
+  const filasDe = (tabla, search) => {
+    const condiciones = [...new URLSearchParams(search).entries()].filter(([k]) => !['select', 'order', 'limit', 'offset', 'columns'].includes(k));
+    return sombra[tabla].filter(f => condiciones.every(([col, expr]) => {
+      const v = String(f[col]);
+      if (expr.startsWith('eq.')) return v === expr.slice(3);
+      if (expr.startsWith('in.(')) return expr.slice(4, -1).split(',').includes(v);
+      return false;
+    }));
   };
 
   // ── Auth falso ────────────────────────────────────────────────────────
@@ -107,6 +124,8 @@ async function abrirSistema(page, opciones = {}) {
       return p.app_metadata && p.app_metadata.rol ? p.app_metadata.rol : (p.role === 'authenticated' ? 'sin-rol' : null);
     } catch (e) { return null; }
   };
+
+  reg.fijarReloj = async nueva => { reg.control.ahora = nueva; await page.clock.setFixedTime(nueva); };
 
   page.on('pageerror', e => reg.errores.push('pageerror: ' + e.message));
   page.on('console', m => { if (m.type() === 'error') reg.errores.push('console.error: ' + m.text()); });
@@ -217,11 +236,33 @@ async function abrirSistema(page, opciones = {}) {
       }
       let cuerpo = null;
       try { cuerpo = req.postDataJSON(); } catch (e) { /* sin cuerpo */ }
+      // Candado de días (solo caja, solo las tablas con candado): se evalúa contra la sombra, como el disparador de Postgres.
+      const conCandado = TABLAS_CON_CANDADO.includes(tabla);
+      if (conCandado) {
+        const ahoraCandado = reg.control.ahora;
+        const objetivos = metodo === 'POST' ? [null] : filasDe(tabla, url.search);
+        const nuevas = metodo === 'POST' ? (Array.isArray(cuerpo) ? cuerpo : [cuerpo || {}]) : [];
+        const veredictos = metodo === 'POST'
+          ? nuevas.map(f => evaluarCandado({ rol, tabla, op: 'I', despues: f, pedidos: sombra.pedidos, ahora: ahoraCandado }))
+          : objetivos.map(f => evaluarCandado({ rol, tabla, op, antes: f, despues: metodo === 'PATCH' ? { ...f, ...cuerpo } : null, pedidos: sombra.pedidos, ahora: ahoraCandado }));
+        const rechazo = veredictos.find(Boolean);
+        if (rechazo) {
+          reg.denegadas.push(`${rol} ${op} ${tabla} (candado de días)`);
+          return route.fulfill({ status: 403, contentType: 'application/json', headers: cors, body: JSON.stringify(rechazo) });
+        }
+      }
       reg.escrituras.push({ metodo, tabla, consulta: url.search, cuerpo, rol, prefer: cabeceras['prefer'] || '' });
-      if (metodo === 'DELETE') return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-      if (metodo === 'POST' && !pideFila) return route.fulfill({ status: 201, contentType: 'application/json', body: '' });
+      if (metodo === 'DELETE') {
+        if (conCandado) { const borrar = new Set(filasDe(tabla, url.search)); sombra[tabla] = sombra[tabla].filter(f => !borrar.has(f)); }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      }
       const devolver = Array.isArray(cuerpo) ? cuerpo : [cuerpo || {}];
       const conId = devolver.map((f, i) => Object.assign({ id: 9000 + reg.escrituras.length * 10 + i }, f));
+      if (conCandado) {
+        if (metodo === 'POST') sombra[tabla].push(...conId.map(copiaProfunda));
+        else for (const f of filasDe(tabla, url.search)) Object.assign(f, cuerpo);
+      }
+      if (metodo === 'POST' && !pideFila) return route.fulfill({ status: 201, contentType: 'application/json', body: '' });
       return route.fulfill({ status: metodo === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(conId) });
     }
     // Fuentes de Google, librería xlsx (CDN), etc.: respuesta vacía, sin salir a internet.
