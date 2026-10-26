@@ -60,7 +60,9 @@ No hay respaldo automático: el que había se eliminó cuando se activó la segu
 
 **Datos → Exportar datos a Excel** es otra cosa: genera el Excel para analizar o alimentar el modelo financiero. **No es un respaldo** y no sirve para restaurar la base.
 
-> El plan gratuito de Supabase **no** incluye copias diarias propias. Un respaldo cuenta como *verificado* solo después de restaurarlo en un proyecto de pruebas (guía de restauración: se escribe con el Prompt H; hasta entonces, la restauración no está probada).
+> El plan gratuito de Supabase **no** incluye copias diarias propias. Un respaldo cuenta como *verificado* solo después de restaurarlo en un proyecto de pruebas. Guía paso a paso (ensayo y desastre): [`docs/RESTAURAR.md`](RESTAURAR.md).
+>
+> **Último ensayo de restauración:** _pendiente_ (anota aquí la fecha, el respaldo usado y el resultado cuando se haga).
 
 ## Desplegar un cambio al sistema
 
@@ -114,6 +116,6 @@ Todo en verde antes de fusionar. Si algo falla, copia el mensaje completo y pás
 
 ## Lo que está pendiente (fuera de este manual)
 
-- Guía de restauración de respaldos y su prueba en un proyecto aparte (Prompt H).
+- Ensayo de restauración en un proyecto aparte: la guía y las herramientas ya existen (`docs/RESTAURAR.md`); la consulta de esquema ya se corrió (2026-10-24) y el ensayo sobre ese esquema real, con datos de ejemplo, pasa en un Postgres de prueba (`tests/python/test_ensayo_esquema_real.py`); falta hacer el ensayo en un proyecto de Supabase aparte con un respaldo real.
 - Confirmación del contador sobre impuestos y facturación electrónica.
 - Decidir si algún día se automatiza el respaldo (hoy es manual cada domingo; el usuario `respaldo` de solo lectura ya está previsto para eso).

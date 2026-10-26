@@ -17,6 +17,8 @@
 # un archivo que ya estaba en el repo (ver Contabilidad/ElLobo_respaldo_2026-06-22.json).
 ElLobo_respaldo_*.json
 ElLobo_datos_*
+# SQL para restaurar un respaldo (herramientas/respaldo_a_sql.py): lleva los datos reales del negocio.
+ElLobo_restaurar_*.sql
 
 # Datos del Tablero exportados a JSON (datos_tablero.json, datos_*.json): datos reales del
 # negocio, igual que los exports de arriba. Guárdalos fuera del repo (p. ej. ~/ElLobo-datos/).

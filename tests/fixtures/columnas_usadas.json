@@ -1,0 +1,206 @@
+{
+ "_comentario": "Columnas que el código de Contabilidad/ElLobo-Sistema Contable.html lee, escribe, modifica o usa para filtrar (docs/ESPECIFICO_EL_LOBO.md §2.5). «requeridas»: deben existir en la base. «opcionales»: el código reintenta sin ellas si faltan (†) pero el esquema completo debe tenerlas. «solo_en_pruebas»: aparecen solo en los datos de prueba; el código no las usa.",
+ "requeridas": {
+  "pedidos": [
+   "acomp",
+   "arroz",
+   "cantidad",
+   "created_at",
+   "detalle",
+   "es_domicilio",
+   "estado",
+   "fecha",
+   "hora",
+   "id",
+   "mesa",
+   "metodo",
+   "monto_almuerzo",
+   "monto_domicilio",
+   "monto_total",
+   "monto_unit",
+   "pagado_via_abono",
+   "para_llevar",
+   "pedido",
+   "proteina",
+   "sopa"
+  ],
+  "mesas": [
+   "estado",
+   "numero"
+  ],
+  "clientes_fiado": [
+   "id",
+   "nombre"
+  ],
+  "abonos_fiado": [
+   "cuenta",
+   "fecha",
+   "monto",
+   "nota"
+  ],
+  "pedidos_eliminados": [
+   "created_at",
+   "detalle",
+   "fecha",
+   "hora",
+   "id",
+   "metodo",
+   "monto_total",
+   "motivo",
+   "pedido",
+   "pedido_id",
+   "ubicacion"
+  ],
+  "pedidos_descuentos": [
+   "ajuste_efectivo",
+   "ajuste_transferencia",
+   "cierre_ajustado",
+   "created_at",
+   "descuento_anterior",
+   "descuento_nuevo",
+   "estado_pedido",
+   "fecha",
+   "gastos_eliminados",
+   "hora",
+   "id",
+   "motivo",
+   "pedido_ids",
+   "valor_lista"
+  ],
+  "inventario": [
+   "costo",
+   "id",
+   "minimo",
+   "nombre",
+   "stock",
+   "unidad"
+  ],
+  "consumos": [
+   "cantidad",
+   "costo",
+   "fecha",
+   "nombre",
+   "producto_id"
+  ],
+  "gastos_dia": [
+   "fecha",
+   "id",
+   "monto",
+   "nombre"
+  ],
+  "cierres_dia": [
+   "abonos_efectivo",
+   "abonos_transferencia",
+   "ajuste_efectivo",
+   "ajuste_manual",
+   "ajuste_manual_nota",
+   "ajuste_transferencia",
+   "efectivo",
+   "fecha",
+   "gastos",
+   "id",
+   "manual",
+   "platos_familia",
+   "resultado",
+   "transferencia"
+  ],
+  "aperturas_turno": [
+   "caja_inicial",
+   "created_at",
+   "fecha",
+   "venta_desayuno"
+  ],
+  "notas_dia": [
+   "created_at",
+   "fecha",
+   "id",
+   "texto"
+  ],
+  "config": [
+   "actualizado_en",
+   "clave",
+   "valor"
+  ],
+  "egresos": [
+   "cat",
+   "created_at",
+   "cuenta",
+   "description",
+   "fecha",
+   "id",
+   "monto"
+  ],
+  "movimientos_caja": [
+   "created_at",
+   "cuenta",
+   "cuenta_destino",
+   "descripcion",
+   "fecha",
+   "id",
+   "monto",
+   "tipo"
+  ],
+  "ingresos_extra": [
+   "cuenta",
+   "descripcion",
+   "fecha",
+   "id",
+   "monto"
+  ]
+ },
+ "opcionales": {
+  "pedidos": [
+   "cliente_fiado_id",
+   "descuento",
+   "direccion",
+   "es_fiar",
+   "es_gratis",
+   "es_sin_mesa",
+   "fecha_original",
+   "fecha_pago",
+   "grupo_pedido",
+   "monto_efectivo",
+   "monto_transferencia",
+   "motivo_descuento",
+   "turno",
+   "turno_pago"
+  ],
+  "abonos_fiado": [
+   "cliente_fiado_id",
+   "turno"
+  ],
+  "pedidos_eliminados": [
+   "turno"
+  ],
+  "pedidos_descuentos": [
+   "grupo_pedido",
+   "turno"
+  ],
+  "gastos_dia": [
+   "categoria",
+   "turno"
+  ],
+  "cierres_dia": [
+   "turno"
+  ],
+  "aperturas_turno": [
+   "turno",
+   "venta_desayuno_transferencia"
+  ],
+  "egresos": [
+   "turno"
+  ]
+ },
+ "solo_en_pruebas": {
+  "clientes_fiado": [
+   "created_at"
+  ],
+  "abonos_fiado": [
+   "created_at",
+   "id"
+  ],
+  "aperturas_turno": [
+   "id"
+  ]
+ }
+}

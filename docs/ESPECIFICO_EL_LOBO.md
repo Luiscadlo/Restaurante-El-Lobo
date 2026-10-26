@@ -4,7 +4,7 @@
 >
 > **Cómo se sacó:** con búsquedas y análisis automático del archivo `Contabilidad/ElLobo-Sistema Contable.html` (≈ 10.000 líneas, 561 KB), de `Contabilidad/modelo-financiero/generar_modelo_financiero.py` (4.691 líneas) y de `Menu/Menú diario-El Lobo.html`; las columnas de cada tabla se midieron además **abriendo el sistema con datos de prueba y registrando qué campos lee la pantalla** (no de memoria). Los números de línea corresponden a la versión de la rama `inventario-migracion` (sobre los PR #3, #6 y #7) y se mueven con cada cambio.
 >
-> **Límites honestos:** (1) lo que el código escribe se detectó leyendo cada llamada a la base; unas pocas escrituras se arman en variables y pueden faltar. (2) Lo que el código *lee* se midió abriendo las 12 pestañas con datos de ejemplo; un campo que solo se lee en un modal poco común puede no aparecer. (3) **La lista de columnas es lo que el código necesita; el esquema real de Supabase se confirma en el Prompt H** (`sql/esquema_completo.sql`, que aún no existe): ahí se comparan una contra la otra.
+> **Límites honestos:** (1) lo que el código escribe se detectó leyendo cada llamada a la base; unas pocas escrituras se arman en variables y pueden faltar. (2) Lo que el código *lee* se midió abriendo las 12 pestañas con datos de ejemplo; un campo que solo se lee en un modal poco común puede no aparecer. (3) **La lista de columnas es lo que el código necesita; el esquema real de Supabase se confirma con `sql/consulta_esquema.sql` → `sql/esquema_completo.sql`** (Prompt H; el archivo se genera cuando se corra esa consulta). La lista está copiada en `tests/fixtures/columnas_usadas.json` y una prueba (`tests/python/test_cobertura_esquema.py`) la compara contra el esquema completo apenas exista.
 
 > **Actualización del 24-oct-2026 (después de escribirlo).** Desde que se midió este inventario entraron cambios que lo dejan parcialmente desfasado:
 > (1) **los números de línea** entre paréntesis (y el tamaño del archivo, ahora ≈ 10.300 líneas) **ya no coinciden**: sirven de pista, busca siempre por el nombre de la función;
@@ -149,7 +149,7 @@ Todas pasan por `sbFetch` (token del usuario, un reintento con renovación si la
 
 Leyenda de cada columna: **L** la lee la pantalla · **E** el código la escribe al insertar · **M** la modifica con `PATCH` · **C** se usa para filtrar u ordenar · **P** aparece solo en los datos de prueba (el código no la usa) · **†** columna *opcional con respaldo*: si no existe en Supabase el código reintenta sin ella y avisa.
 
-Esta lista es lo que el código **necesita**. Para el esquema real (tipos, restricciones, índices) falta el Prompt H.
+Esta lista es lo que el código **necesita**. El esquema real (tipos, restricciones, índices) se saca con `sql/consulta_esquema.sql` (ver `docs/RESTAURAR.md`, Paso 0).
 
 | Tabla | N.º | Columnas (uso) |
 |---|---|---|
@@ -247,7 +247,7 @@ No hay otras librerías ni frameworks. El generador de menú es autosuficiente: 
 7. **Reintentos "sin la columna que falta"** repetidos 8 veces (pedidos, extras, apertura de turno, cierres, gastos…): código duplicado y difícil de seguir; hay que quitarlos al fijar un esquema único.
 8. **Reglas implícitas en comentarios:** la mayor parte de las reglas de negocio (fiados se pagan en el mes, pendientes se cierran el mismo día, Tablero = Σ cierres, descuentos informativos) solo están en comentarios y en `Contabilidad/README.md`.
 9. **Restricciones de "días anteriores" solo de pantalla** (ver `docs/MATRIZ_PERMISOS.md`, decisión 3).
-10. **Sin control de versiones del esquema:** las migraciones `.sql` ya corridas se quitaron de la carpeta (siguen en el historial) y no hay `esquema_completo.sql`; hasta H, reconstruir la base desde cero no es posible.
+10. **Control de versiones del esquema:** las migraciones `.sql` ya corridas se quitaron de la carpeta (siguen en el historial). Con H la estructura quedó escrita en `sql/esquema_completo.sql` (sacada con `sql/consulta_esquema.sql` el 2026-10-24, ya con la tabla `config` creada, y convertida con `herramientas/esquema_a_sql.py`). Cada vez que se agregue una tabla o columna en Supabase hay que regenerarlo.
 11. **`confirm()`/`alert()`/`prompt()` en 16 sitios:** bloquean el hilo y se ven distinto en cada navegador/celular.
 12. **El contrato con el motor Python es un Excel** con nombres de hoja y de columna fijos (sección 3) sin prueba que lo proteja.
 13. **Hora del dispositivo:** si un equipo tiene mal el reloj o la zona horaria, los pedidos quedan con la fecha/turno equivocados.
@@ -275,7 +275,15 @@ Hay 119 pruebas web (humo, reglas de plata, respaldo, seguridad, flujos del most
 
 **El contrato entre el sistema y el motor** (nombres de hojas y columnas del Excel) tampoco tiene prueba.
 
-**Verificación contra `sql/esquema_completo.sql`:** ese archivo **todavía no existe** (lo crea el Prompt H a partir del esquema real de Supabase). Cuando exista, hay que comprobar contra la tabla de la sección 2.5 que cubre las 16 tablas y todas las columnas marcadas L, E, M o C, y tener presentes las columnas † (opcionales con respaldo) y las heredadas (`ajuste_manual`).
+**Verificación contra `sql/esquema_completo.sql`:** el archivo existe desde el 2026-10-24 (sacado de la base real). `tests/python/test_cobertura_esquema.py` exige las 16 tablas y todas las columnas marcadas L, E, M o C (`tests/fixtures/columnas_usadas.json`), y avisa de las † (opcionales con respaldo) que falten; las heredadas (`ajuste_manual`) cuentan como requeridas porque el código las lee. Resultado con la base real: **todas las columnas que el código necesita existen** (la tabla `config` se creó ese mismo día con `sql/migracion_supabase_config.sql`).
+
+**Hallazgos del esquema real (2026-10-24):**
+- **Seguridad hoy:** 11 de las 16 tablas tienen RLS APAGADO y el rol `anon` (la llave pública que viaja en el HTML) tiene todos los permisos sobre las 16 tablas; las 5 que tienen RLS traen una regla «allow all». Es lo que cierra `sql/rls_seguridad.sql`.
+- **Tabla vieja `el_lobo_data`** (`id`, `data`, `updated_at`): era el almacenamiento antiguo del sistema (todo en un solo bloque, constante `SB_TABLE` hasta finales de junio de 2026). Tiene UNA fila (`main`, 1,2 KB, última actualización 2026-06-26); el sistema ya no la usa y no entra en los respaldos. Se deja como está; el SQL de seguridad la cierra.
+- **12 tablas usan `identity ALWAYS`** (no deja insertar con un `id` propio): `esquema_completo.sql` las crea «BY DEFAULT» para poder restaurar con los mismos `id`.
+- **Columnas que existen y el código no usa:** `abonos_fiado.id/created_at`, `aperturas_turno.id`, `cierres_dia.created_at`, `clientes_fiado.telefono/created_at`, `consumos.id/created_at`, `gastos_dia.created_at`, `ingresos_extra.created_at`, `mesas.updated_at`, `pedidos.es_para_llevar/entrega_sopa/entrega_plato`. No estorban; los respaldos las conservan.
+- **Restricciones de valores (CHECK) que la base hace cumplir:** `abonos_fiado.cuenta` ∈ {efectivo, transferencia}; `pedidos_eliminados.motivo` ∈ {eliminado, cancelado}; `egresos/ingresos_extra/movimientos_caja.cuenta` ∈ {efectivo, transf_rapidas, transf_almuerzos}; `turno` ∈ {almuerzo, cena}; `mesas.numero` 1–15. El ensayo `test_ensayo_esquema_real.py` descubrió que los datos de ejemplo de las pruebas rompían dos de ellas (corregido; el sistema en sí las respeta).
+- `mesas` no tiene columna `id` (la llave es `numero`) y `pedidos_descuentos` guarda `pedido_ids` como texto, no `pedido_id`.
 
 ---
 
