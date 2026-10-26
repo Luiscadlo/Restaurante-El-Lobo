@@ -401,6 +401,24 @@
   <div style="color:#a09880;font-size:13px;font-family:'DM Mono',monospace;">Sincronizando datos…</div>
 </div>
 
+<!-- Pantalla de entrada: nada del sistema se ve ni se carga hasta iniciar sesión (Supabase Auth) -->
+<div id="loginOverlay" style="position:fixed;inset:0;background:#0f0e0c;z-index:10000;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:16px;">
+  <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:#e8b84b;">🐺 El Lobo</div>
+  <form id="login-form" class="panel" style="width:100%;max-width:340px;padding:20px;" onsubmit="enviarLogin(event)" novalidate>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Ingresa con tu usuario para usar el sistema.</div>
+    <div class="form-group mb">
+      <label for="login-email">Usuario</label>
+      <input type="text" id="login-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario">
+    </div>
+    <div class="form-group mb">
+      <label for="login-password">Contraseña</label>
+      <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <div id="login-error" role="alert" style="display:none;color:var(--red);font-size:12px;margin-bottom:12px;"></div>
+    <button type="submit" id="login-btn" class="btn btn-primary" style="width:100%;">Entrar</button>
+  </form>
+</div>
+
 <header>
   <div class="logo" style="display:flex;align-items:center;gap:10px;">
     <span style="color:var(--accent);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;letter-spacing:-0.5px;">🐺 El Lobo</span>
@@ -409,8 +427,8 @@
   <div class="header-right">
     <div id="syncBadge" style="border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid rgba(232,184,75,0.4);background:rgba(232,184,75,0.1);color:var(--accent);">🔄 Sincronizando…</div>
     <button class="btn-abrir-turno" id="btn-abrir-turno-header" onclick="abrirModalTurno()" title="Registrar caja inicial del turno">🔓 Abrir turno</button>
-    <button class="btn btn-outline" onclick="exportarDatos()" style="font-size:11px;padding:6px 12px;" title="Exportar respaldo JSON">⬇ <span class="btn-label">Exportar</span></button>
-    <label class="btn btn-outline" style="font-size:11px;padding:6px 12px;cursor:pointer;" title="Importar respaldo JSON">⬆ <span class="btn-label">Importar</span><input type="file" accept=".json" onchange="importarDatos(event)" style="display:none;"></label>
+    <div id="rolBadge" style="display:none;border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);" title="Usuario con el que se inició sesión"></div>
+    <button class="btn btn-outline" id="btn-salir" onclick="salirDelSistema()" style="font-size:11px;padding:6px 12px;display:none;" title="Cerrar la sesión de este equipo">🚪 <span class="btn-label">Salir</span></button>
     <div class="turno-badge turno-almuerzo" id="turnoBadge">☀️ Almuerzo</div>
     <div class="date-badge" id="currentDate"></div>
   </div>
@@ -424,14 +442,17 @@
   <div class="tab" onclick="showTab('diaadia',this)">Cierre</div>
   <div class="tab" onclick="showTab('inventario',this)">Inventario</div>
   <div class="tab" onclick="showTab('menu',this)">Menú</div>
-  <!-- Administrativas — todas piden la misma contraseña -->
-  <div class="tab" onclick="showTab('dashboard',this)">🔒 Tablero</div>
-  <div class="tab" onclick="showTab('ingfin',this)">🔒 Ingresos</div>
-  <div class="tab" onclick="showTab('egresos',this)">🔒 Egresos</div>
-  <div class="tab" onclick="showTab('caja',this)">🔒 Caja</div>
-  <div class="tab" onclick="showTab('auditoria',this)">🔒 Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
-  <div class="tab" onclick="showTab('datos',this)">🔒 Datos</div>
+  <!-- Administrativas — solo rol admin: con caja NO aparecen (sincronizarSesion() las muestra u oculta). Para verlas: Salir y entrar como administrador. -->
+  <div class="tab tab-admin" id="tab-nav-dashboard" style="display:none;" onclick="showTab('dashboard',this)">Tablero</div>
+  <div class="tab tab-admin" id="tab-nav-ingfin" style="display:none;" onclick="showTab('ingfin',this)">Ingresos</div>
+  <div class="tab tab-admin" id="tab-nav-egresos" style="display:none;" onclick="showTab('egresos',this)">Egresos</div>
+  <div class="tab tab-admin" id="tab-nav-caja" style="display:none;" onclick="showTab('caja',this)">Caja</div>
+  <div class="tab tab-admin" id="tab-nav-auditoria" style="display:none;" onclick="showTab('auditoria',this)">Auditoría <span id="audit-badge" style="display:none;background:var(--red);color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:4px;"></span></div>
+  <div class="tab tab-admin" id="tab-nav-datos" style="display:none;" onclick="showTab('datos',this)">Datos</div>
 </nav>
+
+<!-- Aviso de respaldo (se llena con renderAvisoRespaldo; solo lo ve el administrador) -->
+<div id="aviso-respaldo" style="display:none;padding:12px 24px 0;"></div>
 
 <main>
 
@@ -442,8 +463,12 @@
     <div class="panel-body">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">El tablero muestra el estado financiero completo del negocio.</div>
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="text" id="tablero-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('tablero-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="tablero-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('tablero-password')">
+        <input type="password" id="tablero-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('tablero-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('tablero-password')">Entrar</button>
     </div>
@@ -909,6 +934,33 @@
       <div id="fiados-clientes-zone"></div>
     </div>
   </div>
+
+  <!-- Saldo a favor: plata que un cliente deja de más (o por adelantado) sin tener deuda -->
+  <div class="panel" id="saf-panel" style="margin-top:20px;">
+    <div class="panel-header">
+      <div class="panel-title">💰 Registrar saldo a favor de un cliente</div>
+    </div>
+    <div class="panel-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">
+        Úsalo cuando un cliente te deja plata de más y no se la puedes devolver (o la deja por adelantado). Entra a la caja del turno como un abono y el cliente queda con <b>saldo a favor</b>.
+        <br><b>Ejemplo:</b> te pagan con 20.000 una cuenta de 15.000 y no hay cambio → cobra la cuenta normal (15.000) y registra aquí los 5.000.
+        <br>Para gastarlo: en su próximo pedido regístralo como <b>fiado</b> a su nombre y pulsa <b>✔ Aplicar saldo a favor</b> en su tarjeta (o abona la diferencia).
+      </div>
+      <div class="pending-pay-bar" style="padding:0;background:none;border:none;">
+        <select id="saf-cliente" title="Cliente que ya existe">
+          <option value="">— Elegir cliente —</option>
+        </select>
+        <input type="text" id="saf-nuevo" placeholder="o escribe un cliente nuevo…" style="max-width:190px;">
+        <input type="text" inputmode="numeric" id="saf-monto" placeholder="Monto a favor" class="vuelto-inline" oninput="formatMilesInput(this)">
+        <select id="saf-cuenta">
+          <option value="efectivo">💵 Efectivo</option>
+          <option value="transferencia">📲 Transferencia</option>
+        </select>
+        <input type="text" id="saf-nota" placeholder="Nota (opcional)" style="max-width:220px;">
+        <button class="btn btn-primary" id="btn-saf" onclick="registrarSaldoAFavor()">+ Registrar saldo a favor</button>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- ===== EGRESOS (acceso con contraseña) ===== -->
@@ -917,8 +969,12 @@
     <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
     <div class="panel-body">
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="text" id="egresos-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('egresos-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="egresos-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('egresos-password')">
+        <input type="password" id="egresos-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('egresos-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('egresos-password')">Entrar</button>
     </div>
@@ -1131,8 +1187,12 @@
     <div class="panel-body">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Ingresos totales del negocio, tomados de los cierres guardados.</div>
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="text" id="ingfin-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('ingfin-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="ingfin-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('ingfin-password')">
+        <input type="password" id="ingfin-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('ingfin-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('ingfin-password')">Entrar</button>
     </div>
@@ -1320,7 +1380,7 @@
   <div class="panel" style="margin-bottom:20px;">
     <div class="panel-header">
       <div class="panel-title">Cierre del día</div>
-      <button type="button" class="btn btn-outline" style="padding:6px 12px;font-size:12px;" onclick="abrirModalCierreManual()">✍️ Cierre manual</button>
+      <button type="button" class="btn btn-outline" id="btn-cierre-manual" data-solo-admin style="padding:6px 12px;font-size:12px;display:none;" onclick="abrirModalCierreManual()">✍️ Cierre manual</button>
     </div>
     <div class="panel-body">
       <div class="form-row">
@@ -1440,13 +1500,17 @@
       </div>
     </div>
   </div>
-  <div class="panel">
+  <!-- Historial completo de cierres — solo administrador: con caja ni se dibuja (sincronizarSesion() lo muestra u oculta). -->
+  <div class="panel" id="dd-historial-panel" data-solo-admin style="display:none;">
     <div class="panel-header"><div class="panel-title">🔒 Historial completo de cierres</div></div>
     <div class="panel-body" id="dd-historial-login">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Para ver o corregir cierres de otros días necesitas la contraseña.</div>
-      <div style="display:flex;gap:8px;max-width:400px;">
-        <input type="password" id="dd-historial-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('dd-historial-password')">
-        <button class="btn btn-primary" onclick="intentarAccesoAdmin('dd-historial-password')">Entrar</button>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Para ver o corregir cierres de otros días necesitas autorización de un administrador (usuario y contraseña).</div>
+      <div style="display:flex;flex-direction:column;gap:8px;max-width:400px;">
+        <input type="text" id="dd-historial-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario de administrador" onkeydown="if(event.key==='Enter')document.getElementById('dd-historial-password').focus()">
+        <div style="display:flex;gap:8px;">
+          <input type="password" id="dd-historial-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('dd-historial-password')">
+          <button class="btn btn-primary" onclick="intentarAccesoAdmin('dd-historial-password')">Entrar</button>
+        </div>
       </div>
     </div>
     <div id="dd-historial-contenido" style="display:none;">
@@ -1470,8 +1534,12 @@
     <div class="panel-header"><div class="panel-title">🔒 Acceso restringido</div></div>
     <div class="panel-body">
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="text" id="caja-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('caja-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="caja-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('caja-password')">
+        <input type="password" id="caja-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('caja-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('caja-password')">Entrar</button>
     </div>
@@ -1554,14 +1622,45 @@
     <div class="panel-body">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Esta sección muestra todos los ajustes manuales hechos en los cierres.</div>
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="text" id="auditoria-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('auditoria-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="auditoria-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('auditoria-password')">
+        <input type="password" id="auditoria-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('auditoria-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('auditoria-password')">Entrar</button>
     </div>
   </div>
 
   <div id="auditoria-contenido" style="display:none;">
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-body">
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;">
+          <div>
+            <div class="filtro-label">Período</div>
+            <div class="filter-bar" id="auditoria-periodo" style="margin-bottom:0;">
+              <button class="filter-btn" data-periodo="hoy" onclick="setFAuditoria('hoy')">Hoy</button>
+              <button class="filter-btn" id="auditoria-btn-ayer" title="Ver solo lo de ayer" onclick="setFAuditoriaAyer()">Ayer</button>
+              <button class="filter-btn" data-periodo="semana" onclick="setFAuditoria('semana')">Semana</button>
+              <button class="filter-btn" data-periodo="mes" onclick="setFAuditoria('mes')">Mes</button>
+              <button class="filter-btn active" data-periodo="todo" onclick="setFAuditoria('todo')">Todo</button>
+            </div>
+          </div>
+          <div>
+            <div class="filtro-label">Un día o un rango <span style="text-transform:none;">(desde – hasta)</span></div>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
+              <input type="date" id="auditoria-desde" style="padding:8px 10px;" title="Desde (si eliges solo este, ves solo ese día)" onchange="setFAuditoriaRango('desde')">
+              <span style="color:var(--text3);font-size:11px;">–</span>
+              <input type="date" id="auditoria-hasta" style="padding:8px 10px;" title="Hasta" onchange="setFAuditoriaRango('hasta')">
+              <button class="filter-btn" title="Quitar el filtro y ver todo" onclick="setFAuditoria('todo')">✕</button>
+            </div>
+          </div>
+        </div>
+        <div id="auditoria-filtro-resumen" style="font-size:12px;color:var(--text2);margin-top:12px;"></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Los ajustes se filtran por la fecha del cierre; los pedidos eliminados y los descuentos, por el día en que se hicieron.</div>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">📋 Ajustes manuales registrados en cierres</div>
@@ -1606,8 +1705,12 @@
     <div class="panel-body">
       <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Exportación completa de datos para análisis externo (Excel/Python).</div>
       <div class="form-group mb">
+        <label>Correo de administrador</label>
+        <input type="text" id="datos-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario" onkeydown="if(event.key==='Enter')document.getElementById('datos-password').focus()">
+      </div>
+      <div class="form-group mb">
         <label>Contraseña</label>
-        <input type="password" id="datos-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('datos-password')">
+        <input type="password" id="datos-password" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')intentarAccesoAdmin('datos-password')">
       </div>
       <button class="btn btn-primary" style="width:100%;" onclick="intentarAccesoAdmin('datos-password')">Entrar</button>
     </div>
@@ -1617,10 +1720,18 @@
     <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
       <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
     </div>
+    <div class="panel" style="margin-bottom:20px;">
+      <div class="panel-header"><div class="panel-title">💾 Respaldo completo (copia de seguridad)</div></div>
+      <div class="panel-body">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Descarga un archivo <b>.json</b> con TODAS las tablas del sistema, completas (pedidos, egresos, cierres, caja, fiados, inventario, auditoría…). Es la copia que sirve para recuperar el sistema si algo falla (se restaura con <code>docs/RESTAURAR.md</code>). Hazlo <b>cada domingo</b> y guarda el archivo <b>fuera del repositorio</b> (que es público). Solo se registra como hecho si bajaron todas las filas.</div>
+        <div id="datos-respaldo-estado" style="font-size:12px;color:var(--text2);margin-bottom:14px;"></div>
+        <button class="btn btn-primary" id="btn-respaldo-completo" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo completo (.json)</button>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-header"><div class="panel-title">📊 Exportar datos a Excel</div></div>
       <div class="panel-body">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Genera un Excel (.xlsx) con una hoja por cada tabla del sistema (pedidos, egresos, cierres, caja, inventario, etc.) — pensado para análisis externo en Excel o Python (es el archivo que lee el modelo financiero), no para reimportar. Para respaldo/reimportación, usa el botón "Exportar" (JSON) del encabezado.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Para análisis (no es una copia de seguridad). Genera un Excel (.xlsx) con una hoja por cada tabla del sistema (pedidos, egresos, cierres, caja, inventario, etc.) — pensado para análisis externo en Excel o Python (es el archivo que lee el modelo financiero). No se puede restaurar desde aquí: para la copia de seguridad usa la tarjeta «Respaldo completo» de arriba.</div>
 
         <div class="filtro-label">Período de los datos históricos a descargar</div>
         <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:6px;">
@@ -1697,10 +1808,13 @@
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:18px;">✍️ Cierre manual</div>
 
     <div id="cierremanual-login">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Cargar un cierre a mano requiere la contraseña de administrador.</div>
-      <div style="display:flex;gap:8px;">
-        <input type="password" id="cierremanual-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoCierreManual()">
-        <button class="btn btn-primary" onclick="intentarAccesoCierreManual()">Entrar</button>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Cargar un cierre a mano requiere autorización de un administrador (usuario y contraseña).</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <input type="text" id="cierremanual-email" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="usuario de administrador" onkeydown="if(event.key==='Enter')document.getElementById('cierremanual-password').focus()">
+        <div style="display:flex;gap:8px;">
+          <input type="password" id="cierremanual-password" autocomplete="current-password" placeholder="••••••••" style="flex:1;" onkeydown="if(event.key==='Enter')intentarAccesoCierreManual()">
+          <button class="btn btn-primary" onclick="intentarAccesoCierreManual()">Entrar</button>
+        </div>
       </div>
     </div>
 
@@ -2194,17 +2308,355 @@ const EMPAQUE_DOMICILIO = 1000;
 
 // ── Supabase ───────────────────────────────────────────────────────────
 const SB_URL = 'https://arxyfcquvsmfoxmbifne.supabase.co';
+// Llave PÚBLICA (anon) del proyecto: identifica el proyecto, no da acceso por sí sola (ver "Sesión" abajo).
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFyeHlmY3F1dnNtZm94bWJpZm5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzkwMTcsImV4cCI6MjA5NzcxNTAxN30.2s8SgF_YlLy3eyI9Wz1TD48VTFPDHo4xMw8J7J9YL4w';
 
-const sbH = (extra = {}) => ({
-  'Content-Type': 'application/json',
-  'apikey': SB_KEY,
-  'Authorization': `Bearer ${SB_KEY}`,
-  ...extra
-});
+// ── Sesión (Supabase Auth) ─────────────────────────────────────────────
+// Cada persona entra con SU usuario (usuario + contraseña). Supabase devuelve un
+// token firmado (JWT) que lleva el ROL (app_metadata.rol): 'admin', 'caja' o
+// 'respaldo'. Ese token es lo que usa cada petición a la base de datos: la llave
+// pública de abajo (SB_KEY) sola ya no da acceso a nada.
+// IMPORTANTE: lo que se muestra u oculta en pantalla según el rol es solo comodidad.
+// El control real está en el servidor (reglas RLS, carpeta sql/): aunque alguien
+// altere esta página, la base solo le entrega lo que su rol permite.
+//
+// · Caja (usuario compartido del mostrador): su sesión se recuerda en este equipo
+//   (localStorage) para no pedir la clave en cada recarga.
+// · Admin (cada dueño con su propio usuario): NUNCA se guarda; si recargas la
+//   página hay que volver a entrar. También puede "autorizarse en el sitio"
+//   desde una sesión de caja (usuario + contraseña en una pestaña con candado):
+//   esa sesión elevada vive solo en memoria y se pierde al recargar o al pulsar
+//   "Cerrar sesión".
+const ROLES_APP = ['admin', 'caja'];     // 'respaldo' es solo para el respaldo automático: no entra a la pantalla
+const AUTH_KEY_CAJA = 'ellobo.sesion.caja.v1';
+const MARGEN_TOKEN_SEG = 60;             // se renueva el token cuando le quedan menos de 60 s
+let sesionBase  = null;                  // quien inició sesión en este equipo (caja o admin)
+let sesionAdmin = null;                  // admin autorizado en el sitio sobre una sesión de caja (solo memoria)
+
+const ahoraSeg = () => Math.floor(Date.now() / 1000);
+
+function errorAuth(mensaje, tipo) { return Object.assign(new Error(mensaje), { tipo }); }
+
+// Usuarios cortos: la gente escribe "caja" o "luiscadlo" y por detrás se completa el correo con el
+// dominio de El Lobo. Supabase pide que el usuario tenga forma de correo; este dominio es inventado
+// (nunca se envía nada). Si lo escrito ya trae «@», se usa tal cual (por si algún usuario tiene un
+// correo completo). OJO: este dominio debe ser el mismo con el que se crearon los usuarios en Supabase.
+const DOMINIO_USUARIOS = 'elobo.test';
+function correoDeUsuario(texto) {
+  const t = String(texto || '').trim().toLowerCase();
+  if (!t) return '';
+  return t.includes('@') ? t : `${t}@${DOMINIO_USUARIOS}`;
+}
+function nombreDeUsuario(correo) {
+  const c = String(correo || '');
+  const fin = '@' + DOMINIO_USUARIOS;
+  return c.toLowerCase().endsWith(fin) ? c.slice(0, -fin.length) : c;
+}
+
+// Lee el contenido (payload) de un JWT. No verifica la firma — eso lo hace el servidor en cada petición.
+function decodificarJWT(token) {
+  try {
+    const b64 = String(token).split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(atob(b64).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join(''));
+    return JSON.parse(json);
+  } catch (e) { return null; }
+}
+
+function sesionDeRespuesta(r) {
+  const payload = decodificarJWT(r.access_token) || {};
+  return {
+    access_token: r.access_token,
+    refresh_token: r.refresh_token,
+    expires_at: Number(r.expires_at) || (ahoraSeg() + (Number(r.expires_in) || 3600)),
+    email: (r.user && r.user.email) || payload.email || '',
+    rol: (payload.app_metadata && payload.app_metadata.rol) || null,
+  };
+}
+
+// POST a /auth/v1/... — traduce los errores del servicio a mensajes en español.
+async function authPost(ruta, cuerpo, token) {
+  let r;
+  try {
+    r = await fetch(`${SB_URL}/auth/v1/${ruta}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY, ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+      body: JSON.stringify(cuerpo || {})
+    });
+  } catch (e) {
+    throw errorAuth('No hay conexión con el servidor. Revisa el internet e intenta de nuevo.', 'red');
+  }
+  let datos = null;
+  try { datos = await r.json(); } catch (e) { /* sin cuerpo (p. ej. logout) */ }
+  if (!r.ok) {
+    if (r.status === 429) throw errorAuth('Demasiados intentos seguidos. Espera un minuto e intenta de nuevo.', 'limite');
+    if (r.status >= 500) throw errorAuth('El servicio de acceso no responde. Intenta de nuevo en un momento.', 'servidor');
+    throw errorAuth('Usuario o contraseña incorrectos.', 'credenciales');
+  }
+  return datos;
+}
+
+async function iniciarSesion(email, password) {
+  const sesion = sesionDeRespuesta(await authPost('token?grant_type=password', { email: correoDeUsuario(email), password }));
+  return sesion;
+}
+
+// Cierra la sesión en el servidor (solo ESTA sesión: scope=local, para no sacar a otros equipos). No bloquea.
+function cerrarEnServidor(sesion) {
+  if (!sesion || !sesion.access_token) return Promise.resolve();
+  return authPost('logout?scope=local', {}, sesion.access_token).catch(() => {});
+}
+
+// Persistencia: SOLO la sesión de caja.
+function guardarSesionCaja(s) {
+  try {
+    localStorage.setItem(AUTH_KEY_CAJA, JSON.stringify({
+      access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at, email: s.email, rol: s.rol
+    }));
+  } catch (e) { /* sin almacenamiento: se pedirá la clave en cada recarga */ }
+}
+function leerSesionCaja() {
+  try {
+    const s = JSON.parse(localStorage.getItem(AUTH_KEY_CAJA));
+    if (s && s.rol === 'caja' && s.access_token && s.refresh_token) return s;
+  } catch (e) { /* vacío o dañado */ }
+  return null;
+}
+function borrarSesionCaja() { try { localStorage.removeItem(AUTH_KEY_CAJA); } catch (e) {} }
+
+// Renueva el token con el refresh_token. Varias peticiones a la vez comparten UNA sola renovación,
+// y si otra pestaña de este mismo equipo ya renovó (Supabase rota el refresh_token), se adopta su sesión
+// en vez de gastar el token viejo de nuevo.
+function refrescarSesion(sesion) {
+  if (sesion._refrescando) return sesion._refrescando;
+  const trabajo = async () => {
+    if (sesion === sesionBase) {
+      const guardada = leerSesionCaja();
+      if (guardada && guardada.refresh_token !== sesion.refresh_token && guardada.expires_at - MARGEN_TOKEN_SEG > ahoraSeg()) {
+        Object.assign(sesion, guardada);
+        return;
+      }
+    }
+    const nueva = sesionDeRespuesta(await authPost('token?grant_type=refresh_token', { refresh_token: sesion.refresh_token }));
+    Object.assign(sesion, nueva);
+    if (sesion === sesionBase && sesion.rol === 'caja') guardarSesionCaja(sesion);
+  };
+  sesion._refrescando = (async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.locks) await navigator.locks.request('ellobo-auth', trabajo);
+      else await trabajo();
+    } catch (e) {
+      if (e.tipo === 'credenciales') {
+        sesionPerdida(sesion);
+        throw errorAuth('Tu sesión venció. Ingresa de nuevo.', 'credenciales');
+      }
+      throw e;
+    } finally {
+      sesion._refrescando = null;
+    }
+  })();
+  return sesion._refrescando;
+}
+
+async function tokenDe(sesion) {
+  if (sesion.expires_at - MARGEN_TOKEN_SEG <= ahoraSeg()) await refrescarSesion(sesion);
+  return sesion.access_token;
+}
+
+const sesionActiva = () => sesionAdmin || sesionBase;
+const esAdminActivo = () => { const s = sesionActiva(); return !!s && s.rol === 'admin'; };
+
+// Encabezados de cada petición a la base: la llave pública identifica el proyecto
+// y el token de la persona (si hay sesión) es lo que decide qué puede ver y hacer.
+async function sbH(extra = {}) {
+  const s = sesionActiva();
+  const token = s ? await tokenDe(s) : SB_KEY;
+  return {
+    'Content-Type': 'application/json',
+    'apikey': SB_KEY,
+    'Authorization': `Bearer ${token}`,
+    ...extra
+  };
+}
+
+// fetch con el token de la sesión. Si el servidor responde 401 (el token venció justo ahora),
+// renueva una vez y reintenta; si sigue en 401, la sesión ya no sirve y se vuelve a la pantalla de entrada.
+async function sbFetch(url, init = {}) {
+  const intentar = async () => fetch(url, { ...init, headers: await sbH(init.headers) });
+  let r = await intentar();
+  const s = sesionActiva();
+  if (r.status === 401 && s) {
+    try { await refrescarSesion(s); } catch (e) { return r; }
+    r = await intentar();
+    if (r.status === 401) sesionPerdida(s);
+  }
+  return r;
+}
+
+// La sesión dejó de servir (token y renovación rechazados).
+function sesionPerdida(sesion) {
+  if (sesion && sesion === sesionAdmin) {
+    quitarAdmin();
+    showToast('🔒 La autorización de administrador venció — vuelve a ingresar el usuario y la contraseña', 'warning');
+    return;
+  }
+  if (!sesionBase) return;               // ya se avisó
+  sesionBase = null;
+  sesionAdmin = null;
+  borrarSesionCaja();
+  vaciarTablasAdmin();
+  sincronizarSesion();
+  mostrarLogin('Tu sesión venció. Ingresa de nuevo.');
+}
+
+// ── Pantalla de entrada ──
+function mostrarLogin(mensaje) {
+  document.getElementById('loadingOverlay').style.display = 'none';
+  document.getElementById('loginOverlay').style.display = 'flex';
+  if (mensaje !== undefined) {              // sin mensaje se conserva el aviso que ya esté (p. ej. "Tu sesión venció")
+    const err = document.getElementById('login-error');
+    err.textContent = mensaje;
+    err.style.display = mensaje ? 'block' : 'none';
+  }
+  const campo = document.getElementById('login-email');
+  if (campo) campo.focus();
+}
+function ocultarLogin() {
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('login-password').value = '';
+  const err = document.getElementById('login-error');
+  err.textContent = '';
+  err.style.display = 'none';
+}
+
+let ingresando = false;
+async function enviarLogin(ev) {
+  if (ev) ev.preventDefault();
+  if (ingresando) return;
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  if (!email || !password) { mostrarLogin('Escribe tu usuario y tu contraseña.'); return; }
+  ingresando = true;
+  btn.disabled = true;
+  let sesion;
+  try {
+    sesion = await iniciarSesion(email, password);
+  } catch (e) {
+    mostrarLogin(e.message);
+    return;
+  } finally {
+    ingresando = false;
+    btn.disabled = false;
+  }
+  if (!ROLES_APP.includes(sesion.rol)) {
+    cerrarEnServidor(sesion);
+    mostrarLogin(sesion.rol
+      ? 'Este usuario es solo para el respaldo automático y no puede entrar a la pantalla.'
+      : 'Tu usuario todavía no tiene un rol asignado. Avísale al administrador.');
+    return;
+  }
+  sesionBase = sesion;
+  sesionAdmin = null;
+  if (sesion.rol === 'caja') guardarSesionCaja(sesion); else borrarSesionCaja();
+  sincronizarSesion();
+  ocultarLogin();
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  await loadState();
+}
+
+// Cierra la sesión de este equipo (la de caja o la del admin que entró directo) y recarga:
+// así no queda ningún dato en memoria y vuelve la pantalla de entrada.
+async function salirDelSistema() {
+  const sesiones = [sesionAdmin, sesionBase].filter(Boolean);
+  borrarSesionCaja();
+  // Avisa al servidor, pero sin esperar de más: si no hay internet igual se sale.
+  await Promise.race([Promise.all(sesiones.map(cerrarEnServidor)), new Promise(r => setTimeout(r, 2000))]);
+  sesionBase = null;
+  sesionAdmin = null;
+  location.reload();
+}
+
+// Secciones solo para administradores: con caja no aparecen en la barra (orden de la barra).
+const TABS_ADMIN = ['dashboard', 'ingfin', 'egresos', 'caja', 'auditoria', 'datos'];
+
+// Rol efectivo → bandera que usa la pantalla (adminAutenticado) + encabezado + barra de secciones.
+// OJO: ocultar secciones es solo comodidad; lo que protege los datos son las reglas de la base (sql/).
+function sincronizarSesion() {
+  adminAutenticado = esAdminActivo();
+  TABS_ADMIN.forEach(id => {
+    const t = document.getElementById('tab-nav-' + id);
+    if (t) t.style.display = adminAutenticado ? '' : 'none';
+  });
+  if (!adminAutenticado) {
+    // Si estaba mirando una sección de administrador y ya no lo es, vuelve a Pedidos.
+    const abierta = document.querySelector('.section.active');
+    if (abierta && TABS_ADMIN.some(id => abierta.id === 'tab-' + id)) {
+      showTab('ingresos', document.querySelector(`.tab[onclick*="showTab('ingresos'"]`));
+    }
+  }
+  const badge = document.getElementById('rolBadge');
+  const salir = document.getElementById('btn-salir');
+  // Funciones de administrador dentro de las pestañas que caja sí ve (Cierre manual,
+  // Historial de cierres…): marcadas con data-solo-admin, con caja ni se dibujan.
+  document.querySelectorAll('[data-solo-admin]').forEach(el => { el.style.display = adminAutenticado ? '' : 'none'; });
+  if (!badge || !salir) return;
+  if (!sesionBase) { badge.style.display = 'none'; salir.style.display = 'none'; return; }
+  let texto;
+  if (sesionBase.rol === 'admin') {
+    // «👑 Admin» a secas cuando el usuario se llama «admin» (si no, «👑 Admin · nombre», p. ej. «👑 Admin · luisca»).
+    const quien = nombreDeUsuario(sesionBase.email);
+    texto = quien.toLowerCase() === 'admin' ? '👑 Admin' : `👑 Admin · ${quien}`;
+  }
+  else if (sesionAdmin) texto = `👤 Caja · 🔓 ${nombreDeUsuario(sesionAdmin.email)}`;
+  else texto = '👤 Caja';
+  badge.textContent = texto;
+  badge.style.display = '';
+  salir.style.display = '';
+}
+
+// Admin autorizado "en el sitio" sobre una sesión de caja. No guarda nada en el equipo.
+let autorizandoAdmin = false;
+async function autorizarAdmin(email, password) {
+  if (esAdminActivo()) return { ok: true };
+  if (!sesionBase) return { ok: false, mensaje: 'Primero inicia sesión.' };
+  if (autorizandoAdmin) return { ok: false, mensaje: 'Espera un momento…' };
+  autorizandoAdmin = true;
+  try {
+    const sesion = await iniciarSesion(email, password);
+    if (sesion.rol !== 'admin') {
+      cerrarEnServidor(sesion);
+      return { ok: false, mensaje: 'Ese usuario no es administrador.' };
+    }
+    sesionAdmin = sesion;
+    sincronizarSesion();
+    try {
+      await cargarTablasAdmin();
+    } catch (e) {
+      console.error(e);
+      quitarAdmin(true);
+      return { ok: false, mensaje: 'No se pudieron cargar los datos de administrador. Intenta de nuevo.' };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, mensaje: e.message };
+  } finally {
+    autorizandoAdmin = false;
+  }
+}
+
+// Deja de usar la sesión de administrador elevada: vuelve a caja y borra de memoria lo que solo el admin ve.
+function quitarAdmin(silencioso) {
+  const s = sesionAdmin;
+  sesionAdmin = null;
+  cerrarEnServidor(s);
+  vaciarTablasAdmin();
+  sincronizarSesion();
+  if (!silencioso) renderAll();
+}
+
 
 async function sbGet(tabla, qs = '') {
-  const r = await fetch(`${SB_URL}/rest/v1/${tabla}${qs ? '?' + qs : ''}`, { headers: sbH() });
+  const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}${qs ? '?' + qs : ''}`);
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }
@@ -2228,8 +2680,8 @@ async function sbGetAll(tabla, qs = '') {
   let acumulado = [];
   for (;;) {
     const qsLote = (qs ? qs + '&' : '') + `limit=${LOTE}&offset=${offset}`;
-    const r = await fetch(`${SB_URL}/rest/v1/${tabla}?${qsLote}`, {
-      headers: sbH({ 'Prefer': 'count=exact' })
+    const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}?${qsLote}`, {
+      headers: { 'Prefer': 'count=exact' }
     });
     if (!r.ok) throw new Error(await r.text());
     const lote = await r.json();
@@ -2245,13 +2697,19 @@ async function sbGetAll(tabla, qs = '') {
   return acumulado;
 }
 
+// Tablas de auditoría: caja puede AGREGAR registros pero no leerlos (así un empleado no puede ver
+// ni alterar el rastro de lo que borra o descuenta). Para caja el insert no pide la fila de vuelta.
+const TABLAS_SOLO_ESCRITURA_CAJA = ['pedidos_eliminados', 'pedidos_descuentos'];
+
 async function sbInsert(tabla, data) {
-  const r = await fetch(`${SB_URL}/rest/v1/${tabla}`, {
+  const sinRetorno = TABLAS_SOLO_ESCRITURA_CAJA.includes(tabla) && !esAdminActivo();
+  const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}`, {
     method: 'POST',
-    headers: sbH({ 'Prefer': 'return=representation' }),
+    headers: { 'Prefer': sinRetorno ? 'return=minimal' : 'return=representation' },
     body: JSON.stringify(data)
   });
   if (!r.ok) throw new Error(await r.text());
+  if (sinRetorno) return [];
   return r.json(); // array de filas insertadas
 }
 
@@ -2282,9 +2740,9 @@ async function sbInsertConCuenta(tabla, datos) {
 }
 
 async function sbPatch(tabla, qs, data) {
-  const r = await fetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
+  const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
     method: 'PATCH',
-    headers: sbH({ 'Prefer': 'return=representation' }),
+    headers: { 'Prefer': 'return=representation' },
     body: JSON.stringify(data)
   });
   if (!r.ok) throw new Error(await r.text());
@@ -2292,9 +2750,8 @@ async function sbPatch(tabla, qs, data) {
 }
 
 async function sbDelete(tabla, qs) {
-  const r = await fetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
-    method: 'DELETE',
-    headers: sbH()
+  const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
+    method: 'DELETE'
   });
   if (!r.ok) throw new Error(await r.text());
 }
@@ -2318,7 +2775,10 @@ let ST = {
   abonosFiado: [], // abonos parciales contra el saldo total de un cliente fiado
   // Log de auditoría de descuentos aplicados — null (no []) si la tabla
   // pedidos_descuentos todavía no existe en Supabase (ver descuentosDisponibles()).
-  pedidosDescuentos: null
+  pedidosDescuentos: null,
+  // Filas de la tabla config (clave/valor). undefined = todavía no se cargó;
+  // null = la tabla config no existe en Supabase (ver sql/migracion_supabase_config.sql).
+  config: undefined
 };
 
 // ── Badge de sincronización ────────────────────────────────────────────
@@ -2357,12 +2817,44 @@ function showToast(msg, tipo = 'info', accion = null) {
 }
 
 // ── loadState: lee todas las tablas en paralelo ───────────────────────
+// Tablas que solo ve el administrador (finanzas y auditoría). Con una sesión de caja NO se
+// piden — el servidor tampoco las entregaría — y quedan vacías en memoria.
+function pedirTablasAdmin() {
+  return Promise.all([
+    sbGetAll('egresos',     'order=created_at.desc'),
+    sbGetAll('movimientos_caja', 'order=created_at.desc').catch(() => []),
+    sbGetAll('ingresos_extra', 'order=fecha.desc').catch(() => []),
+    sbGetAll('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
+    sbGetAll('pedidos_descuentos', 'order=created_at.desc').catch(() => null)
+  ]);
+}
+function asignarTablasAdmin([egresos, movimientosCaja, ingresosExtra, pedidosEliminados, pedidosDescuentos]) {
+  ST.egresos = egresos;
+  ST.movimientosCaja = movimientosCaja;
+  ST.ingresosExtra = ingresosExtra;
+  ST.pedidosEliminados = pedidosEliminados;
+  ST.pedidosDescuentos = pedidosDescuentos;
+}
+function vaciarTablasAdmin() {
+  ST.egresos = [];
+  ST.movimientosCaja = [];
+  ST.ingresosExtra = [];
+  ST.pedidosEliminados = [];
+  // Caja no puede LEER pedidos_descuentos (solo agregar registros). [] (y no null) significa "la tabla
+  // se asume presente" para descuentosDisponibles(): si se dejara null, caja perdería los descuentos.
+  ST.pedidosDescuentos = [];
+}
+// Al autorizar a un administrador sobre una sesión de caja: trae lo que faltaba y redibuja.
+async function cargarTablasAdmin() {
+  asignarTablasAdmin(await pedirTablasAdmin());
+  renderAll();
+}
+
 async function loadState() {
   setSyncBadge('syncing');
   try {
-    const [pedidos, egresos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, movimientosCaja, ingresosExtra, pedidosEliminados, clientesFiado, abonosFiado, pedidosDescuentos] = await Promise.all([
+    const [pedidos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, clientesFiado, abonosFiado, config, tablasAdmin] = await Promise.all([
       sbGetAll('pedidos',     'order=created_at.desc'),
-      sbGetAll('egresos',     'order=created_at.desc'),
       sbGetAll('inventario',  'order=nombre.asc'),
       sbGetAll('consumos',    'order=fecha.desc'),
       sbGetAll('gastos_dia',  'order=fecha.desc'),
@@ -2370,17 +2862,14 @@ async function loadState() {
       sbGetAll('cierres_dia', 'order=fecha.desc').catch(() => []),
       sbGetAll('aperturas_turno', 'order=created_at.desc').catch(() => []),
       sbGetAll('notas_dia',   'order=created_at.desc').catch(() => []),
-      sbGetAll('movimientos_caja', 'order=created_at.desc').catch(() => []),
-      sbGetAll('ingresos_extra', 'order=fecha.desc').catch(() => []),
-      sbGetAll('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
       sbGetAll('clientes_fiado', 'order=nombre.asc').catch(() => []),
       sbGetAll('abonos_fiado', 'order=fecha.desc').catch(() => []),
-      sbGetAll('pedidos_descuentos', 'order=created_at.desc').catch(() => null)
+      sbGetAll('config', 'order=clave.asc').catch(() => null),
+      esAdminActivo() ? pedirTablasAdmin() : null
     ]);
 
     ST.ingresos   = pedidos.filter(p => p.estado === 'pagado');
     ST.pendientes = pedidos.filter(p => p.estado === 'pendiente');
-    ST.egresos    = egresos;
     ST.inventario = inventario;
     ST.consumos   = consumos;
     ST.gastosDia  = gastosDia;
@@ -2388,12 +2877,10 @@ async function loadState() {
     ST.cierresDia = cierresDia;
     ST.aperturasTurno = aperturasTurno;
     ST.notasDia   = notasDia;
-    ST.movimientosCaja = movimientosCaja;
-    ST.ingresosExtra   = ingresosExtra;
-    ST.pedidosEliminados = pedidosEliminados;
     ST.clientesFiado   = clientesFiado;
     ST.abonosFiado     = abonosFiado;
-    ST.pedidosDescuentos = pedidosDescuentos;
+    ST.config = config;
+    if (tablasAdmin) asignarTablasAdmin(tablasAdmin); else vaciarTablasAdmin();
 
     setSyncBadge('ok');
   } catch (e) {
@@ -2689,22 +3176,190 @@ function descuentosDisponibles() {
   return columnasOk && tablaOk;
 }
 
-// ── Exportar / Importar ───────────────────────────────────────────────
-function exportarDatos() {
-  const fecha = today();
-  const blob = new Blob([JSON.stringify({
-    ingresos: ST.ingresos,
-    pendientes: ST.pendientes,
-    egresos: ST.egresos,
-    inventario: ST.inventario,
-    consumos: ST.consumos,
-    gastosDia: ST.gastosDia
-  }, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `ElLobo_respaldo_${fecha}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+// ── Respaldo completo + aviso ─────────────────────────────────────────
+// El plan gratis de Supabase no trae copias automáticas: este respaldo es la red de
+// seguridad. Baja TODAS las tablas, verifica que no falte ninguna fila y registra la
+// fecha en config.ultimo_respaldo (de ahí sale el aviso de la pantalla).
+// El respaldo es SEMANAL y a mano (pestaña Datos → Respaldo completo, solo administrador): el aviso sale desde cada DOMINGO y
+// sigue saliendo hasta que haya un respaldo completo hecho desde ese domingo (el que registra
+// config.ultimo_respaldo, que solo se guarda si el respaldo terminó bien). Se pone rojo si pasan
+// RESPALDO_ROJO_DIAS días sin respaldo.
+const RESPALDO_ROJO_DIAS  = 10;  // desde esta cantidad de días → aviso rojo
+
+// TODAS las tablas que usa el código con sbGet/sbGetAll/sbInsert/sbPatch/sbDelete
+// (derivadas con grep, no de memoria) más config. Una prueba automática
+// (tests/respaldo.spec.js) falla si aparece una tabla nueva en el código y no se agrega aquí.
+const TABLAS_RESPALDO = [
+  'pedidos', 'egresos', 'inventario', 'consumos', 'gastos_dia', 'mesas', 'cierres_dia',
+  'aperturas_turno', 'notas_dia', 'movimientos_caja', 'ingresos_extra', 'pedidos_eliminados',
+  'clientes_fiado', 'abonos_fiado', 'pedidos_descuentos', 'config'
+];
+// Tablas que pueden no existir todavía en Supabase (migración sin correr): se omiten del
+// respaldo en vez de hacerlo fallar. Cualquier OTRA tabla que falle aborta el respaldo.
+const TABLAS_RESPALDO_OPCIONALES = {
+  config: () => Array.isArray(ST.config),
+  pedidos_descuentos: () => ST.pedidosDescuentos !== null && ST.pedidosDescuentos !== undefined
+};
+// Columna de orden para paginar sin saltar ni repetir filas (por defecto, id).
+const ORDEN_RESPALDO = { config: 'order=clave.asc' };
+
+// Igual que sbGetAll(), pero devuelve también el total que reporta Supabase
+// (header Content-Range) para poder verificar que no falta ninguna fila.
+async function sbGetAllConTotal(tabla, qs = '') {
+  const LOTE = 5000;
+  let offset = 0, acumulado = [], total = null;
+  for (;;) {
+    const qsLote = (qs ? qs + '&' : '') + `limit=${LOTE}&offset=${offset}`;
+    const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}?${qsLote}`, { headers: { 'Prefer': 'count=exact' } });
+    if (!r.ok) throw new Error(await r.text());
+    const lote = await r.json();
+    acumulado = acumulado.concat(lote);
+    const t = parseInt((r.headers.get('content-range') || '').split('/')[1], 10);
+    if (Number.isFinite(t)) total = t;
+    if (!lote.length) break;
+    offset += lote.length;
+    if (Number.isFinite(t) ? offset >= t : lote.length < LOTE) break;
+  }
+  return { filas: acumulado, total };
+}
+
+// Baja una tabla completa y la verifica: las filas bajadas deben coincidir con el total de
+// Supabase y no haber ids repetidos. Si no coincide (por ejemplo, entró un pedido mientras
+// se bajaba), reintenta una vez; si sigue sin coincidir, falla con un mensaje claro.
+async function descargarTablaVerificada(tabla) {
+  const orden = ORDEN_RESPALDO[tabla] || 'order=id.asc';
+  let problema = '';
+  for (let intento = 1; intento <= 2; intento++) {
+    let res;
+    try { res = await sbGetAllConTotal(tabla, orden); }
+    catch (e) { res = await sbGetAllConTotal(tabla, ''); } // tabla sin columna id: sin orden explícito
+    const { filas, total } = res;
+    if (total === null) { problema = `Supabase no informó el total de filas de "${tabla}"`; continue; }
+    if (filas.length !== total) { problema = `"${tabla}": se bajaron ${filas.length} filas pero Supabase reporta ${total}`; continue; }
+    if (filas.length && 'id' in filas[0] && new Set(filas.map(f => f.id)).size !== filas.length) { problema = `"${tabla}": hay filas repetidas`; continue; }
+    return filas;
+  }
+  throw new Error(problema);
+}
+
+// Un solo "toast" de progreso que se actualiza (null lo quita).
+function progresoRespaldo(texto) {
+  let el = document.getElementById('toast-respaldo');
+  if (texto === null) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast-respaldo';
+    el.className = 'toast info';
+    el.appendChild(document.createElement('span'));
+    document.body.appendChild(el);
+  }
+  el.firstChild.textContent = texto;
+}
+
+// Guarda config.ultimo_respaldo (insert o patch). Devuelve true si quedó registrado.
+async function registrarUltimoRespaldo(valor) {
+  if (!Array.isArray(ST.config)) return false;
+  try {
+    const existente = ST.config.find(c => c.clave === 'ultimo_respaldo');
+    if (existente) {
+      const [fila] = await sbPatch('config', 'clave=eq.ultimo_respaldo', { valor, actualizado_en: new Date().toISOString() });
+      Object.assign(existente, fila || { valor });
+    } else {
+      const [fila] = await sbInsert('config', { clave: 'ultimo_respaldo', valor });
+      ST.config.push(fila || { clave: 'ultimo_respaldo', valor });
+    }
+    return true;
+  } catch (e) { console.error(e); return false; }
+}
+
+let respaldoEnCurso = false;
+async function respaldoCompleto() {
+  if (respaldoEnCurso) { showToast('Ya hay un respaldo en curso…', 'info'); return; }
+  respaldoEnCurso = true;
+  try {
+    const lista = TABLAS_RESPALDO.filter(t => !TABLAS_RESPALDO_OPCIONALES[t] || TABLAS_RESPALDO_OPCIONALES[t]());
+    const tablas = {}, conteos = {};
+    for (let i = 0; i < lista.length; i++) {
+      progresoRespaldo(`💾 Respaldando ${i + 1}/${lista.length}: ${lista[i]}… (no cierres la página)`);
+      tablas[lista[i]] = await descargarTablaVerificada(lista[i]);
+      conteos[lista[i]] = tablas[lista[i]].length;
+    }
+    const fecha = today();
+    const generado_en = new Date().toISOString();
+    const blob = new Blob([JSON.stringify({ version: 1, generado_en, fecha, conteos, tablas }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ElLobo_respaldo_completo_${fecha}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    const guardado = await registrarUltimoRespaldo({ generado_en, fecha, conteos });
+    progresoRespaldo(null);
+    const filasTotal = Object.values(conteos).reduce((x, y) => x + y, 0);
+    showToast(`✅ Respaldo completo descargado (${lista.length} tablas, ${filasTotal} filas)`, 'ok');
+    if (!guardado) showToast('⚠ El archivo se descargó, pero no quedó registrado el respaldo (falta la tabla config en Supabase): el aviso seguirá activo', 'warning');
+    renderAvisoRespaldo();
+    renderDatosRespaldo();
+  } catch (e) {
+    console.error(e);
+    progresoRespaldo(null);
+    showToast('⚠ El respaldo NO se completó: ' + e.message, 'warning');
+  } finally {
+    respaldoEnCurso = false;
+  }
+}
+
+// El botón «Respaldo completo» de la pestaña Datos y el del aviso de respaldo: son solo del administrador
+// (con caja ni se dibujan). Si alguien lo llama a mano con caja, se niega — no hay ventana de contraseña.
+function pedirRespaldoCompleto() {
+  if (!adminAutenticado) { showToast('🔒 El respaldo completo es solo para administradores', 'warning'); return; }
+  respaldoCompleto();
+}
+// Días calendario entre dos fechas AAAA-MM-DD (sin depender de la zona horaria).
+function diasDesdeFecha(fechaStr, hoyStr = today()) {
+  const aMs = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((aMs(hoyStr) - aMs(fechaStr)) / 86400000);
+}
+// Día de la semana de una fecha AAAA-MM-DD: 0 = domingo … 6 = sábado (sin depender de la zona horaria).
+function diaDeLaSemana(fechaStr = today()) {
+  const [y, m, d] = String(fechaStr).slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+// null = sin aviso; 'ambar' o 'rojo'. dias null/NaN = nunca se ha hecho un respaldo.
+// `diaSemana` = día de la semana de HOY (0 = domingo): el domingo más reciente cae `diaSemana` días
+// atrás, así que un respaldo de hace MÁS días que esos es anterior a ese domingo → toca hacer otro.
+function nivelAvisoRespaldo(dias, diaSemana = diaDeLaSemana()) {
+  if (dias === null || dias === undefined || Number.isNaN(dias)) return 'ambar';
+  if (dias >= RESPALDO_ROJO_DIAS) return 'rojo';
+  if (dias > diaSemana) return 'ambar';
+  return null;
+}
+function renderAvisoRespaldo() {
+  const el = document.getElementById('aviso-respaldo');
+  if (!el) return;
+  // Hacer el respaldo es del administrador: con caja el aviso ni aparece (no puede hacer nada con él).
+  if (!adminAutenticado) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  if (ST.config === undefined) { el.style.display = 'none'; el.innerHTML = ''; return; } // aún no cargó
+  if (ST.config === null) {
+    el.innerHTML = `<div class="alert info"><div style="flex:1;">ℹ️ El aviso de respaldo está desactivado: falta crear la tabla <b>config</b> en Supabase (archivo sql/migracion_supabase_config.sql).</div></div>`;
+    el.style.display = '';
+    return;
+  }
+  const fila = ST.config.find(c => c.clave === 'ultimo_respaldo');
+  const fecha = fila && fila.valor ? (fila.valor.fecha || String(fila.valor.generado_en || '').slice(0, 10)) : '';
+  const dias = fecha ? diasDesdeFecha(fecha) : null;
+  const nivel = nivelAvisoRespaldo(dias);
+  if (!nivel) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const texto = (dias === null || Number.isNaN(dias))
+    ? 'Todavía no se ha hecho ningún respaldo completo.'
+    : nivel === 'rojo'
+      ? `Hace ${dias} días no se hace respaldo completo.`
+      : `Toca el respaldo semanal — el último fue hace ${dias} día${dias === 1 ? '' : 's'}.`;
+  el.innerHTML = `<div class="alert ${nivel === 'rojo' ? 'warning' : 'info'}">
+    <div style="flex:1;">${nivel === 'rojo' ? '🚨' : '⚠️'} ${texto}</div>
+    <button class="btn btn-outline" style="font-size:11px;" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo ahora</button>
+  </div>`;
+  el.style.display = '';
 }
 
 // Período de los datos a descargar en la pestaña Datos (para el modelo
@@ -2771,7 +3426,23 @@ function datosParaExportar() {
   };
 }
 
+// Línea de estado de la tarjeta «Respaldo completo» (pestaña Datos): fecha del último respaldo registrado.
+function renderDatosRespaldo() {
+  const el = document.getElementById('datos-respaldo-estado');
+  if (!el) return;
+  if (ST.config === undefined) { el.textContent = ''; return; }
+  if (ST.config === null) { el.innerHTML = 'ℹ️ No se puede registrar el último respaldo: falta crear la tabla <b>config</b> en Supabase (sql/migracion_supabase_config.sql). El respaldo igual se descarga.'; return; }
+  const fila = ST.config.find(c => c.clave === 'ultimo_respaldo');
+  const fecha = fila && fila.valor ? (fila.valor.fecha || String(fila.valor.generado_en || '').slice(0, 10)) : '';
+  if (!fecha) { el.innerHTML = '⚠️ <b>Todavía no se ha hecho ningún respaldo completo.</b>'; return; }
+  const dias = diasDesdeFecha(fecha);
+  const nivel = nivelAvisoRespaldo(dias);
+  const cuando = dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`;
+  el.innerHTML = `Último respaldo completo: <b>${fecha}</b> (${cuando}). ` + (nivel ? '<b>Toca hacer uno.</b>' : '✅ Al día esta semana.');
+}
+
 function renderDatosExport() {
+  renderDatosRespaldo();
   document.querySelectorAll('#datos-presets .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.preset === fDatos.preset));
   const el = document.getElementById('datos-resumen');
   if (!el) return;
@@ -2785,8 +3456,8 @@ function renderDatosExport() {
 }
 
 // Exporta lo que hay en memoria a un Excel con una hoja por tabla — para
-// análisis externo (Excel/Python), no para reimportar (eso lo cubre
-// exportarDatos()/importarDatos(), el respaldo JSON de arriba). El período
+// análisis externo (Excel/Python), NO es una copia de seguridad (eso es el
+// Respaldo completo .json de esta misma pestaña, que se restaura con docs/RESTAURAR.md). El período
 // elegido en la pestaña Datos recorta las hojas de movimientos por fecha; las
 // que son estado actual (inventario, fiados pendientes, clientes, abonos y
 // movimientos de caja) van siempre completas.
@@ -2837,59 +3508,6 @@ function exportarExcelCompleto() {
   const sufijo = (fDatos.desde || fDatos.hasta) ? `_${fDatos.desde || 'inicio'}_a_${fDatos.hasta || 'hoy'}` : '';
   XLSX.writeFile(wb, `ElLobo_datos_${today()}${sufijo}.xlsx`);
   showToast(`✅ Excel exportado (${d.cierres.length} cierres, ${d.pagados.length} pedidos pagados)`, 'ok');
-}
-
-async function importarDatos(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  try {
-    const datos = JSON.parse(await file.text());
-    if (!datos.ingresos && !datos.egresos) {
-      alert('El archivo no parece ser un respaldo válido de El Lobo.'); return;
-    }
-    if (!confirm(`¿Importar datos de ${file.name}? Esto AÑADIRÁ los registros a Supabase.`)) return;
-
-    setSyncBadge('syncing');
-    const inserts = [];
-
-    // Ingresos del backup (formato viejo: monto → monto_total)
-    (datos.ingresos || []).forEach(i => {
-      inserts.push(sbInsert('pedidos', {
-        fecha: i.fecha, hora: i.hora, turno: i.turno, pedido: i.pedido,
-        sopa: i.sopa||'', arroz: i.arroz||'', proteina: i.proteina||'',
-        acomp: i.acomp||'', detalle: i.detalle||'',
-        metodo: i.metodo, cantidad: i.cantidad||1,
-        monto_almuerzo: i.monto || i.montoUnit || 0,
-        monto_domicilio: 0,
-        monto_total: i.monto || i.montoUnit || 0,
-        estado: 'pagado', es_domicilio: false, mesa: null, para_llevar: false
-      }).catch(() => {}));
-    });
-    (datos.egresos || []).forEach(eg => {
-      // "description" (en inglés) es el nombre real de esa columna en la
-      // tabla "egresos" de Supabase — ver la nota en agregarEgreso().
-      inserts.push(sbInsert('egresos', {
-        fecha: eg.fecha, cat: eg.cat, monto: eg.monto, description: eg.description || eg.desc || eg.descripcion || ''
-      }).catch(() => {}));
-    });
-    (datos.inventario || []).forEach(inv => {
-      inserts.push(sbInsert('inventario', {
-        nombre: inv.nombre, unidad: inv.unidad, stock: inv.stock, minimo: inv.minimo, costo: inv.costo
-      }).catch(() => {}));
-    });
-    (datos.gastosDia || []).forEach(g => {
-      inserts.push(sbInsert('gastos_dia', {
-        fecha: g.fecha, turno: g.turno, nombre: g.nombre, monto: g.monto
-      }).catch(() => {}));
-    });
-
-    await Promise.all(inserts);
-    await loadState();
-    showToast('✅ Datos importados correctamente', 'ok');
-  } catch (err) {
-    showToast('⚠ Error al importar: ' + err.message, 'warning');
-  }
-  e.target.value = '';
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────
@@ -4644,7 +5262,7 @@ function abrirModalDescuento(ids) {
   // día solo se puede tocar con la contraseña de administrador — cambiar su
   // monto equivale a corregir un cierre de otro día.
   if (primero.estado === 'pagado' && primero.fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, ingresa la contraseña en Auditoría o el historial de cierres', 'warning');
+    showToast('🔒 Para aplicar un descuento a un pedido pagado de otro día, sal e ingresa como administrador', 'warning');
     return;
   }
   descuentoModalIds = idArr;
@@ -5416,16 +6034,25 @@ function toggleFiadoCliente(clienteId) {
 function renderFiados() {
   const zone = document.getElementById('fiados-clientes-zone');
   if (!zone) return;
+  renderSaldoAFavorForm();
 
   // Solo clientes con saldo > 0 estorban la vista — los que ya quedaron en
   // $0 no se muestran (ni colapsados: simplemente no tienen nada pendiente).
-  // Excepción: si tienen pedidos pendientes cubiertos por saldo a favor (p.
-  // ej. tras revertir un pago vía abono, saldo = 0) sí se muestran, para
-  // poder usar "Aplicar saldo a favor".
-  const clientesConSaldo = ST.clientesFiado
+  // Excepciones, que SÍ se muestran:
+  //  · pedidos pendientes cubiertos por saldo a favor (p. ej. tras revertir un
+  //    pago vía abono, saldo = 0), para poder usar "Aplicar saldo a favor";
+  //  · saldo a favor sin ningún pedido pendiente (abonó de más, o se canceló
+  //    el pedido que había abonado): esa plata ya entró al cierre, así que no
+  //    puede quedar invisible — y es desde aquí que un administrador puede
+  //    eliminar un abono hecho por error.
+  const todosConSaldo = ST.clientesFiado
     .map(c => ({ cliente: c, ...calcularSaldoFiado(c.id) }))
-    .filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5)
+    .filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5 || x.sobrante > 0.5)
     .sort((a,b) => b.saldo - a.saldo);
+  // Los que solo tienen saldo a favor no deben contarse en la insignia de
+  // "fiados por cobrar" de la pestaña.
+  const clientesConSaldo = todosConSaldo;
+  const porCobrar = todosConSaldo.filter(x => x.saldo > 0.5 || x.totalPendiente > 0.5);
 
   // Huérfanos: fiados sin cliente_fiado_id, invisibles en cualquier otro
   // lado (ni Pendientes ni el listado por cliente de arriba los agarra).
@@ -5435,7 +6062,7 @@ function renderFiados() {
 
   const badge = document.getElementById('fiados-badge');
   if (badge) {
-    const total = clientesConSaldo.length + huerfanos.length;
+    const total = porCobrar.length + huerfanos.length;
     badge.textContent = total;
     badge.style.display = total > 0 ? 'inline' : 'none';
     badge.style.background = huerfanos.length > 0 ? 'var(--red, #e05c5c)' : 'var(--orange)';
@@ -5511,14 +6138,18 @@ function renderFiados() {
         }).join('')
       : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin pedidos pendientes — el saldo viene de un abono todavía sin aplicar del todo.</div></td></tr>`;
 
+    // Eliminar un abono (por error o de prueba) es solo de administrador:
+    // la plata ya entró al cierre de su día, así que corregirlo no es cosa
+    // del mostrador. Con caja la columna ni se dibuja.
     const filasAbonos = abonos.length
       ? abonos.map(a => `<tr>
           <td>${a.fecha}${a.turno ? ` · ${a.turno === 'cena' ? '🌙' : '☀️'}` : ''}</td>
           <td class="amount-pos">${fmt(a.monto)}</td>
           <td><span class="badge ${a.cuenta==='efectivo'?'badge-green':'badge-blue'}">${a.cuenta==='efectivo'?'💵 Efectivo':'📲 Transferencia'}</span></td>
           <td style="color:var(--text3);font-size:11px;">${a.nota||'—'}</td>
+          ${adminAutenticado ? `<td><button class="btn btn-danger" onclick="eliminarAbonoFiado(${a.id})" title="Eliminar este abono (solo administrador)">🗑</button></td>` : ''}
         </tr>`).join('')
-      : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin abonos registrados todavía.</div></td></tr>`;
+      : `<tr><td colspan="${adminAutenticado ? 5 : 4}"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin abonos registrados todavía.</div></td></tr>`;
 
     // Pedidos de este cliente ya saldados vía abono — mismo filtro que usa
     // calcularSaldoFiado() para totalPagadoViaAbono. Vive en ST.ingresos
@@ -5545,7 +6176,9 @@ function renderFiados() {
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
           ${grupos.length ? chipFiadoHTML(grupos[0].orders[0].fecha) : ''}
-          <div class="pending-group-total">${fmt(saldo)}</div>
+          ${saldo < -0.5
+            ? `<div class="pending-group-total" style="color:var(--green);" title="Abonó más de lo que debe: esa plata ya entró al cierre">a favor ${fmt(-saldo)}</div>`
+            : `<div class="pending-group-total">${fmt(saldo)}</div>`}
         </div>
       </div>
       <div style="${abierto ? '' : 'display:none;'}">
@@ -5557,7 +6190,7 @@ function renderFiados() {
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Abono</th><th>Monto</th><th>Cuenta</th><th>Nota</th></tr></thead>
+            <thead><tr><th>Abono</th><th>Monto</th><th>Cuenta</th><th>Nota</th>${adminAutenticado ? '<th></th>' : ''}</tr></thead>
             <tbody>${filasAbonos}</tbody>
           </table>
         </div>
@@ -5690,7 +6323,7 @@ async function saldarFiadosConSaldoAFavor(clienteId, metodo, fechaPago, turnoPag
 
 // Lleva a "Corregir cierre" de una fecha/turno ya guardado (para que incluya
 // un abono recibido después de cerrarlo). Mismas reglas que el botón del
-// banner: el de hoy se corrige libre; el de otro día pide la contraseña.
+// banner: el de hoy se corrige libre; el de otro día pide ser administrador.
 function abrirCorreccionCierre(fecha, turno) {
   document.getElementById('dd-fecha').value = fecha;
   ddTurno = turno;
@@ -5712,7 +6345,22 @@ async function registrarAbonoFiado(clienteId) {
   const notaEl   = document.getElementById(`abono-nota-${clienteId}`);
   const cuenta = cuentaEl ? cuentaEl.value : 'efectivo';
   const nota   = notaEl ? notaEl.value.trim() : '';
-  if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
+  const ok = await registrarAbonoDeCliente(cliente, monto, cuenta, nota);
+  if (!ok) return;
+  const montoEl = document.getElementById(`abono-monto-${clienteId}`);
+  if (montoEl) montoEl.value = '';
+  if (notaEl) notaEl.value = '';
+}
+
+// Núcleo del abono (lo usan la tarjeta del cliente y el formulario «Registrar saldo
+// a favor»): inserta el abono en el día/turno real, salda los pedidos fiados que
+// alcance a cubrir y avisa. Devuelve true si el abono quedó guardado (false si faltó
+// el monto, se canceló la confirmación del cierre o falló la base).
+async function registrarAbonoDeCliente(cliente, monto, cuenta, nota) {
+  const clienteId = cliente.id;
+  if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return false; }
+  // ¿Tenía deuda antes de abonar? Si no, es un saldo a favor puro (otro mensaje).
+  const teniaDeuda = calcularSaldoFiado(clienteId).totalPendiente > 0.5;
 
   const { fecha, turno } = fechaTurnoDeCobro();
   const nombreTurno = turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas';
@@ -5723,7 +6371,7 @@ async function registrarAbonoFiado(clienteId) {
     `El cierre de ${nombreTurno} del ${fechaCorta(fecha)} ya está guardado.\n\n` +
     `El abono de ${fmt(monto)} pertenece a ese turno, pero el cierre guardado no lo incluye todavía. ` +
     `Si continúas, se registra el abono y se abre "Corregir cierre" para volver a guardarlo con el abono incluido.\n\n¿Continuar?`
-  )) return;
+  )) return false;
 
   try {
     const [abonoRow] = await sbInsertConCuenta('abonos_fiado', {
@@ -5742,22 +6390,109 @@ async function registrarAbonoFiado(clienteId) {
     }
 
     setSyncBadge('ok');
-    const montoEl = document.getElementById(`abono-monto-${clienteId}`);
-    if (montoEl) montoEl.value = '';
-    if (notaEl) notaEl.value = '';
-
-    const saldoFinal = calcularSaldoFiado(clienteId).saldo;
+    const { saldo: saldoFinal, sobrante } = calcularSaldoFiado(clienteId);
     showToast(
-      saldoFinal <= 0.5
-        ? `✅ Fiado de ${cliente.nombre} saldado por completo`
-        : `✅ Abono de ${fmt(monto)} registrado${pagados.length ? ` (${pagados.length} pedido(s) saldado(s))` : ''} — ${cliente.nombre} debe ${fmt(saldoFinal)}`,
+      !teniaDeuda
+        ? `✅ Saldo a favor registrado: ${cliente.nombre} tiene ${fmt(Math.max(sobrante, 0))} a favor`
+        : saldoFinal <= 0.5
+          ? `✅ Fiado de ${cliente.nombre} saldado por completo`
+          : `✅ Abono de ${fmt(monto)} registrado${pagados.length ? ` (${pagados.length} pedido(s) saldado(s))` : ''} — ${cliente.nombre} debe ${fmt(saldoFinal)}`,
       'ok'
     );
     renderAll();
     if (cierre && abonoRow.turno) abrirCorreccionCierre(fecha, turno);
+    return true;
   } catch (e) {
     console.error(e);
     showToast(`⚠ Error al registrar el abono: ${(e.message||'').slice(0,160)}`, 'warning');
+    return false;
+  }
+}
+
+// Formulario «Registrar saldo a favor»: para un cliente que no debe nada (o que no está
+// en la lista todavía). Elegir de la lista O escribir un nombre nuevo (si ya existe uno
+// igual, aunque cambien tildes/mayúsculas, se usa ese y no se crea otro).
+async function registrarSaldoAFavor() {
+  const sel = document.getElementById('saf-cliente');
+  const nuevoEl = document.getElementById('saf-nuevo');
+  const idElegido = sel && sel.value ? parseInt(sel.value, 10) : 0;
+  const nombreNuevo = nuevoEl ? nuevoEl.value.trim().replace(/\s+/g, ' ') : '';
+  const monto = valMiles('saf-monto');
+  const cuenta = document.getElementById('saf-cuenta').value;
+  const nota = document.getElementById('saf-nota').value.trim();
+
+  if (idElegido && nombreNuevo) { showToast('⚠ Elige un cliente de la lista O escribe uno nuevo, no los dos', 'warning'); return; }
+  if (!idElegido && !nombreNuevo) { showToast('⚠ Elige un cliente de la lista o escribe el nombre de uno nuevo', 'warning'); return; }
+  if (!monto || monto <= 0) { showToast('⚠ Ingresa un monto válido', 'warning'); return; }
+
+  let cliente = idElegido ? ST.clientesFiado.find(c => c.id === idElegido) : clienteFiadoPorNombre(nombreNuevo);
+  if (!cliente) {
+    try {
+      const [row] = await sbInsert('clientes_fiado', { nombre: nombreNuevo });
+      ST.clientesFiado.push(row);
+      ST.clientesFiado.sort((a,b) => a.nombre.localeCompare(b.nombre));
+      cliente = row;
+    } catch (e) {
+      console.error(e);
+      showToast('⚠ No se pudo crear el cliente — ¿ya creaste la tabla clientes_fiado en Supabase?', 'warning');
+      return;
+    }
+  }
+  const ok = await registrarAbonoDeCliente(cliente, monto, cuenta, nota);
+  if (!ok) return;
+  ['saf-nuevo', 'saf-monto', 'saf-nota'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  if (sel) sel.value = '';
+}
+
+// Llena la lista de clientes del formulario (todos, también los que no deben nada),
+// conservando lo que estaba elegido aunque la pantalla se redibuje.
+function renderSaldoAFavorForm() {
+  const sel = document.getElementById('saf-cliente');
+  if (!sel) return;
+  const actual = sel.value;
+  sel.innerHTML = '<option value="">— Elegir cliente —</option>' +
+    ST.clientesFiado.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+  if (actual && ST.clientesFiado.some(c => String(c.id) === actual)) sel.value = actual;
+}
+
+// Elimina UN abono (registrado por error, o de prueba). Solo administrador:
+// la plata del abono ya entró al cierre de su día/turno, y ese cierre —si ya
+// se guardó— es una foto que no se recalcula sola.
+// Regla de saldo (la misma que protege eliminarGrupoIngreso): lo abonado tiene
+// que seguir cubriendo los pedidos que ya se saldaron con abonos. Si no los
+// cubre, se avisa qué hacer (↩ devolver esos pedidos a pendiente) en vez de
+// dejar el saldo del cliente descuadrado.
+async function eliminarAbonoFiado(abonoId) {
+  if (!adminAutenticado) { showToast('🔒 Eliminar un abono es solo para administradores', 'warning'); return; }
+  const abono = ST.abonosFiado.find(a => a.id === abonoId);
+  if (!abono) return;
+  const cliente = ST.clientesFiado.find(c => c.id === abono.cliente_fiado_id);
+  const nombre = cliente ? cliente.nombre : 'el cliente';
+
+  const { totalAbonos, totalPagadoViaAbono } = calcularSaldoFiado(abono.cliente_fiado_id);
+  if (totalAbonos - (abono.monto || 0) + 0.01 < totalPagadoViaAbono) {
+    showToast(`🔒 No se puede eliminar este abono: con él se saldaron pedidos de ${nombre} por ${fmt(totalPagadoViaAbono)} y sin él el saldo quedaría descuadrado. Primero devuelve esos pedidos a pendiente con ↩ (Ingresos) y luego elimina el abono.`, 'warning');
+    return;
+  }
+
+  const cierre = abono.turno ? ST.cierresDia.find(c => c.fecha === abono.fecha && c.turno === abono.turno) : null;
+  const nombreTurno = abono.turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas';
+  if (!confirm(
+    `¿Eliminar el abono de ${nombre} por ${fmt(abono.monto)} (${abono.fecha}${abono.turno ? ', ' + nombreTurno : ''})?\n\n` +
+    `Deja de contarse como plata recibida en ese cierre y se resta de lo que ${nombre} tiene abonado.` +
+    (cierre ? `\n\nEl cierre de ${nombreTurno} del ${fechaCorta(abono.fecha)} ya está guardado y lo incluye: se abrirá "Corregir cierre" para volver a guardarlo sin este abono.` : '')
+  )) return;
+
+  try {
+    await sbDelete('abonos_fiado', `id=eq.${abonoId}`);
+    ST.abonosFiado = ST.abonosFiado.filter(a => a.id !== abonoId);
+    setSyncBadge('ok');
+    showToast(`🗑 Abono de ${fmt(abono.monto)} eliminado`, 'info');
+    renderAll();
+    if (cierre) abrirCorreccionCierre(abono.fecha, abono.turno);
+  } catch (e) {
+    console.error(e);
+    showToast(`⚠ Error al eliminar el abono: ${(e.message||'').slice(0,160)}`, 'warning');
   }
 }
 
@@ -5948,8 +6683,16 @@ function cerrarModalTurnoClick(e) {
   if (e.target.id === 'modal-turno') cerrarModalTurno();
 }
 
+// Funciones solo de administrador: con caja los botones ni se dibujan; esto es el segundo seguro si
+// alguien las llama a mano. Devuelve true si hay administrador activo; si no, avisa y devuelve false.
+function avisarSiNoEsAdmin(que) {
+  if (adminAutenticado) return true;
+  showToast(`🔒 ${que} es solo para administradores — sal e ingresa como administrador`, 'warning');
+  return false;
+}
+
 // ── Cierre manual: respaldo por si el sistema no se pudo usar ese día y las
-// cuentas se llevaron aparte. Reutiliza la contraseña compartida de admin. ──
+// cuentas se llevaron aparte. Solo administrador. ──
 let cierreManualTurno = 'almuerzo';
 // Gastos categorizados en cola, en memoria, hasta que se pulse "Guardar cierre
 // manual" — ahí se insertan como filas reales en gastos_dia (igual que
@@ -5965,6 +6708,7 @@ let cierreManualEditando = null;
 let cierreManualPendiente = null;
 
 function abrirModalCierreManual() {
+  if (!avisarSiNoEsAdmin('Cargar un cierre a mano')) return;
   cierreManualPendiente = null;
   document.getElementById('modal-cierre-manual').style.display = 'flex';
   document.getElementById('cierremanual-password').value = '';
@@ -5976,6 +6720,7 @@ function abrirModalCierreManual() {
 // el botón "Editar" del historial y desde "Corregir cierre" cuando el cierre
 // del turno actual es manual.
 function editarCierreManual(fecha, turno) {
+  if (!avisarSiNoEsAdmin('Corregir un cierre cargado a mano')) return;
   cierreManualPendiente = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno) || null;
   document.getElementById('modal-cierre-manual').style.display = 'flex';
   document.getElementById('cierremanual-password').value = '';
@@ -5990,10 +6735,10 @@ function cerrarModalCierreManualClick(e) {
   if (e.target.id === 'modal-cierre-manual') cerrarModalCierreManual();
 }
 
-// intentarAccesoAdmin() ya deja adminAutenticado=true/false y muestra el toast;
+// intentarAccesoAdmin() ya deja adminAutenticado=true/false y muestra el aviso;
 // aquí solo hace falta re-evaluar el gate de ESTE modal (no lo hace renderAll()).
-function intentarAccesoCierreManual() {
-  intentarAccesoAdmin('cierremanual-password');
+async function intentarAccesoCierreManual() {
+  await intentarAccesoAdmin('cierremanual-password');
   aplicarGateAdmin('cierremanual', () => prepararFormCierreManual(cierreManualPendiente));
 }
 
@@ -8792,14 +9537,14 @@ function renderDiaADia() {
     document.getElementById('dd-transferencia').textContent = '$0';
 
     // Solo se puede corregir libremente el cierre de HOY. Para uno de otro
-    // día hace falta la contraseña (misma del historial completo, abajo).
+    // día hace falta ser administrador (con caja: Salir e ingresar como administrador).
     const puedeCorregir = fecha === today() || adminAutenticado;
     const msgEl = document.getElementById('dd-cerrado-mensaje');
     const btnCorregir = document.getElementById('btn-corregir-cierre');
     if (btnCorregir) btnCorregir.style.display = puedeCorregir ? '' : 'none';
     if (msgEl) msgEl.textContent = puedeCorregir
       ? '🔒 Este turno ya está cerrado. Los valores quedaron guardados.'
-      : '🔒 Este cierre es de otro día — ingresa la contraseña en "Historial completo de cierres" (más abajo) para verlo o corregirlo.';
+      : '🔒 Este cierre es de otro día — para verlo o corregirlo, sal e ingresa como administrador.';
 
     renderNotasCierre(fecha);
     aplicarGateAdmin('dd-historial', renderHistorialCierres);
@@ -8885,11 +9630,11 @@ function irADiaADia(fecha, turno) {
 // Botón "Corregir cierre" del banner de turno cerrado — reabre en modo edición
 // el cierre del turno/fecha que se está viendo ahora mismo (sin contraseña,
 // es parte del flujo normal del día). Para ver/editar OTROS días hace falta
-// la contraseña del historial completo, más abajo en esta misma pestaña.
+// sesión de administrador (el Historial completo de cierres solo se dibuja para él).
 function corregirCierreActual() {
   const fecha = document.getElementById('dd-fecha').value || today();
   if (fecha !== today() && !adminAutenticado) {
-    showToast('🔒 Para corregir un cierre de otro día, ingresa la contraseña en "Historial completo de cierres"', 'warning');
+    showToast('🔒 Para corregir un cierre de otro día, sal e ingresa como administrador', 'warning');
     return;
   }
   // Un cierre manual no tiene pedidos reales detrás — corregirlo por la vía
@@ -9203,38 +9948,48 @@ function renderCaja() {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// ACCESO ADMINISTRADOR — una sola contraseña compartida por Tablero,
-// Ingresos, Egresos, Caja, Auditoría y el historial completo de Cierre.
-// Autenticarse en cualquiera de ellas desbloquea las demás por el resto
-// de la sesión (hasta recargar la página o pulsar "Cerrar sesión").
-// (Nota: es un candado simple del lado del cliente, pensado para que no
-// cualquiera entre a curiosear — no es seguridad real de servidor, ya que
-// el código de la página es visible para quien sepa cómo mirarlo.)
+// ACCESO ADMINISTRADOR — Tablero, Ingresos, Egresos, Caja, Auditoría, Datos,
+// el historial completo de cierres, el respaldo y el cierre manual son solo
+// para el rol "admin" (cada dueño tiene su propio usuario).
+// · Si se entró con un usuario admin, todo esto ya está abierto.
+// · Si se entró como caja, al abrir una de estas secciones se pide el usuario y
+//   la contraseña de un administrador ("autorizar en el sitio"). Autorizarse en
+//   una abre las demás hasta pulsar "Cerrar sesión" o recargar la página.
+// El candado de pantalla es solo comodidad: el servidor (RLS) es quien realmente
+// impide que caja lea o toque las tablas de administración (ver sql/).
 // ══════════════════════════════════════════════════════════════════════
-const ADMIN_PASSWORD = 'Chocolate1625@2004';
-let adminAutenticado = false;
+let adminAutenticado = false;   // lo calcula sincronizarSesion() a partir del rol del token
 
-function intentarAccesoAdmin(inputId) {
+// Botón "Entrar" de cada candado: lee el usuario (campo "-email" junto a la contraseña) y la clave.
+async function intentarAccesoAdmin(inputId) {
   const input = document.getElementById(inputId);
-  if (!input) return;
-  if (input.value === ADMIN_PASSWORD) {
-    adminAutenticado = true;
-    input.value = '';
-    showToast('🔓 Acceso concedido', 'ok');
-    renderAll();
-  } else {
-    showToast('⚠ Contraseña incorrecta', 'warning');
-    input.value = '';
+  if (!input) return false;
+  const campoEmail = document.getElementById(inputId.replace(/-password$/, '-email'));
+  const email = campoEmail ? campoEmail.value.trim() : '';
+  const password = input.value;
+  if (!email || !password) {
+    showToast('⚠ Escribe el usuario y la contraseña de un administrador', 'warning');
+    return false;
   }
+  input.value = '';
+  const r = await autorizarAdmin(email, password);
+  if (!r.ok) { showToast('⚠ ' + r.mensaje, 'warning'); return false; }
+  if (campoEmail) campoEmail.value = '';
+  showToast('🔓 Acceso de administrador concedido', 'ok');
+  renderAll();
+  return true;
 }
 
+// "🔒 Cerrar sesión" dentro de las secciones de administrador:
+// · autorizado en el sitio → vuelve a caja;  · entró como admin → sale del sistema.
 function cerrarSesionAdmin() {
-  adminAutenticado = false;
+  if (sesionAdmin) { quitarAdmin(); return; }
+  if (sesionBase && sesionBase.rol === 'admin') { salirDelSistema(); return; }
   renderAll();
 }
 
-// Muestra el login o el contenido de una sección protegida según el estado
-// de adminAutenticado, y renderiza su contenido si corresponde.
+// Muestra el candado o el contenido de una sección protegida según adminAutenticado
+// (rol admin en la sesión activa), y renderiza su contenido si corresponde.
 // Espera divs con id "{prefix}-login" y "{prefix}-contenido".
 function aplicarGateAdmin(prefix, renderFn) {
   const login = document.getElementById(prefix + '-login');
@@ -9250,10 +10005,66 @@ function aplicarGateAdmin(prefix, renderFn) {
   }
 }
 
+// ── Filtro por día de Auditoría ───────────────────────────────────────
+// Mismo filtro de fechas que Egresos/Ingresos (enFiltroFecha): un período rápido
+// (hoy/semana/mes/todo) o un rango «desde – hasta» (un solo día = la misma fecha).
+// Los ajustes se ubican por la fecha de su CIERRE; los pedidos eliminados y los
+// descuentos, por el día (hora local) en que se hicieron (created_at), que es lo
+// que dice su primera columna. Si un registro no trae created_at, vale su fecha.
+const fAuditoria = { periodo: 'todo', desde: '', hasta: '' };
+
+function diaDeEventoAuditoria(r) {
+  const d = r.created_at ? new Date(r.created_at) : null;
+  return d && !Number.isNaN(d.getTime()) ? toLocalDateStr(d) : (r.fecha || '');
+}
+const auditoriaVisibleCierre = c => enFiltroFecha(c.fecha, fAuditoria);
+const auditoriaVisibleEvento = r => enFiltroFecha(diaDeEventoAuditoria(r), fAuditoria);
+function auditoriaFiltroActivo() { return fAuditoria.periodo !== 'todo' || !!(fAuditoria.desde || fAuditoria.hasta); }
+
+function textoFiltroAuditoria() {
+  const { desde, hasta, periodo } = fAuditoria;
+  if (desde || hasta) {
+    if (desde && hasta) return desde === hasta ? `el ${desde}` : `del ${desde} al ${hasta}`;
+    return desde ? `desde el ${desde}` : `hasta el ${hasta}`;
+  }
+  return { hoy: 'hoy', semana: 'esta semana', mes: 'este mes' }[periodo] || 'todo';
+}
+
+// Período rápido: quita el rango escrito y marca el botón.
+function setFAuditoria(periodo) {
+  limpiarRangoFiltro(fAuditoria, 'auditoria-desde', 'auditoria-hasta');
+  fAuditoria.periodo = periodo;
+  document.querySelectorAll('#auditoria-periodo .filter-btn').forEach(b => b.classList.toggle('active', b.dataset.periodo === periodo));
+  renderAuditoria();
+}
+
+// Rango escrito a mano. Si solo eliges un extremo, el otro se pone igual: ves solo ese día
+// (para un rango, cambia el otro extremo; para «desde ese día en adelante», borra «hasta»).
+function setFAuditoriaRango(cambio) {
+  const d = document.getElementById('auditoria-desde'), h = document.getElementById('auditoria-hasta');
+  if (d && h) {
+    if (cambio === 'desde' && d.value && !h.value) h.value = d.value;
+    else if (cambio === 'hasta' && h.value && !d.value) d.value = h.value;
+  }
+  aplicarRangoFiltro(fAuditoria, 'auditoria-desde', 'auditoria-hasta', '#auditoria-periodo', cambio);
+  renderAuditoria();
+}
+
+function setFAuditoriaAyer() {
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  const ayer = toLocalDateStr(d);
+  document.getElementById('auditoria-desde').value = ayer;
+  document.getElementById('auditoria-hasta').value = ayer;
+  setFAuditoriaRango('desde');
+}
+
 function renderAuditoria() {
   const body = document.getElementById('auditoria-body');
   if (!body) return;
-  const ajustes = ST.cierresDia.filter(c => ajustesDeCierre(c).total !== 0).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const filtrando = auditoriaFiltroActivo();
+  const todosAjustes = ST.cierresDia.filter(c => ajustesDeCierre(c).total !== 0);
+  const ajustes = todosAjustes.filter(auditoriaVisibleCierre).sort((a,b) => b.fecha.localeCompare(a.fecha));
+  const vacio = (hayDatos, sinNada, sinEnPeriodo) => (filtrando && hayDatos) ? sinEnPeriodo : sinNada;
   body.innerHTML = ajustes.length
     ? ajustes.map(c => {
         const aj = ajustesDeCierre(c);
@@ -9265,11 +10076,11 @@ function renderAuditoria() {
         <td style="color:var(--text2);">${c.ajuste_manual_nota || '—'}</td>
       </tr>`;
       }).join('')
-    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Sin ajustes manuales registrados</div></div></td></tr>`;
+    : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">${vacio(todosAjustes.length, 'Sin ajustes manuales registrados', 'Sin ajustes manuales en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
 
   const elimBody = document.getElementById('auditoria-eliminados-body');
   if (elimBody) {
-    const eliminados = [...ST.pedidosEliminados].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    const eliminados = ST.pedidosEliminados.filter(auditoriaVisibleEvento).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     elimBody.innerHTML = eliminados.length
       ? eliminados.map(e => `<tr>
           <td>${new Date(e.created_at).toLocaleString('es-CO')}</td>
@@ -9279,12 +10090,12 @@ function renderAuditoria() {
           <td style="color:var(--text2);">${LABELS[e.pedido]||e.pedido}${e.detalle ? ' — ' + e.detalle : ''}</td>
           <td class="amount-neg">${fmt(e.monto_total||0)}</td>
         </tr>`).join('')
-      : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">Sin pedidos eliminados registrados</div></div></td></tr>`;
+      : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">${vacio(ST.pedidosEliminados.length, 'Sin pedidos eliminados registrados', 'Sin pedidos eliminados en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
   }
 
   const descBody = document.getElementById('auditoria-descuentos-body');
   if (descBody) {
-    const descuentos = [...(ST.pedidosDescuentos || [])].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    const descuentos = (ST.pedidosDescuentos || []).filter(auditoriaVisibleEvento).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     descBody.innerHTML = descuentos.length
       ? descuentos.map(d => `<tr>
           <td>${new Date(d.created_at).toLocaleString('es-CO')}</td>
@@ -9295,7 +10106,18 @@ function renderAuditoria() {
           <td style="color:var(--text2);">${d.cierre_ajustado ? `💵 ${fmtAjuste(d.ajuste_efectivo||0)} · 💳 ${fmtAjuste(d.ajuste_transferencia||0)}` : '—'}</td>
           <td style="color:var(--text3);font-size:11px;">${d.gastos_eliminados || '—'}</td>
         </tr>`).join('')
-      : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🏷</div><div class="empty-text">Sin descuentos aplicados todavía</div></div></td></tr>`;
+      : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🏷</div><div class="empty-text">${vacio((ST.pedidosDescuentos || []).length, 'Sin descuentos aplicados todavía', 'Sin descuentos en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
+  }
+
+  // Resumen del filtro: qué se está viendo y cuántos registros quedan de cuántos hay.
+  const resumen = document.getElementById('auditoria-filtro-resumen');
+  if (resumen) {
+    const totE = ST.pedidosEliminados.length, totD = (ST.pedidosDescuentos || []).length;
+    const verE = ST.pedidosEliminados.filter(auditoriaVisibleEvento).length;
+    const verD = (ST.pedidosDescuentos || []).filter(auditoriaVisibleEvento).length;
+    resumen.innerHTML = filtrando
+      ? `Mostrando <b>${textoFiltroAuditoria()}</b>: ajustes <b>${ajustes.length}</b> de ${todosAjustes.length} · eliminados <b>${verE}</b> de ${totE} · descuentos <b>${verD}</b> de ${totD}`
+      : `Mostrando todo: ajustes <b>${todosAjustes.length}</b> · eliminados <b>${totE}</b> · descuentos <b>${totD}</b>`;
   }
 }
 
@@ -9305,12 +10127,13 @@ function renderAuditoria() {
 // badge muestra cuántos son nuevos y desaparece al entrar a la pestaña.
 const AUDITORIA_VISTOS_KEY = 'elLobo_auditoria_vistos';
 
-function auditoriaEventosIds() {
+// soloVisibles = true: solo los que el filtro de día de Auditoría deja ver ahora.
+function auditoriaEventosIds(soloVisibles = false) {
   const ajustesIds = ST.cierresDia
-    .filter(c => c.ajuste_manual)
+    .filter(c => c.ajuste_manual && (!soloVisibles || auditoriaVisibleCierre(c)))
     .map(c => `ajuste:${c.fecha}:${c.turno}`);
-  const elimIds = ST.pedidosEliminados.map(e => `elim:${e.id}`);
-  const descIds = (ST.pedidosDescuentos || []).map(d => `desc:${d.id}`);
+  const elimIds = ST.pedidosEliminados.filter(e => !soloVisibles || auditoriaVisibleEvento(e)).map(e => `elim:${e.id}`);
+  const descIds = (ST.pedidosDescuentos || []).filter(d => !soloVisibles || auditoriaVisibleEvento(d)).map(d => `desc:${d.id}`);
   return [...ajustesIds, ...elimIds, ...descIds];
 }
 
@@ -9322,6 +10145,9 @@ function auditoriaVistosGuardados() {
 function actualizarBadgeAuditoria() {
   const badge = document.getElementById('audit-badge');
   if (!badge) return;
+  // Auditoría es de administrador: con caja no se muestra ni el numerito (y caja ni siquiera
+  // puede leer los pedidos eliminados / descuentos, así que la cuenta saldría incompleta).
+  if (!adminAutenticado) { badge.style.display = 'none'; return; }
   const vistos = auditoriaVistosGuardados();
   const nuevos = auditoriaEventosIds().filter(id => !vistos.has(id));
   badge.textContent = nuevos.length;
@@ -9329,7 +10155,13 @@ function actualizarBadgeAuditoria() {
 }
 
 function marcarAuditoriaVista() {
-  try { localStorage.setItem(AUDITORIA_VISTOS_KEY, JSON.stringify(auditoriaEventosIds())); } catch(e) {}
+  if (!adminAutenticado) return;   // con caja no se ve la pestaña: no se pisa lo que ya vio un administrador
+  // Se marcan como vistos los que se ven ahora; lo que un filtro de día deje escondido sigue
+  // contando como novedad en el numerito (sin filtro, esto equivale a marcar todo).
+  const vistos = auditoriaVistosGuardados();
+  const visibles = new Set(auditoriaEventosIds(true));
+  const guardar = auditoriaEventosIds().filter(id => vistos.has(id) || visibles.has(id));
+  try { localStorage.setItem(AUDITORIA_VISTOS_KEY, JSON.stringify(guardar)); } catch(e) {}
   actualizarBadgeAuditoria();
 }
 
@@ -9545,7 +10377,7 @@ function renderAll() {
   renderFiados();
   renderDiaADia();
   renderInventario();
-  // Administrativas — todas detrás de la misma contraseña compartida
+  // Administrativas — solo rol admin
   aplicarGateAdmin('tablero', renderTablero);
   aplicarGateAdmin('ingfin',  renderIngresosFinanciero);
   aplicarGateAdmin('egresos', renderEgresos);
@@ -9554,10 +10386,27 @@ function renderAll() {
   aplicarGateAdmin('datos', renderDatosExport);
   renderPendientesNotasBadge();
   actualizarBadgeAuditoria();
+  renderAvisoRespaldo();
 }
 
 // ── ARRANQUE ──────────────────────────────────────────────────────────
-loadState();
+// Sin sesión no se carga ni se muestra nada: primero la pantalla de entrada.
+async function arrancar() {
+  const guardada = leerSesionCaja();            // solo la sesión de caja se recuerda en el equipo
+  if (guardada) {
+    sesionBase = guardada;
+    try {
+      await tokenDe(sesionBase);                // si venció, la renueva
+    } catch (e) {
+      // Sin internet: se sigue (loadState avisará "sin conexión"). Si el servidor la rechazó, sesionPerdida() ya abrió el login.
+      console.error('No se pudo renovar la sesión:', e);
+    }
+  }
+  if (!sesionBase) { mostrarLogin(); return; }
+  sincronizarSesion();
+  await loadState();
+}
+arrancar();
 </script>
 </body>
 </html>

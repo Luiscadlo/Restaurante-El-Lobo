@@ -63,9 +63,9 @@ const clientes_fiado = [
 const abonos_fiado = [
   { id: 1, cliente_fiado_id: 1, monto: 10000, fecha: '2026-10-18', turno: 'almuerzo', cuenta: 'efectivo',        created_at: '2026-10-18T13:00:00-05:00' },
   { id: 2, cliente_fiado_id: 2, monto: 15000, fecha: '2026-10-18', turno: 'almuerzo', cuenta: 'efectivo',        created_at: '2026-10-18T13:05:00-05:00' },
-  { id: 3, cliente_fiado_id: 1, monto: 5000,  fecha: '2026-10-19', turno: null,       cuenta: 'transf_almuerzos', created_at: '2026-10-19T13:00:00-05:00' },
+  { id: 3, cliente_fiado_id: 1, monto: 5000,  fecha: '2026-10-19', turno: null,       cuenta: 'transferencia',   created_at: '2026-10-19T13:00:00-05:00' },
   { id: 4, cliente_fiado_id: 1, monto: 7000,  fecha: '2026-10-20', turno: 'almuerzo', cuenta: 'efectivo',        created_at: '2026-10-20T13:00:00-05:00' },
-  { id: 5, cliente_fiado_id: 1, monto: 4000,  fecha: '2026-10-20', turno: 'almuerzo', cuenta: 'transf_almuerzos', created_at: '2026-10-20T13:10:00-05:00' },
+  { id: 5, cliente_fiado_id: 1, monto: 4000,  fecha: '2026-10-20', turno: 'almuerzo', cuenta: 'transferencia',   created_at: '2026-10-20T13:10:00-05:00' },
 ];
 
 const aperturas_turno = [
@@ -97,14 +97,24 @@ const gastos_dia = [
   { id: 1, fecha: '2026-10-18', turno: 'almuerzo', nombre: 'Hielo (prueba)', monto: 6000, categoria: 'otro' },
 ];
 
-const mesas = Array.from({ length: 15 }, (_, i) => ({ id: i + 1, numero: i + 1, estado: i + 1 === 3 ? 'ocupada' : 'libre' }));
+const mesas = Array.from({ length: 15 }, (_, i) => ({ numero: i + 1, estado: i + 1 === 3 ? 'ocupada' : 'libre' })); // la tabla real no tiene "id": la llave es "numero"
 
 const pedidos_eliminados = [
-  { id: 1, created_at: '2026-10-17T20:00:00-05:00', fecha: '2026-10-17', turno: 'cena', pedido: 'Hamburguesa', monto_total: 18000, metodo: 'efectivo', motivo: 'Error de digitación (prueba)' },
+  { id: 1, created_at: '2026-10-17T20:00:00-05:00', fecha: '2026-10-17', turno: 'cena', pedido: 'Hamburguesa', monto_total: 18000, metodo: 'efectivo', motivo: 'eliminado' },
 ];
 
+// Mismas columnas que la tabla real (tomadas del esquema de producción): el rastro de un descuento
+// guarda los ids de los pedidos como texto "104" (o "104,105"), no una columna numérica.
 const pedidos_descuentos = [
-  { id: 1, created_at: `${FECHA_HOY}T12:31:00-05:00`, pedido_id: 104, fecha: FECHA_HOY, descuento: 2000, motivo: 'Cortesía (prueba)' },
+  { id: 1, created_at: `${FECHA_HOY}T12:31:00-05:00`, grupo_pedido: 'g-104', pedido_ids: '104',
+    fecha: FECHA_HOY, hora: '12:30', turno: 'almuerzo', estado_pedido: 'pagado',
+    valor_lista: 15000, descuento_anterior: 0, descuento_nuevo: 2000, motivo: 'Cortesía (prueba)',
+    ajuste_efectivo: 0, ajuste_transferencia: 0, cierre_ajustado: false, gastos_eliminados: null },
+];
+
+// Configuración (clave/valor). Último respaldo hace 2 días → el aviso NO se muestra.
+const config = [
+  { clave: 'ultimo_respaldo', valor: { generado_en: '2026-10-18T22:00:00.000Z', fecha: '2026-10-18', conteos: { pedidos: 11 } }, actualizado_en: '2026-10-18T22:00:00-05:00' },
 ];
 
 module.exports = {
@@ -112,6 +122,6 @@ module.exports = {
   datos: {
     pedidos, egresos, inventario, consumos: [], gastos_dia, mesas, cierres_dia, aperturas_turno,
     notas_dia: [], movimientos_caja: [], ingresos_extra: [], pedidos_eliminados, clientes_fiado,
-    abonos_fiado, pedidos_descuentos,
+    abonos_fiado, pedidos_descuentos, config,
   },
 };
