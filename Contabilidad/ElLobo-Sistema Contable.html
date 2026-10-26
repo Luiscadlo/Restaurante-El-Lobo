@@ -2697,6 +2697,30 @@ async function sbGetAll(tabla, qs = '') {
   return acumulado;
 }
 
+// Candado de días (sql/candado_dias.sql): el servidor rechaza que CAJA cambie datos de días anteriores y lo
+// dice con un error 403 cuyo DETAIL es «candado_dias». Se convierte en un Error con el mensaje legible (marcado
+// con .candadoDias) y se avisa en pantalla UNA sola vez: el aviso propio sale una vez cada 3 s (lo que dura un aviso) y
+// showToast descarta el segundo aviso «⚠ Error al …: <mismo mensaje>» que sacan los flujos al atrapar el error.
+// Cualquier otro error conserva el texto de siempre: varios flujos lo leen para reintentar sin una columna que falta.
+const VENTANA_AVISO_CANDADO = 3000;
+let ultimoAvisoCandado = 0;
+let ultimoMensajeCandado = '';
+async function errorDeRespuesta(r) {
+  const texto = await r.text();
+  let info = null;
+  try { info = JSON.parse(texto); } catch (e) { /* no era JSON */ }
+  if (info && info.code === '42501' && info.details === 'candado_dias') {
+    const err = new Error(info.message);
+    err.candadoDias = true;
+    const ahora = Date.now();
+    const repetido = info.message === ultimoMensajeCandado && ahora - ultimoAvisoCandado < VENTANA_AVISO_CANDADO;
+    ultimoMensajeCandado = info.message;
+    if (!repetido) { ultimoAvisoCandado = ahora; showToast('🔒 ' + info.message, 'warning'); }
+    return err;
+  }
+  return new Error(texto);
+}
+
 // Tablas de auditoría: caja puede AGREGAR registros pero no leerlos (así un empleado no puede ver
 // ni alterar el rastro de lo que borra o descuenta). Para caja el insert no pide la fila de vuelta.
 const TABLAS_SOLO_ESCRITURA_CAJA = ['pedidos_eliminados', 'pedidos_descuentos'];
@@ -2708,7 +2732,7 @@ async function sbInsert(tabla, data) {
     headers: { 'Prefer': sinRetorno ? 'return=minimal' : 'return=representation' },
     body: JSON.stringify(data)
   });
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) throw await errorDeRespuesta(r);
   if (sinRetorno) return [];
   return r.json(); // array de filas insertadas
 }
@@ -2745,7 +2769,7 @@ async function sbPatch(tabla, qs, data) {
     headers: { 'Prefer': 'return=representation' },
     body: JSON.stringify(data)
   });
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) throw await errorDeRespuesta(r);
   return r.json();
 }
 
@@ -2753,7 +2777,7 @@ async function sbDelete(tabla, qs) {
   const r = await sbFetch(`${SB_URL}/rest/v1/${tabla}?${qs}`, {
     method: 'DELETE'
   });
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) throw await errorDeRespuesta(r);
 }
 
 // ── Estado global ──────────────────────────────────────────────────────
@@ -2800,6 +2824,9 @@ function setSyncBadge(estado) {
 // ── Toast notifications ───────────────────────────────────────────────
 // accion opcional: { label:'↩ Deshacer', onClick: () => {...} } — muestra un botón en el toast.
 function showToast(msg, tipo = 'info', accion = null) {
+  // El candado de días ya avisó con su propio mensaje: no se repite el mismo texto envuelto en «⚠ Error al …».
+  if (ultimoMensajeCandado && !msg.startsWith('🔒') && msg.includes(ultimoMensajeCandado) &&
+      Date.now() - ultimoAvisoCandado < VENTANA_AVISO_CANDADO) return;
   const el = document.createElement('div');
   el.className = `toast ${tipo}`;
   const span = document.createElement('span');

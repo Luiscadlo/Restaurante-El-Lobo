@@ -2,7 +2,7 @@
 
 Primera red de seguridad: el motor corre en modo --demo sin errores y genera el libro
 de Excel esperado. Todo se escribe en una carpeta temporal: NADA dentro del repo.
-(Las pruebas por función del motor se agregan junto con el Prompt C.)
+(Las pruebas por función —descuentos y abonos— están en test_motor_funciones.py.)
 
 Correr desde la raíz del repo:  python -m pytest tests/python -q
 """

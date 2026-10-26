@@ -232,7 +232,7 @@ No hay otras librerías ni frameworks. El generador de menú es autosuficiente: 
 | `Menu/platos.xlsx` y `Menu/Menu/platos.xlsx` | 10 KB cada una — **byte a byte idénticas** | No |
 | `QR del lobo .docx` | 0,7 MB | No (contiene QR de pago) |
 
-`Menu/` pesa 26,9 MB de los ≈ 28,7 MB de archivos versionados; `Contabilidad/` pesa 0,9 MB. La propuesta de limpieza (sin borrar nada todavía) está en la descripción del pull request correspondiente. El historial de git conserva además cosas viejas (una contraseña ya quemada, dos SQL de correcciones de datos y un respaldo de prueba); **no deben viajar al producto** (se exporta una copia limpia de la etiqueta, sin historial).
+`Menu/` pesaba 26,9 MB de los ≈ 28,7 MB de archivos versionados; `Contabilidad/` pesa 0,9 MB. **Resuelto el 25-oct-2026 (decisión del dueño):** de `Menu/` solo se sigue versionando el generador (`Menú diario-El Lobo.html`, que la pestaña Menú necesita); todo lo demás de la tabla de arriba quedó fuera del repositorio (`.gitignore`) y sus archivos no se borraron del computador del dueño. Una prueba (`tests/menu-publicado.spec.js`) vigila que el generador nunca se excluya por accidente. El historial de git conserva además cosas viejas (una contraseña ya quemada, dos SQL de correcciones de datos y un respaldo de prueba); **no deben viajar al producto** (se exporta una copia limpia de la etiqueta, sin historial).
 
 ---
 
@@ -246,7 +246,7 @@ No hay otras librerías ni frameworks. El generador de menú es autosuficiente: 
 6. **353 manejadores en línea (`onclick=`, `onchange=`…) en el marcado** y 84 variables globales: las funciones se llaman por nombre desde el HTML, lo que obliga a que todo sea global y complica pasar a módulos.
 7. **Reintentos "sin la columna que falta"** repetidos 8 veces (pedidos, extras, apertura de turno, cierres, gastos…): código duplicado y difícil de seguir; hay que quitarlos al fijar un esquema único.
 8. **Reglas implícitas en comentarios:** la mayor parte de las reglas de negocio (fiados se pagan en el mes, pendientes se cierran el mismo día, Tablero = Σ cierres, descuentos informativos) solo están en comentarios y en `Contabilidad/README.md`.
-9. **Restricciones de "días anteriores" solo de pantalla** (ver `docs/MATRIZ_PERMISOS.md`, decisión 3).
+9. **Restricciones de "días anteriores"**: resueltas en el servidor con `sql/candado_dias.sql` (decisión 3 = B, ver `docs/MATRIZ_PERMISOS.md`); la pantalla conserva su propio aviso. Pendiente solo conocer sus casos límite (cena sin cerrar pasadas las 9:00 a. m., deshacer el cobro de un pendiente viejo que no es fiado).
 10. **Control de versiones del esquema:** las migraciones `.sql` ya corridas se quitaron de la carpeta (siguen en el historial). Con H la estructura quedó escrita en `sql/esquema_completo.sql` (sacada con `sql/consulta_esquema.sql` el 2026-10-24, ya con la tabla `config` creada, y convertida con `herramientas/esquema_a_sql.py`). Cada vez que se agregue una tabla o columna en Supabase hay que regenerarlo.
 11. **`confirm()`/`alert()`/`prompt()` en 16 sitios:** bloquean el hilo y se ven distinto en cada navegador/celular.
 12. **El contrato con el motor Python es un Excel** con nombres de hoja y de columna fijos (sección 3) sin prueba que lo proteja.

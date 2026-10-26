@@ -17,13 +17,16 @@ Leyenda: 🗄 Supabase (navegador) · 🌐 el sistema en el navegador/celular ·
 | `sql/rls_seguridad.sql` | **Se corre en Supabase** para activar las reglas. Seguro de correr dos veces. |
 | `sql/rollback_rls.sql` | **Deshacer**: quita las reglas y deja las tablas como estaban. |
 | `tests/python/test_rls.py` | Prueba el SQL contra un Postgres de verdad (no toca tu Supabase). |
+| `sql/candado_dias.sql` | **Se corre en Supabase** (Paso 6b) para que **caja solo pueda cambiar lo de hoy**. Seguro de correr dos veces. Necesita que el Paso 6 ya esté hecho. |
+| `sql/rollback_candado.sql` | **Deshacer** solo el candado de días (las reglas del Paso 6 quedan como están). |
+| `tests/python/test_candado_dias.py` | Prueba el candado contra un Postgres de verdad (no toca tu Supabase). |
 
 ## Antes de empezar (no sigas si falta algo)
 
 - [ ] El restaurante está **sin servicio** y nadie tiene pedidos abiertos. Los pendientes de ayer están cerrados.
 - [ ] Hiciste un **respaldo completo reciente** (pestaña **Datos → 💾 Respaldo completo**) y lo guardaste **fuera del repositorio**.
 - [ ] Ya corriste en Supabase `sql/migracion_supabase_config.sql` (tabla `config`, del respaldo/aviso). Si no, hazlo ahora: el sistema nuevo la lee.
-- [ ] Decidiste las 3 decisiones de `docs/MATRIZ_PERMISOS.md` (si no respondes, quedan las opciones **A**).
+- [ ] Las 3 decisiones de `docs/MATRIZ_PERMISOS.md` ya están tomadas (1 = A, 2 = A, 3 = B: el candado de días del Paso 6b).
 - [ ] Tienes el **nombre corto** de cada dueño que tendrá usuario propio (p. ej. `luiscadlo`), y un gestor de contraseñas (o papel guardado bajo llave) para las claves.
 - [ ] Tienes a mano `sql/rollback_rls.sql` (para deshacer si algo sale mal).
 
@@ -106,6 +109,54 @@ Si algo de esto no pasa, **no sigas**: cuéntame qué viste (ver "Si algo sale m
    *(Tu base trae 5 reglas viejas «allow all» —aperturas_turno, ingresos_extra, movimientos_caja, notas_dia, pedidos_eliminados— que dejarían pasar a cualquiera con sesión por encima de las nuevas. Este SQL las retira solo y las guarda en `seguridad.politicas_previas`; por eso la última columna debe ser 0.)*
 4. 🌐 Recarga todos los equipos (el sistema viejo en memoria ya no funcionaría; el nuevo sí).
 
+## Paso 6b — Candado de días: caja solo puede cambiar lo de hoy 🗄
+
+**Qué hace:** desde aquí, aunque alguien manipule la página con el usuario `caja`, la base **rechaza** crear, cambiar o borrar datos de días anteriores (cierres, gastos, aperturas, notas, abonos, consumos y pedidos ya cobrados). Los administradores no tienen este límite. Las reglas completas, con ejemplos, están en `docs/MATRIZ_PERMISOS.md` («Candado de días»). El día de negocio **cambia a las 9:00 a. m.** (hora de Bogotá), así la cena que pasa de medianoche se sigue cerrando con su fecha.
+
+**Cuándo:** con el restaurante sin servicio, **después** de publicar el sistema con este cambio (el mismo cambio de pantalla muestra el aviso en claro; sin él, funciona igual pero el aviso saldría como texto técnico) y **después** del Paso 6 (usa `seguridad.rol_app()`; si falta, el SQL se detiene con «Primero corre sql/rls_seguridad.sql» y no deja nada a medias).
+
+1. Abre `sql/candado_dias.sql`, copia **todo** su contenido.
+2. Supabase → **SQL Editor → New query** → pega → **Run**. Corre en una sola transacción: si algo falla, no queda nada a medias. Es seguro correrlo dos veces.
+3. Al final muestra una fila. Debe ser:
+
+| candados | dia_de_negocio |
+|---|---|
+| 7 | la fecha de HOY en Bogotá (antes de las 9:00 a. m. sale la de ayer) |
+
+   Si ves otra cosa, **no sigas** y pégame el resultado.
+4. **Comprueba que el candado responde** (no cambia nada: todo se deshace). Pega esto en una consulta nueva y córrela:
+
+```sql
+-- prueba-candado: simula a «caja» intentando tocar el cierre más reciente de un día anterior. Todo se deshace al final.
+do $$
+begin
+  perform set_config('request.jwt.claims', '{"role":"authenticated","app_metadata":{"rol":"caja"}}', true);
+  set local role authenticated;
+  begin
+    update public.cierres_dia set efectivo = efectivo
+     where id = (select id from public.cierres_dia where fecha < seguridad.dia_negocio() order by fecha desc limit 1);
+    raise exception 'MAL: caja pudo tocar un cierre de un día anterior (el candado no está funcionando)';
+  exception when insufficient_privilege then
+    raise exception 'BIEN: el candado respondió: %', sqlerrm;
+  end;
+end $$;
+```
+
+   **Lo correcto es que termine con un error rojo que empieza con «BIEN: el candado respondió: Caja solo puede cambiar lo de hoy. Este registro es del …»** (sí, es un error a propósito: así todo se deshace). Si empieza con «MAL», corre la reversa de abajo y avísame.
+5. 🌐 **Con el usuario `caja`, prueba que el mostrador sigue igual** (recarga los equipos primero):
+   - [ ] Un pedido en mesa pagado en efectivo; un domicilio por transferencia.
+   - [ ] Un fiado nuevo con un abono; **cobrar un fiado viejo** (de días atrás) y, si quieres, «↩ Deshacer».
+   - [ ] **Agregar un producto** a un pedido pendiente de ayer (si hay uno) y cancelar un pendiente viejo de prueba.
+   - [ ] Abrir turno, gastos del turno y **cerrar el turno** de hoy.
+   - [ ] Ver el historial (leer días anteriores sigue permitido).
+   - [ ] Con la pantalla de caja, un cierre de ayer solo dice «sal e ingresa como administrador» (como siempre).
+6. 🌐 **Con tu usuario de administrador:** corrige algo de un día anterior (por ejemplo, un cierre de ayer). Debe dejarte hacerlo sin ningún aviso del candado.
+7. Borra los datos de «PRUEBA» que hayas creado.
+
+**Qué esperar a diario:** nada distinto. El único caso nuevo es una cena que quedó **sin cerrar y ya pasaron las 9:00 a. m.**: caja ya no puede cerrarla; la cierra un administrador (el aviso de pantalla lo dice: «pídele el cambio al administrador»).
+
+**Deshacer solo el candado:** 🗄 corre `sql/rollback_candado.sql`. Quita los 7 candados y sus funciones; las reglas del Paso 6, los usuarios y los datos no se tocan. Verificación: `candados = 0`.
+
 ## Paso 7 — Verificar que todo funciona 🌐
 
 **Lo que debe seguir funcionando (con el usuario `caja`):**
@@ -150,6 +201,8 @@ La tarea programada automática (entraba con la llave pública) **dejó de poder
 3. Solo si necesitas volver también a la **pantalla anterior** (sin usuarios): 🖥 `git revert -m 1 <hash del merge de seguridad>` y push. El orden es ese: primero la base, luego la pantalla (la pantalla vieja con las reglas activas no funciona).
 4. 💬 Cuéntame qué falló.
 
+**Solo el candado de días** (si bloquea algo que no debía): 🗄 `sql/rollback_candado.sql`, y cuéntame qué intentaba hacer caja (copia el aviso en rojo que salió).
+
 El rollback no borra datos ni usuarios.
 
 ## Mantenimiento de los usuarios
@@ -171,6 +224,7 @@ update auth.users set encrypted_password = crypt('NUEVA-CLAVE-LARGA', gen_salt('
 ## Limitaciones que conviene recordar
 
 - **Caja puede leer `pedidos` y `cierres_dia`** (hace falta para cobrar y cerrar turno): alguien técnico con esa cuenta podría consultar las ventas históricas. No ve compras, gastos ni caja.
-- **Las restricciones de "días anteriores"** (solo admin corrige otros días) siguen siendo de pantalla, no del servidor (decisión 3).
+- **Días anteriores:** con el candado del Paso 6b, el servidor rechaza que caja cambie datos de días anteriores. Casos que quedan en manos del administrador: una cena que se quedó sin cerrar pasadas las 9:00 a. m., y deshacer el cobro de un pedido pendiente viejo (no fiado) que se cobró hoy. Detalle en `docs/MATRIZ_PERMISOS.md`.
+- **El reloj es el del servidor:** el candado usa la hora de Bogotá del servidor, no la del celular o computador del mostrador.
 - El plan gratuito de Supabase **no incluye** copias de seguridad diarias propias: por eso el respaldo semanal (Paso 8) es importante.
 - Las contraseñas viejas del código siguen en el historial de GitHub (el repositorio es público): si alguna se usa en otro sitio, **cámbiala allá**.

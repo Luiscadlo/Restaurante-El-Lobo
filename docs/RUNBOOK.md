@@ -100,14 +100,14 @@ Todo en verde antes de fusionar. Si algo falla, copia el mensaje completo y pás
 ## Cierre del día y datos
 
 - Los pendientes se cierran el mismo día; los fiados se pagan dentro del mismo mes (regla del negocio, ver `Contabilidad/README.md`).
-- Si un cierre quedó mal: solo un administrador puede corregir cierres o pedidos de días anteriores (restricción **de pantalla**; ver las limitaciones en `docs/MATRIZ_PERMISOS.md`).
+- Si un cierre quedó mal: solo un administrador puede corregir cierres o pedidos de días anteriores. La pantalla se lo pide y, con el **candado de días** activado (`sql/candado_dias.sql`), la base también lo rechaza para el usuario de caja. El día de negocio cambia a las **9:00 a. m.** (hora de Bogotá): la cena que pasa de medianoche se sigue cerrando como «de hoy» hasta las 8:59 a. m.; pasada esa hora, cerrarla le toca a un administrador. Si caja ve el aviso «Caja solo puede cambiar lo de hoy…», es el candado y no una falla: entra como administrador. Detalle en `docs/MATRIZ_PERMISOS.md`.
 - Todo lo que se elimina o se descuenta queda en **Auditoría** (solo administradores).
 
 ## Si algo falla — guía rápida
 
 | Síntoma | Qué hacer |
 |---|---|
-| El enlace viejo (`Contabildad`) muestra "Este enlace cambió" | Normal: guardar el enlace nuevo de la raíz y borrar el viejo de favoritos. |
+| Con el enlace viejo (`Contabildad`) la pantalla tarda un instante en cargar | Es solo una redirección al sistema. Para saltarla, guarda el enlace nuevo (la raíz del sitio: `https://luiscadlo.github.io/Restaurante-El-Lobo/`) y borra el viejo de favoritos. |
 | Pantalla de entrada no deja pasar a nadie | ¿Se activó RLS sin crear usuarios con rol? Revisa el `select email, raw_app_meta_data ->> 'rol' from auth.users`. Último recurso: `sql/rollback_rls.sql`. |
 | La caja no puede cobrar tras un cambio | Puede ser un permiso faltante. Abre la consola (F12) y busca peticiones con error 403; pásaselas a Claude. Reversa: arriba. |
 | El aviso de respaldo sigue en pantalla | Entra como administrador → **Datos → Respaldo completo**. El aviso solo se apaga cuando bajaron **todas** las filas de todas las tablas; si sale un error de conteo, ese archivo no sirve: repite el respaldo y, si vuelve a fallar, pásale el mensaje a Claude. |
