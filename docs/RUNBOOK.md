@@ -100,8 +100,17 @@ Todo en verde antes de fusionar. Si algo falla, copia el mensaje completo y pás
 ## Cierre del día y datos
 
 - Los pendientes se cierran el mismo día; los fiados se pagan dentro del mismo mes (regla del negocio, ver `Contabilidad/README.md`).
-- Si un cierre quedó mal: solo un administrador puede corregir cierres o pedidos de días anteriores. La pantalla se lo pide y, con el **candado de días** activado (`sql/candado_dias.sql`), la base también lo rechaza para el usuario de caja. El día de negocio cambia a las **9:00 a. m.** (hora de Bogotá): la cena que pasa de medianoche se sigue cerrando como «de hoy» hasta las 8:59 a. m.; pasada esa hora, cerrarla le toca a un administrador. Si caja ve el aviso «Caja solo puede cambiar lo de hoy…», es el candado y no una falla: entra como administrador. Detalle en `docs/MATRIZ_PERMISOS.md`.
+- Si un cierre quedó mal: solo un administrador puede corregir cierres o pedidos de días anteriores. La pantalla se lo pide y, con el **candado de días** activado (`sql/candado_dias.sql`), la base también lo rechaza para el usuario de caja. El día de negocio cambia a las **9:00 a. m.** (hora de Bogotá): la cena que pasa de medianoche se sigue cerrando como «de hoy» hasta las 8:59 a. m.; pasada esa hora, cerrarla le toca a un administrador. En la pantalla de Cierre, el calendario de caja no deja escoger días anteriores a ese día de negocio, y si llega a uno (por ejemplo escribiendo la fecha) lo ve bloqueado, con el aviso de entrar como administrador. Si caja ve el aviso «Caja solo puede cambiar lo de hoy…», es el candado y no una falla: entra como administrador. Detalle en `docs/MATRIZ_PERMISOS.md`.
 - Todo lo que se elimina o se descuenta queda en **Auditoría** (solo administradores).
+
+### Comparar el Excel con el Tablero (cuadre del mes)
+
+El Excel (Datos → Excel) y el Tablero deben dar lo mismo, con **una diferencia que es normal**: los **préstamos** («Préstamos (no cuenta como egreso)») el Tablero no los cuenta como egreso y el Excel sí los lista. Para comparar:
+
+- **Ingresos:** deben ser iguales.
+- **Egresos:** compara el Tablero contra «egresos del Excel − préstamos». Si así da igual, está cuadrado; si todavía hay diferencia, copia las dos cifras y la categoría que no cuadra y pásaselas a Claude.
+
+Último cuadre hecho (26-oct-2026): ingresos 19.289.600 = 19.289.600; egresos sin préstamos 15.914.402 = 15.914.402 (diferencia 0). El Excel sumaba además 33.000 de préstamos, que era toda la diferencia que se veía.
 
 ## Si algo falla — guía rápida
 
