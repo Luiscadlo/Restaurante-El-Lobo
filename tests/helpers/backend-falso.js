@@ -17,6 +17,10 @@
 // - GET devuelve la tabla completa (respeta limit/offset y manda Content-Range como
 //   PostgREST). NO aplica filtros (eq., in., ...): para esta red de pruebas basta.
 // - POST/PATCH/DELETE responden con éxito y quedan registrados en `escrituras`.
+// - RPC (/rest/v1/rpc/...): solo las dos funciones de sql/restaurar_respaldo.sql (lobo_restaurar_respaldo y
+//   lobo_empezar_de_cero), con el mismo permiso (solo admin) y la misma palabra de confirmación que la base de verdad;
+//   reemplazan/vacían los datos del servidor falso (reg.datos) para que la pantalla los vuelva a leer. Cada llamada
+//   queda en `reg.rpc`. `opciones.rpcFalla` ('red' | 'no-instalada' | 'servidor' | {status, cuerpo}) las hace fallar.
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { datos: DATOS_BASE, FECHA_HOY } = require('../fixtures/datos');
@@ -67,6 +71,10 @@ const b64url = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
  * @param opciones.rechazarRefresh true → toda renovación de token es rechazada (sesión revocada)
  * @param opciones.tablasFaltantes  tablas que "no existen" en Supabase (responden 404), p. ej. ['config']
  * @param opciones.totalesFalsos    { tabla: n } → el header Content-Range de esa tabla dice n (para simular filas que faltan)
+ * @param opciones.rpcFalla         'red' | 'no-instalada' | 'servidor' | { status, cuerpo } → las funciones de restaurar fallan así
+ * @param opciones.rpcRetraso       ms que tardan en responder las funciones de restaurar (para probar «en pleno proceso»)
+ * @param opciones.rpcDespuesFalso  { tabla: n } → la función dice que quedaron n filas en esa tabla (para probar el aviso de diferencias)
+ * (`reg.control.tablasFaltantes` se puede cambiar en plena prueba: las tablas listadas responden 404)
  * @returns { errores, peticiones, escrituras, noManejadas, avisos, auth, rest, denegadas, intentos401, control, fijarReloj }
  */
 async function abrirSistema(page, opciones = {}) {
@@ -82,9 +90,11 @@ async function abrirSistema(page, opciones = {}) {
     denegadas: [],   // 'rol OP tabla' que la matriz de permisos no deja hacer
     logoutScopes: [], // 'local' = cierra solo esta sesión (no saca a otros equipos)
     hosts: new Set(), // direcciones de supabase.co con las que habló la página
+    rpc: [],         // { fn, rol, cuerpo } de cada llamada a /rest/v1/rpc/...
+    datos,           // los datos del servidor falso (las funciones de restaurar los cambian)
     tokens: {},      // lo último emitido por correo (para inspeccionar)
     // Interruptores que una prueba puede mover EN MEDIO de la prueba:
-    control: { rechazarRefresh: !!opciones.rechazarRefresh, authFalla: opciones.authFalla || null, ahora: fecha },
+    control: { rechazarRefresh: !!opciones.rechazarRefresh, authFalla: opciones.authFalla || null, ahora: fecha, rpcFalla: opciones.rpcFalla || null, rpcRetraso: opciones.rpcRetraso || 0, rpcDespuesFalso: opciones.rpcDespuesFalso || null, tablasFaltantes: opciones.tablasFaltantes || [] },
   };
   // Estado de las tablas con candado tal como lo dejan las escrituras (el GET sigue devolviendo los datos de la prueba).
   const sombra = {};
@@ -189,6 +199,56 @@ async function abrirSistema(page, opciones = {}) {
         }
       }
 
+      // ── /rest/v1/rpc/... (restaurar / empezar de cero) ──
+      const mr = url.pathname.match(/^\/rest\/v1\/rpc\/([^/]+)$/);
+      if (mr) {
+        const fn = mr[1];
+        const cab = await req.allHeaders();
+        const rolRpc = rolDelToken((cab['authorization'] || '').replace(/^Bearer\s+/i, ''));
+        let cuerpoRpc = null;
+        try { cuerpoRpc = req.postDataJSON(); } catch (e) { /* sin cuerpo */ }
+        reg.rpc.push({ fn, rol: rolRpc, cuerpo: cuerpoRpc });
+        reg.rest.push({ rol: rolRpc, metodo: 'POST', tabla: `rpc/${fn}` });   // para comparar el ORDEN con las demás peticiones
+        const json = (status, o) => route.fulfill({ status, contentType: 'application/json', headers: cors, body: JSON.stringify(o) });
+        const err = (status, code, message, details) => json(status, { code, message, details: details || null, hint: null });
+        if (reg.control.rpcRetraso) await new Promise(r => setTimeout(r, reg.control.rpcRetraso));
+        const falla = reg.control.rpcFalla;
+        if (falla === 'red') return route.abort('failed');
+        if (falla === 'no-instalada') return err(404, 'PGRST202', `Could not find the function public.${fn} in the schema cache`);
+        if (falla === 'servidor') return route.fulfill({ status: 502, contentType: 'text/html', headers: cors, body: '<html>Bad gateway</html>' });
+        if (falla && typeof falla === 'object') return json(falla.status, falla.cuerpo);
+        if (!['lobo_restaurar_respaldo', 'lobo_empezar_de_cero'].includes(fn)) {
+          reg.noManejadas.push(`${req.method()} ${url.pathname}`);
+          return route.fulfill({ status: 404, contentType: 'application/json', body: '{"message":"no manejada en las pruebas"}' });
+        }
+        if (rolRpc === null) return err(401, '42501', `permission denied for function ${fn}`);
+        const contar = () => Object.fromEntries(TABLAS_LOADSTATE.map(t => [t, (datos[t] || []).length]));
+        const reponerSombra = t => { if (TABLAS_CON_CANDADO.includes(t)) sombra[t] = copiaProfunda(datos[t] || []); };
+        if (fn === 'lobo_restaurar_respaldo') {
+          if (rolRpc !== 'admin') return err(403, '42501', 'Solo el administrador puede restaurar un respaldo.', 'restaurar_solo_admin');
+          if (!cuerpoRpc || cuerpoRpc.p_confirmacion !== 'RESTAURAR') return err(400, '22023', 'Falta la palabra de confirmación (RESTAURAR).', 'restaurar_sin_confirmacion');
+          const rp = cuerpoRpc.p_respaldo;
+          const malo = !rp || rp.version !== 1 || typeof rp.tablas !== 'object' || typeof rp.conteos !== 'object'
+            || Object.keys(rp.tablas).some(t => !TABLAS_LOADSTATE.includes(t))
+            || Object.entries(rp.tablas).some(([t, f]) => !Array.isArray(f) || rp.conteos[t] !== f.length)
+            || TABLAS_LOADSTATE.some(t => !(t in rp.tablas) && !['config', 'pedidos_descuentos'].includes(t));
+          if (malo) return err(400, '22023', 'El archivo no es un respaldo completo de El Lobo (versión 1). No se cambió nada.', 'respaldo_invalido');
+          const antes = contar();
+          for (const [t, filas] of Object.entries(rp.tablas)) { datos[t] = copiaProfunda(filas); reponerSombra(t); }
+          return json(200, { ok: true, accion: 'restaurar', antes, despues: { ...contar(), ...(reg.control.rpcDespuesFalso || {}) }, restauradas: Object.keys(rp.tablas),
+                             sin_cambios: TABLAS_LOADSTATE.filter(t => !(t in rp.tablas)) });
+        }
+        if (rolRpc !== 'admin') return err(403, '42501', 'Solo el administrador puede empezar de cero.', 'cero_solo_admin');
+        if (!cuerpoRpc || cuerpoRpc.p_confirmacion !== 'BORRAR TODO') return err(400, '22023', 'Falta la palabra de confirmación (BORRAR TODO).', 'cero_sin_confirmacion');
+        const antes = contar();
+        for (const t of TABLAS_LOADSTATE) {
+          if (t === 'mesas') { datos.mesas = (datos.mesas || []).map(m => ({ ...m, estado: 'libre' })); continue; }
+          if (t === 'inventario' && !cuerpoRpc.p_borrar_inventario) continue;
+          datos[t] = []; reponerSombra(t);
+        }
+        return json(200, { ok: true, accion: 'empezar_de_cero', antes, despues: contar() });
+      }
+
       // ── /rest/v1/... ──
       const m = url.pathname.match(/^\/rest\/v1\/([^/]+)/);
       if (!m) {
@@ -202,7 +262,7 @@ async function abrirSistema(page, opciones = {}) {
       const rol = rolDelToken(bearer);          // null = llave pública sola / token inválido
       reg.rest.push({ rol, metodo, tabla });
 
-      if ((opciones.tablasFaltantes || []).includes(tabla)) {
+      if (reg.control.tablasFaltantes.includes(tabla)) {
         reg.peticiones.push(tabla);
         return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: '42P01', message: `relation "public.${tabla}" does not exist` }) });
       }

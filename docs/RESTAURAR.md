@@ -1,11 +1,79 @@
 # Restaurar un respaldo de El Lobo (y comprobar que sirve)
 
-> **Un respaldo que nunca se ha restaurado no es un respaldo, es una esperanza.** Esta guía sirve para dos cosas:
-> **(1) el ensayo:** restaurar el último respaldo en un proyecto de pruebas y comprobar que todo quedó igual;
-> **(2) el desastre:** reconstruir El Lobo en un proyecto nuevo si el de producción se pierde.
-> **Nunca se restaura encima del proyecto de producción.** Los programas se niegan a hacerlo.
+> **Un respaldo que nunca se ha restaurado no es un respaldo, es una esperanza.** Esta guía tiene dos caminos:
+> **(A) el camino normal, desde el propio sistema** — dos botones en **Datos**: «♻️ Restaurar desde un respaldo» y «🧹 Empezar de cero»;
+> **(B) el camino técnico, desde Supabase** — para el ensayo estricto fila por fila y como plan B si algo se complica.
 
-Leyenda: 🗄 Supabase · 💬 el chat con Claude · 🖥 tu computador
+Leyenda: 🗄 Supabase · 💬 el chat con Claude · 🖥 tu computador · 🌐 el sistema
+
+## ¿Qué necesito hacer?
+
+| Situación | Qué hacer |
+|---|---|
+| Se dañó o se borró información y quiero **volver a un respaldo** | **Camino A**, «Restaurar desde un respaldo» |
+| Terminé las pruebas / quiero **entregar el sistema vacío** | **Camino A**, «Empezar de cero» |
+| Quiero **llenar la réplica de pruebas** con datos reales recientes | Hacer un respaldo en el sistema real y **restaurarlo con el botón en la réplica** (Camino A, en la réplica) |
+| **Se perdió el proyecto de Supabase** completo | «Si el proyecto de Supabase se pierde» (abajo): proyecto nuevo + unos SQL + el botón |
+| Se dañó algo **de Supabase por dentro** (permisos, estructura) | Eso es técnico: avisa a quien mantiene el sistema |
+
+# Camino A — Desde el sistema (el normal)
+
+## Una sola vez: instalar las dos funciones en Supabase
+
+Los botones llaman a dos funciones de la base de datos que **solo puede usar el administrador** (`lobo_restaurar_respaldo` y `lobo_empezar_de_cero`). Se instalan una vez:
+
+1. 🗄 SQL Editor → **New query** → pega todo `sql/restaurar_respaldo.sql` → **Run**. Es seguro correrlo más de una vez y **no toca ningún dato**.
+2. Debe terminar con una fila: `funciones = 2 · anon_puede_ejecutar = 0 · bitacora = 1`.
+3. Para deshacerlo: `sql/rollback_restaurar.sql` (quita las dos funciones; la bitácora se conserva).
+
+Para correrlo en **producción**, hazlo con el restaurante sin servicio, como cualquier SQL (`docs/RUNBOOK.md`). Requiere que `sql/rls_seguridad.sql` ya esté instalado (si no, se detiene con un mensaje claro y no cambia nada).
+
+## «♻️ Restaurar desde un respaldo»
+
+🌐 Entra como **administrador** → pestaña **Datos** → tarjeta «Restaurar desde un respaldo».
+
+> **Usa solo el archivo original** `ElLobo_respaldo_completo_AAAA-MM-DD.json` que crea «Hacer respaldo completo». **No lo abras, no lo edites, no lo guardes con otro programa** (Excel, Word, Bloc de notas…) ni le cambies el formato: un archivo modificado se rechaza y, si lo cambias a mano, pierdes esos datos. El Excel de «Exportar datos» **no sirve** para restaurar.
+
+1. Elige el archivo `.json`. El sistema lo **revisa** (que sea un respaldo de El Lobo, completo, sin recortes ni modificaciones) y te muestra: *«Hoy el sistema tiene X pedidos; el respaldo trae Y»*, tabla por tabla, y que **lo posterior al respaldo se perderá**.
+2. Pulsa **«Restaurar este respaldo…»**. Se abre una ventana roja que repite lo que va a pasar.
+3. Escribe la palabra **RESTAURAR** y **tu contraseña de administrador**. (La contraseña se comprueba con el servicio de acceso; no se guarda ni se envía a la función de restaurar.)
+4. Pulsa **«Restaurar ahora»**. El sistema, en este orden:
+   1. comprueba tu contraseña;
+   2. **descarga una copia de lo que hay ahora** (`ElLobo_respaldo_ANTES_de_restaurar_AAAA-MM-DD_HHMM.json`). Si esa copia no se puede guardar completa, **se detiene y no cambia nada**;
+   3. recién entonces le pide a la base que **reemplace todo** por el contenido del archivo, **todo o nada** (si algo falla a la mitad, queda exactamente como estaba);
+   4. vuelve a leer todo, y te muestra el antes y el ahora de cada tabla.
+5. **Guarda la copia «ANTES_de…»** fuera del repositorio hasta que confirmes que todo está bien. Es tu botón de «deshacer»: se restaura con este mismo procedimiento.
+
+Hazlo con el restaurante **sin servicio** y sin nadie más usando el sistema. Los **usuarios y contraseñas no cambian** (no están en el respaldo). Las **mesas** quedan como las trae el respaldo.
+
+**No hay duplicados ni mezcla:** la restauración **reemplaza** (vacía las tablas y carga el archivo); nunca suma. Si lo repites con el mismo archivo, el resultado es el mismo.
+
+Un respaldo **viejo** que no trae `config` o `pedidos_descuentos` (tablas que se agregaron después) se acepta: esas dos tablas se dejan como están y la pantalla lo dice («no viene: se deja igual»).
+
+## «🧹 Empezar de cero»
+
+🌐 **Datos** → tarjeta roja «Empezar de cero». Sirve, por ejemplo, para terminar las pruebas y empezar a trabajar de verdad.
+
+- Al pulsar, un **cartel rojo** explica todas las consecuencias: se borran **todos** los pedidos, fiados y abonos, cierres, aperturas, gastos, egresos, caja, ingresos extra, descuentos, notas, consumos, la auditoría de eliminados y la fecha del último respaldo. **No se puede deshacer** (salvo restaurando la copia que se descarga) y **se recomienda hacer antes un respaldo completo**.
+- Se **conservan** las **mesas** (quedan libres) y, salvo que marques la casilla, el **inventario**. Los usuarios y contraseñas no cambian.
+- Exige **siempre** tu contraseña de administrador y escribir **BORRAR TODO**.
+- Antes de borrar, igual que al restaurar, **descarga una copia de todo** (`ElLobo_respaldo_ANTES_de_empezar_de_cero_…json`); si no se puede guardar, no borra nada.
+
+## Qué pasa si algo sale mal (Camino A)
+
+| Mensaje | Qué significa | Qué hacer |
+|---|---|---|
+| «Este archivo no se puede restaurar: …» | No es el `.json` original del respaldo, o se modificó o se cortó. **No se tocó nada.** | Usa el archivo tal como lo descargó el sistema, o elige otro respaldo. |
+| «La contraseña no es correcta» | La contraseña no es la del administrador con sesión. No se tocó nada. | Vuelve a escribirla. |
+| «No se pudo guardar la copia de lo que hay ahora… No se cambió nada» | No se pudo bajar todo para la copia previa (conexión). | Revisa la conexión y repite. |
+| «Falta instalar la función de restauración en Supabase» | No se corrió `sql/restaurar_respaldo.sql` en este proyecto. | Córrelo (arriba) y repite. |
+| «La base tardó demasiado y canceló la operación. No se cambió nada» | El respaldo es muy grande para el límite de tiempo. | Avisa a quien mantiene el sistema. |
+| «Se cortó la conexión… **No se sabe si alcanzó a terminar**» | La conexión se cayó justo durante el reemplazo. | **No lo repitas todavía.** Recarga la página y mira en Datos cuántos pedidos hay: si coincide con el respaldo, terminó; si coincide con lo anterior, no se cambió nada. Tu copia «ANTES_de…» ya está descargada. |
+| «Tu usuario no tiene permiso» | Solo el rol `admin` puede (lo exige la base, no solo la pantalla). | Entra con un usuario administrador. |
+
+Cada restauración y cada «empezar de cero» deja una línea en una bitácora que **solo se ve desde Supabase** (`seguridad.restauraciones`: quién, cuándo, y cuántas filas había antes y después).
+
+# Camino B — Desde Supabase (técnico: ensayo estricto, plan B)
 
 ## Qué hay (las piezas)
 
@@ -69,13 +137,14 @@ El programa se niega, sin tocar nada, si: la llave es la pública, es del proyec
 2. 🗄 El proyecto de pruebas tiene **copias de los datos reales** (clientes que fían, ventas). Cuando termines: Project Settings → General → **Delete project**. Si vas a conservarlo, trátalo con el mismo cuidado que producción.
 3. Si usaste la Opción B, elimina la variable de entorno de la llave.
 
-## Si el proyecto de producción se pierde (desastre real)
+## Si el proyecto de Supabase se pierde (desastre real)
 
 1. 🗄 Crea un proyecto **nuevo** (el nombre y la dirección serán distintos).
-2. Pasos 2 y 3 de arriba en el proyecto nuevo, con el **último respaldo** que tengas.
-3. 🗄 Corre `sql/rls_seguridad.sql`, luego `sql/candado_dias.sql` (el candado de días), y recrea los usuarios (`admin` de cada dueño, `caja`, `respaldo`) con `docs/DESPLIEGUE_SEGURIDAD.md`. **Los usuarios y contraseñas NO están en el respaldo**: hay que crearlos de nuevo.
+2. 🗄 En su SQL Editor, en este orden: `sql/esquema_completo.sql` (crea las tablas; los pares «real / esperado» deben coincidir), `sql/rls_seguridad.sql`, `sql/candado_dias.sql` y `sql/restaurar_respaldo.sql`.
+3. 🗄 Crea los usuarios (`admin` de cada dueño, `caja`, `respaldo`) con `docs/DESPLIEGUE_SEGURIDAD.md`. **Los usuarios y contraseñas NO están en el respaldo**: hay que crearlos de nuevo.
 4. 💬 Claude actualiza la dirección y la llave **pública** en el sistema (`SB_URL`, `SB_KEY`) con un pull request, y el enlace permanente vuelve a funcionar. También actualiza la constante `REF_PRODUCCION` de `herramientas/restaurar_respaldo.py`.
-5. Se pierde lo ocurrido **después del último respaldo**: por eso el aviso en pantalla insiste en respaldar cada semana.
+5. 🌐 Entra como administrador → **Datos → Restaurar desde un respaldo** con el **último respaldo** que tengas. (Si prefieres el camino técnico, el Paso 3 de abajo carga el respaldo desde Supabase.)
+6. Se pierde lo ocurrido **después del último respaldo**: por eso el aviso en pantalla insiste en respaldar cada semana.
 
 ## Si algo sale mal
 

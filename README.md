@@ -16,7 +16,7 @@ Sistema propio del restaurante El Lobo (Montería, Colombia): pedidos, cobros, f
 | `Contabilidad/README.md` | Notas del módulo de descuentos y de las migraciones ya aplicadas. |
 | `Contabildad/` | **Solo redirección** del enlace viejo (escrito con "d" por error): lleva al sistema al instante, sin pantalla en medio. Pesa casi nada; si se borra, quien tenga guardado el enlace viejo dejará de poder abrirlo. |
 | `Menu/` | Solo el generador del menú del día (`Menú diario-El Lobo.html`, un HTML autónomo que la pestaña Menú del sistema carga en un iframe: **no se puede quitar**). Los materiales de diseño que había junto a él ya no se suben (están en `.gitignore`). |
-| `sql/` | Scripts para Supabase: `rls_seguridad.sql` (reglas de acceso), `rollback_rls.sql` (deshacerlas), `candado_dias.sql` (caja solo puede cambiar lo de hoy) y `rollback_candado.sql` (quitarlo), `matriz_permisos.json` (fuente de esas reglas), `consulta_esquema.sql` (saca la estructura de la base, solo lectura) y migraciones. |
+| `sql/` | Scripts para Supabase: `rls_seguridad.sql` (reglas de acceso), `rollback_rls.sql` (deshacerlas), `candado_dias.sql` (caja solo puede cambiar lo de hoy) y `rollback_candado.sql` (quitarlo), `matriz_permisos.json` (fuente de esas reglas), `consulta_esquema.sql` (saca la estructura de la base, solo lectura), `restaurar_respaldo.sql` (las dos funciones de los botones «Restaurar desde un respaldo» y «Empezar de cero», solo administrador) y `rollback_restaurar.sql` (quitarlas), y migraciones. |
 | `herramientas/` | `generar_rls.py` (SQL de seguridad desde la matriz de permisos) las de restauración: `esquema_a_sql.py`, `respaldo_a_sql.py`, `restaurar_respaldo.py` (ver `docs/RESTAURAR.md`) y `generar_copia_pruebas.py` (la copia de pruebas / réplica, ver `docs/PRUEBAS_REPLICA.md`). |
 | `tests/` | Pruebas automáticas (ver `tests/LEEME.md`). No se publican ni tocan datos reales. |
 | `docs/` | Documentación: `RUNBOOK.md` (operación diaria), `RESTAURAR.md` (restaurar un respaldo), `PRUEBAS_REPLICA.md` (la réplica de pruebas), `DESPLIEGUE_SEGURIDAD.md`, `MATRIZ_PERMISOS.md`, `ESPECIFICO_EL_LOBO.md`. |
@@ -53,7 +53,7 @@ El archivo `.gitignore` bloquea los casos comunes, pero no deshace lo que ya est
 ## Documentación
 
 - Operación del día a día, usuarios, respaldos y qué hacer si algo falla: [`docs/RUNBOOK.md`](docs/RUNBOOK.md)
-- Restaurar un respaldo (ensayo y desastre): [`docs/RESTAURAR.md`](docs/RESTAURAR.md)
+- Restaurar un respaldo con el botón de la pestaña Datos, empezar de cero, ensayo y desastre: [`docs/RESTAURAR.md`](docs/RESTAURAR.md)
 - La réplica de pruebas (probar cambios sin tocar el sistema real): [`docs/PRUEBAS_REPLICA.md`](docs/PRUEBAS_REPLICA.md)
 - Seguridad (usuarios y reglas de la base) paso a paso: [`docs/DESPLIEGUE_SEGURIDAD.md`](docs/DESPLIEGUE_SEGURIDAD.md)
 - Quién puede hacer qué: [`docs/MATRIZ_PERMISOS.md`](docs/MATRIZ_PERMISOS.md)

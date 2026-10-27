@@ -60,6 +60,15 @@ No hay respaldo automático: el que había se eliminó cuando se activó la segu
 
 **Datos → Exportar datos a Excel** es otra cosa: genera el Excel para analizar o alimentar el modelo financiero. **No es un respaldo** y no sirve para restaurar la base.
 
+### Restaurar un respaldo o empezar de cero (desde el propio sistema)
+
+En **Datos** (solo administrador) hay dos tarjetas, con el mismo archivo `.json` que crea «Hacer respaldo completo»:
+
+- **«♻️ Restaurar desde un respaldo»:** eliges el `.json`, el sistema lo revisa y te muestra «hoy hay X pedidos, el respaldo trae Y, perderás lo posterior»; para confirmar escribes **RESTAURAR** y tu contraseña. Antes de tocar nada descarga una copia de lo actual (`ElLobo_respaldo_ANTES_de_restaurar_…json`) y luego **reemplaza todo, todo o nada** (sin duplicados). **Usa solo el archivo original**: no lo abras ni lo edites ni lo guardes con otro programa.
+- **«🧹 Empezar de cero»:** borra todos los datos de trabajo (conserva mesas e inventario, salvo que marques la casilla, y los usuarios). Cartel rojo con las consecuencias, **BORRAR TODO** y tu contraseña, y también descarga antes una copia de todo.
+
+Hazlo siempre con el restaurante sin servicio. Requiere haber corrido una vez `sql/restaurar_respaldo.sql` (instala dos funciones que solo el administrador puede usar; deshacer: `sql/rollback_restaurar.sql`). Cada uso queda anotado en la bitácora `seguridad.restauraciones` (se lee desde Supabase). Guía completa y mensajes de error: [`docs/RESTAURAR.md`](RESTAURAR.md).
+
 > El plan gratuito de Supabase **no** incluye copias diarias propias. Un respaldo cuenta como *verificado* solo después de restaurarlo en un proyecto de pruebas. Guía paso a paso (ensayo y desastre): [`docs/RESTAURAR.md`](RESTAURAR.md).
 >
 > **Último ensayo de restauración: 27-oct-2026 — OK.** Respaldo usado: `ElLobo_respaldo_completo_2026-10-26.json` (generado el 26-oct ~10:32, no incluye lo posterior). Se restauró en el proyecto de pruebas `Lobo-Pruebas` (Opción A: `esquema_completo.sql`, los 9 archivos `ElLobo_restaurar_0N_de_09.sql` en orden, luego `rls_seguridad.sql` y `candado_dias.sql`). Resultado: **las 16 tablas con `OK`** (filas = esperado: pedidos 4145, cierres_dia 108, gastos_dia 372, egresos 166, aperturas_turno 111, movimientos_caja 37, pedidos_eliminados 50, mesas 15, clientes_fiado 10, abonos_fiado 19, notas_dia 22, pedidos_descuentos 8, config 1, inventario/consumos/ingresos_extra 0) y el **Tablero de septiembre 2026 de la copia de pruebas dio las mismas cifras que el de producción**. No se hizo la comparación fila por fila de la Opción B. La base de pruebas se conserva como réplica (`docs/PRUEBAS_REPLICA.md`).
@@ -117,6 +126,7 @@ El Excel (Datos → Excel) y el Tablero deben dar lo mismo, con **una diferencia
 | Síntoma | Qué hacer |
 |---|---|
 | Con el enlace viejo (`Contabildad`) la pantalla tarda un instante en cargar | Es solo una redirección al sistema. Para saltarla, guarda el enlace nuevo (la raíz del sitio: `https://luiscadlo.github.io/Restaurante-El-Lobo/`) y borra el viejo de favoritos. |
+| Se restauró y salió «Se cortó la conexión… No se sabe si alcanzó a terminar» | **No lo repitas.** Recarga y mira en Datos cuántos pedidos hay: si coincide con el respaldo, terminó; si no, no se cambió nada. La copia «ANTES_de…» ya se había descargado. Ver `docs/RESTAURAR.md`. |
 | Pantalla de entrada no deja pasar a nadie | ¿Se activó RLS sin crear usuarios con rol? Revisa el `select email, raw_app_meta_data ->> 'rol' from auth.users`. Último recurso: `sql/rollback_rls.sql`. |
 | La caja no puede cobrar tras un cambio | Puede ser un permiso faltante. Abre la consola (F12) y busca peticiones con error 403; pásaselas a Claude. Reversa: arriba. |
 | El aviso de respaldo sigue en pantalla | Entra como administrador → **Datos → Respaldo completo**. El aviso solo se apaga cuando bajaron **todas** las filas de todas las tablas; si sale un error de conteo, ese archivo no sirve: repite el respaldo y, si vuelve a fallar, pásale el mensaje a Claude. |

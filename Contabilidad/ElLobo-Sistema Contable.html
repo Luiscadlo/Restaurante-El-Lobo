@@ -386,6 +386,20 @@
     font-size: 20px; cursor: pointer;
   }
   .modal-field { margin-bottom: 14px; }
+  /* Restaurar desde un respaldo / Empezar de cero */
+  .rest-aviso  { background: rgba(232,184,75,0.08); border: 1px solid rgba(232,184,75,0.45); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: var(--text2); margin-bottom: 12px; line-height: 1.5; }
+  .rest-peligro{ background: rgba(224,92,92,0.08); border: 1px solid rgba(224,92,92,0.55); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: var(--text); margin-bottom: 14px; line-height: 1.5; }
+  .rest-ok     { background: rgba(76,175,125,0.08); border: 1px solid rgba(76,175,125,0.45); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: var(--text); margin: 10px 0; line-height: 1.5; }
+  .rest-error  { background: rgba(224,92,92,0.1); border: 1px solid var(--red); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: var(--text); margin: 10px 0; line-height: 1.5; }
+  .rest-aviso, .rest-peligro, .rest-ok, .rest-error { overflow-wrap: anywhere; }
+  .rest-aviso ul, .rest-peligro ul { margin: 6px 0 0 18px; padding: 0; }
+  .rest-aviso li, .rest-peligro li { margin-bottom: 4px; }
+  .rest-tabla  { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  .rest-tabla th, .rest-tabla td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: right; }
+  .rest-tabla th:first-child, .rest-tabla td:first-child { text-align: left; }
+  .rest-tabla th { color: var(--text3); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+  .rest-menos  { color: var(--red); font-weight: 700; }
+  .rest-mas    { color: var(--green); font-weight: 700; }
   .modal-field-label {
     font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
     color: var(--text3); font-family: 'Syne', sans-serif; font-weight: 600;
@@ -1731,9 +1745,33 @@
     <div class="panel" style="margin-bottom:20px;">
       <div class="panel-header"><div class="panel-title">💾 Respaldo completo (copia de seguridad)</div></div>
       <div class="panel-body">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Descarga un archivo <b>.json</b> con TODAS las tablas del sistema, completas (pedidos, egresos, cierres, caja, fiados, inventario, auditoría…). Es la copia que sirve para recuperar el sistema si algo falla (se restaura con <code>docs/RESTAURAR.md</code>). Hazlo <b>cada domingo</b> y guarda el archivo <b>fuera del repositorio</b> (que es público). Solo se registra como hecho si bajaron todas las filas.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Descarga un archivo <b>.json</b> con TODAS las tablas del sistema, completas (pedidos, egresos, cierres, caja, fiados, inventario, auditoría…). Es la copia que sirve para recuperar el sistema si algo falla (se restaura aquí mismo, con la tarjeta «Restaurar desde un respaldo» de abajo). Hazlo <b>cada domingo</b> y guarda el archivo <b>fuera del repositorio</b> (que es público). Solo se registra como hecho si bajaron todas las filas.</div>
         <div id="datos-respaldo-estado" style="font-size:12px;color:var(--text2);margin-bottom:14px;"></div>
         <button class="btn btn-primary" id="btn-respaldo-completo" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo completo (.json)</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:20px;" id="panel-restaurar">
+      <div class="panel-header"><div class="panel-title">♻️ Restaurar desde un respaldo</div></div>
+      <div class="panel-body">
+        <div class="rest-aviso">
+          <b>📌 Importante — usa solo el archivo original del respaldo.</b>
+          <ul>
+            <li>Solo sirve el archivo <b>.json</b> que crea «Hacer respaldo completo» (se llama <code>ElLobo_respaldo_completo_AAAA-MM-DD.json</code>). Ese es el único formato que entiende el sistema.</li>
+            <li><b>No lo abras ni lo edites ni lo guardes con otro programa</b> (Excel, Word, Bloc de notas…) y no le cambies el formato: un archivo modificado se rechaza y, si lo cambiaras a mano, perderías esos datos.</li>
+            <li>El Excel de «Exportar datos» <b>no sirve</b> para restaurar: es solo para análisis.</li>
+            <li>Restaurar <b>reemplaza todo</b> lo que hay ahora por lo que trae el archivo. Antes de tocar nada, el sistema te muestra qué cambia y descarga una copia de lo actual.</li>
+          </ul>
+        </div>
+        <input type="file" id="restaurar-archivo" accept=".json,application/json" onchange="elegirArchivoRestaurar(this)" style="margin-bottom:10px;max-width:100%;">
+        <div id="restaurar-resumen"></div>
+        <button class="btn btn-primary" id="btn-restaurar" disabled onclick="abrirRestaurar()" style="margin-top:10px;">♻️ Restaurar este respaldo…</button>
+      </div>
+    </div>
+    <div class="panel" style="margin-bottom:20px;border-color:rgba(224,92,92,0.5);" id="panel-cero">
+      <div class="panel-header"><div class="panel-title">🧹 Empezar de cero</div></div>
+      <div class="panel-body">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Borra los datos de trabajo (ventas, fiados, cierres, gastos, caja…) para empezar con el sistema vacío, por ejemplo al terminar las pruebas y salir a trabajar de verdad. Las mesas se conservan. <b>Es irreversible</b> (salvo restaurando un respaldo): antes de borrar, el sistema descarga una copia de todo lo actual y te pide la palabra de confirmación y tu contraseña.</div>
+        <button class="btn btn-danger" style="padding:10px 20px;font-size:12px;" onclick="abrirEmpezarDeCero()">🧹 Empezar de cero…</button>
       </div>
     </div>
     <div class="panel">
@@ -2007,6 +2045,31 @@
     <button class="modal-close" onclick="cerrarModalDescuento()">✕</button>
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--accent);margin-bottom:16px;">🏷 Descuento / promoción</div>
     <div id="descuento-modal-cuerpo"></div>
+  </div>
+</div>
+
+<!-- Modal: Restaurar desde un respaldo / Empezar de cero (solo administrador; no se cierra tocando afuera) -->
+<div id="modal-restauracion" class="modal-overlay" style="display:none;">
+  <div class="modal-box" style="max-width:580px;">
+    <div id="rest-titulo" style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--red);margin-bottom:14px;"></div>
+    <div id="rest-formulario">
+      <div id="rest-cuerpo"></div>
+      <div class="modal-field">
+        <div class="modal-field-label" id="rest-etq-palabra"></div>
+        <input type="text" id="rest-palabra" autocomplete="off" spellcheck="false" oninput="actualizarBotonRestauracion()" onkeydown="if(event.key==='Enter')confirmarRestauracion()" style="width:100%;">
+      </div>
+      <div class="modal-field">
+        <div class="modal-field-label">Tu contraseña de administrador</div>
+        <input type="password" id="rest-clave" autocomplete="off" oninput="actualizarBotonRestauracion()" onkeydown="if(event.key==='Enter')confirmarRestauracion()" style="width:100%;">
+      </div>
+      <div id="rest-error" class="rest-error" style="display:none;"></div>
+      <div id="rest-progreso" style="display:none;font-size:12px;color:var(--text2);margin:10px 0;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px;">
+        <button class="btn btn-outline" id="rest-cancelar" onclick="cerrarModalRestauracion()">Cancelar</button>
+        <button class="btn btn-primary" id="rest-confirmar" disabled onclick="confirmarRestauracion()"></button>
+      </div>
+    </div>
+    <div id="rest-resultado" style="display:none;"></div>
   </div>
 </div>
 
@@ -2606,6 +2669,7 @@ const TABS_ADMIN = ['dashboard', 'ingfin', 'egresos', 'caja', 'auditoria', 'dato
 // OJO: ocultar secciones es solo comodidad; lo que protege los datos son las reglas de la base (sql/).
 function sincronizarSesion() {
   adminAutenticado = esAdminActivo();
+  if (!adminAutenticado) limpiarRestauracion();   // nada del respaldo cargado queda en memoria sin administrador
   TABS_ADMIN.forEach(id => {
     const t = document.getElementById('tab-nav-' + id);
     if (t) t.style.display = adminAutenticado ? '' : 'none';
@@ -3327,28 +3391,38 @@ async function registrarUltimoRespaldo(valor) {
   } catch (e) { console.error(e); return false; }
 }
 
+// Baja TODAS las tablas (verificadas, una por una) y arma el respaldo: { version, generado_en, fecha, conteos, tablas }.
+// Lo usan el botón «Respaldo completo» y la copia de seguridad automática que se hace antes de restaurar o empezar
+// de cero. `textoProgreso(i, n, tabla)` devuelve el texto del aviso de avance. Si cualquier tabla falla, lanza el error.
+async function leerRespaldoCompleto(textoProgreso) {
+  const lista = TABLAS_RESPALDO.filter(t => !TABLAS_RESPALDO_OPCIONALES[t] || TABLAS_RESPALDO_OPCIONALES[t]());
+  const tablas = {}, conteos = {};
+  for (let i = 0; i < lista.length; i++) {
+    progresoRespaldo(textoProgreso(i + 1, lista.length, lista[i]));
+    tablas[lista[i]] = await descargarTablaVerificada(lista[i]);
+    conteos[lista[i]] = tablas[lista[i]].length;
+  }
+  return { lista, conteos, archivo: { version: 1, generado_en: new Date().toISOString(), fecha: today(), conteos, tablas } };
+}
+// Descarga el respaldo como archivo .json con ese nombre.
+function descargarRespaldo(archivo, nombre) {
+  const blob = new Blob([JSON.stringify(archivo, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = nombre;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 let respaldoEnCurso = false;
 async function respaldoCompleto() {
   if (respaldoEnCurso) { showToast('Ya hay un respaldo en curso…', 'info'); return; }
   respaldoEnCurso = true;
   try {
-    const lista = TABLAS_RESPALDO.filter(t => !TABLAS_RESPALDO_OPCIONALES[t] || TABLAS_RESPALDO_OPCIONALES[t]());
-    const tablas = {}, conteos = {};
-    for (let i = 0; i < lista.length; i++) {
-      progresoRespaldo(`💾 Respaldando ${i + 1}/${lista.length}: ${lista[i]}… (no cierres la página)`);
-      tablas[lista[i]] = await descargarTablaVerificada(lista[i]);
-      conteos[lista[i]] = tablas[lista[i]].length;
-    }
-    const fecha = today();
-    const generado_en = new Date().toISOString();
-    const blob = new Blob([JSON.stringify({ version: 1, generado_en, fecha, conteos, tablas }, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `ElLobo_respaldo_completo_${fecha}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const { lista, conteos, archivo } = await leerRespaldoCompleto((i, n, tabla) => `💾 Respaldando ${i}/${n}: ${tabla}… (no cierres la página)`);
+    descargarRespaldo(archivo, `ElLobo_respaldo_completo_${archivo.fecha}.json`);
 
-    const guardado = await registrarUltimoRespaldo({ generado_en, fecha, conteos });
+    const guardado = await registrarUltimoRespaldo({ generado_en: archivo.generado_en, fecha: archivo.fecha, conteos });
     progresoRespaldo(null);
     const filasTotal = Object.values(conteos).reduce((x, y) => x + y, 0);
     showToast(`✅ Respaldo completo descargado (${lista.length} tablas, ${filasTotal} filas)`, 'ok');
@@ -3370,6 +3444,371 @@ function pedirRespaldoCompleto() {
   if (!adminAutenticado) { showToast('🔒 El respaldo completo es solo para administradores', 'warning'); return; }
   respaldoCompleto();
 }
+// ── Restaurar desde un respaldo / Empezar de cero (solo administrador) ────────────────────────────
+// Lo hacen dos funciones de la base (sql/restaurar_respaldo.sql) que son TODO-O-NADA y que solo acepta el rol admin;
+// esta parte es la pantalla: valida el archivo, muestra qué cambia, pide la palabra y la contraseña, guarda una copia
+// de lo actual y recién entonces llama a la base. Guía: docs/RESTAURAR.md.
+const PALABRA_RESTAURAR = 'RESTAURAR';
+const PALABRA_EMPEZAR_DE_CERO = 'BORRAR TODO';
+// Tablas que un respaldo viejo puede no traer (la base deja esas tablas como están). Igual a c_opcionales de
+// sql/restaurar_respaldo.sql: una prueba automática vigila que coincidan.
+const TABLAS_OPCIONALES_EN_ARCHIVO = ['config', 'pedidos_descuentos'];
+const MAX_MB_RESPALDO = 100;
+const NOMBRES_TABLAS = {
+  pedidos: 'Pedidos y fiados', egresos: 'Egresos', inventario: 'Inventario', consumos: 'Consumos', gastos_dia: 'Gastos del turno',
+  mesas: 'Mesas', cierres_dia: 'Cierres de turno', aperturas_turno: 'Aperturas de turno', notas_dia: 'Notas del día',
+  movimientos_caja: 'Movimientos de caja', ingresos_extra: 'Ingresos extra', pedidos_eliminados: 'Pedidos eliminados (auditoría)',
+  clientes_fiado: 'Clientes de fiado', abonos_fiado: 'Abonos de fiado', pedidos_descuentos: 'Descuentos', config: 'Configuración'
+};
+let restaurarArchivo = null;        // { nombre, datos, actual } del archivo elegido y ya validado
+let restauracionEnCurso = false;
+let restModo = null;                // 'restaurar' | 'cero'
+
+const escRest = s => String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fechaHoraLegible = iso => { const d = new Date(iso); return iso && !isNaN(d) ? d.toLocaleString('es-CO') : '—'; };
+const nRest = n => (n === null || n === undefined) ? '—' : Number(n).toLocaleString('es-CO');
+
+// Revisa que el contenido sea un respaldo completo de El Lobo y que no esté dañado ni recortado ni modificado.
+// Devuelve la lista de problemas (vacía = bien). Es la misma revisión que repite la base antes de tocar nada.
+function validarRespaldoParaRestaurar(obj) {
+  const forma = x => x !== null && typeof x === 'object' && !Array.isArray(x);
+  if (!forma(obj)) return ['El archivo no tiene la forma de un respaldo de El Lobo.'];
+  const errores = [];
+  if (obj.version !== 1) errores.push('No es un respaldo completo de El Lobo (versión 1).');
+  if (!forma(obj.tablas)) errores.push('No trae las tablas del respaldo.');
+  if (!forma(obj.conteos)) errores.push('No trae los conteos del respaldo.');
+  if (errores.length) return errores;
+  for (const t of Object.keys(obj.tablas)) {
+    if (!TABLAS_RESPALDO.includes(t)) errores.push(`Trae una tabla que no es de El Lobo: «${t}».`);
+  }
+  for (const t of TABLAS_RESPALDO) {
+    const filas = obj.tablas[t];
+    if (filas === undefined) {
+      if (!TABLAS_OPCIONALES_EN_ARCHIVO.includes(t)) errores.push(`Le falta la tabla «${NOMBRES_TABLAS[t] || t}».`);
+      continue;
+    }
+    if (!Array.isArray(filas)) { errores.push(`«${NOMBRES_TABLAS[t] || t}» no es una lista de filas.`); continue; }
+    if (filas.some(f => !forma(f))) { errores.push(`«${NOMBRES_TABLAS[t] || t}» tiene filas dañadas.`); continue; }
+    if (obj.conteos[t] !== filas.length) {
+      errores.push(`«${NOMBRES_TABLAS[t] || t}»: el archivo dice que tiene ${nRest(obj.conteos[t])} filas pero trae ${nRest(filas.length)} (¿se modificó o se cortó?).`);
+    }
+  }
+  return errores;
+}
+
+// Cuántas filas tiene cada tabla AHORA en el sistema y la fecha del último pedido.
+async function consultarEstadoActual() {
+  const conteos = {};
+  await Promise.all(TABLAS_RESPALDO.map(async t => {
+    try {
+      const r = await sbFetch(`${SB_URL}/rest/v1/${t}?select=*&limit=1`, { headers: { 'Prefer': 'count=exact' } });
+      const total = r.ok ? parseInt((r.headers.get('content-range') || '').split('/')[1], 10) : NaN;
+      conteos[t] = Number.isFinite(total) ? total : null;
+    } catch (e) { conteos[t] = null; }
+  }));
+  let ultimaFecha = null;
+  try {
+    const r = await sbFetch(`${SB_URL}/rest/v1/pedidos?select=fecha&order=fecha.desc&limit=1`);
+    if (r.ok) { const f = await r.json(); ultimaFecha = f[0] ? f[0].fecha : null; }
+  } catch (e) { /* solo informativo */ }
+  return { conteos, ultimaFecha };
+}
+
+function mensajeRestaurar(tipo, html) {
+  const el = document.getElementById('restaurar-resumen');
+  if (el) el.innerHTML = html ? `<div class="${tipo}">${html}</div>` : '';
+}
+
+function limpiarRestauracion() {
+  restaurarArchivo = null;
+  const input = document.getElementById('restaurar-archivo');
+  if (input) input.value = '';
+  mensajeRestaurar('', '');
+  const btn = document.getElementById('btn-restaurar');
+  if (btn) btn.disabled = true;
+  const m = document.getElementById('modal-restauracion');
+  if (m && !restauracionEnCurso) { m.style.display = 'none'; }
+}
+
+async function elegirArchivoRestaurar(input) {
+  restaurarArchivo = null;
+  const btn = document.getElementById('btn-restaurar');
+  if (btn) btn.disabled = true;
+  mensajeRestaurar('', '');
+  const archivo = input.files && input.files[0];
+  if (!archivo) return;
+  const rechazar = texto => { mensajeRestaurar('rest-error', `❌ ${texto}`); input.value = ''; };
+  if (!adminAutenticado) { rechazar('Restaurar es solo para administradores.'); return; }
+  if (!/\.json$/i.test(archivo.name)) {
+    rechazar(`<b>«${escRest(archivo.name)}» no es un archivo .json.</b> Solo se puede restaurar el archivo <code>ElLobo_respaldo_completo_AAAA-MM-DD.json</code> que crea «Hacer respaldo completo». Los Excel (.xlsx) y los archivos de otros programas no sirven.`);
+    return;
+  }
+  if (archivo.size > MAX_MB_RESPALDO * 1024 * 1024) { rechazar(`El archivo pesa más de ${MAX_MB_RESPALDO} MB: no parece un respaldo de El Lobo.`); return; }
+  mensajeRestaurar('rest-aviso', '⏳ Revisando el archivo…');
+  let datos;
+  try {
+    datos = JSON.parse(await archivo.text());
+  } catch (e) {
+    rechazar('<b>No se pudo leer el archivo:</b> está dañado o no es el .json original del respaldo. Usa el archivo tal como lo descargó el sistema (sin abrirlo ni cambiarlo) o elige otro respaldo.');
+    return;
+  }
+  const errores = validarRespaldoParaRestaurar(datos);
+  if (errores.length) {
+    rechazar(`<b>Este archivo no se puede restaurar:</b><ul>${errores.map(e => `<li>${escRest(e)}</li>`).join('')}</ul>Usa el archivo tal como lo descargó el sistema, sin abrirlo ni cambiarlo.`);
+    return;
+  }
+  mensajeRestaurar('rest-aviso', '⏳ Consultando lo que hay ahora en el sistema…');
+  const actual = await consultarEstadoActual();
+  const sinDato = TABLAS_RESPALDO.filter(t => actual.conteos[t] === null && !TABLAS_OPCIONALES_EN_ARCHIVO.includes(t));
+  if (sinDato.length) {
+    rechazar(`No se pudo consultar lo que hay ahora en «${escRest(NOMBRES_TABLAS[sinDato[0]])}». Revisa la conexión e inténtalo de nuevo.`);
+    return;
+  }
+  restaurarArchivo = { nombre: archivo.name, datos, actual };
+  renderRestaurarResumen();
+}
+
+function ultimoPedidoDelArchivo(datos) {
+  return (datos.tablas.pedidos || []).reduce((m, p) => (p && p.fecha && p.fecha > m ? p.fecha : m), '') || null;
+}
+
+// Cuadro «ahora vs respaldo» (se muestra al elegir el archivo y otra vez al confirmar).
+function tablaComparacionRestaurar(datos, actual) {
+  const filas = TABLAS_RESPALDO.map(t => {
+    const ahora = actual.conteos[t];
+    const resp = datos.tablas[t] === undefined ? null : datos.tablas[t].length;
+    let cambio = '';
+    if (resp === null) cambio = '<span>no viene: se deja igual</span>';
+    else if (ahora !== null && resp !== ahora) {
+      const d = resp - ahora;
+      cambio = `<span class="${d < 0 ? 'rest-menos' : 'rest-mas'}">${d < 0 ? '−' : '+'}${nRest(Math.abs(d))}</span>`;
+    }
+    return `<tr><td>${escRest(NOMBRES_TABLAS[t] || t)}</td><td>${nRest(ahora)}</td><td>${resp === null ? '—' : nRest(resp)}</td><td>${cambio}</td></tr>`;
+  }).join('');
+  return `<table class="rest-tabla"><thead><tr><th>Tabla</th><th>Ahora</th><th>Respaldo</th><th>Cambio</th></tr></thead><tbody>${filas}</tbody></table>`;
+}
+
+function renderRestaurarResumen() {
+  const btn = document.getElementById('btn-restaurar');
+  if (btn) btn.disabled = !restaurarArchivo;
+  if (!restaurarArchivo) return;
+  const { datos, actual, nombre } = restaurarArchivo;
+  const ultimoResp = ultimoPedidoDelArchivo(datos);
+  const dias = datos.fecha ? diasDesdeFecha(datos.fecha) : null;
+  const antiguedad = dias === null || !Number.isFinite(dias) ? '' : dias === 0 ? ' (de hoy)' : dias === 1 ? ' (de ayer)' : ` (de hace ${dias} días)`;
+  const pedAhora = actual.conteos.pedidos, pedResp = (datos.tablas.pedidos || []).length;
+  mensajeRestaurar('rest-ok', `
+    ✅ <b>Archivo válido:</b> respaldo del <b>${escRest(datos.fecha || '—')}</b>${antiguedad} · generado el ${escRest(fechaHoraLegible(datos.generado_en))}
+    <div style="color:var(--text3);font-size:11px;">${escRest(nombre)}</div>
+    <div style="margin-top:8px;">Ahora el sistema tiene <b>${nRest(pedAhora)}</b> pedidos${actual.ultimaFecha ? ` (el último, del ${escRest(actual.ultimaFecha)})` : ''}.
+    El respaldo trae <b>${nRest(pedResp)}</b>${ultimoResp ? ` (el último, del ${escRest(ultimoResp)})` : ''}.
+    <b>Todo lo que se haya registrado después de ese respaldo se perderá.</b></div>
+    ${tablaComparacionRestaurar(datos, actual)}`);
+}
+
+// ── Ventana de confirmación ───────────────────────────────────────────────────────────────
+function abrirRestaurar() {
+  if (!adminAutenticado) { showToast('🔒 Restaurar es solo para administradores', 'warning'); return; }
+  if (!restaurarArchivo) { showToast('Primero elige el archivo .json del respaldo', 'info'); return; }
+  const { datos, actual } = restaurarArchivo;
+  document.getElementById('rest-cuerpo').innerHTML = `
+    <div class="rest-peligro"><b>⚠ Esto REEMPLAZA todo lo que hay ahora en el sistema por lo que trae el archivo del ${escRest(datos.fecha || '—')}.</b>
+      <ul>
+        <li>Lo registrado <b>después</b> de ese respaldo se pierde: hoy hay <b>${nRest(actual.conteos.pedidos)}</b> pedidos y el respaldo trae <b>${nRest((datos.tablas.pedidos || []).length)}</b>.</li>
+        <li>No se puede deshacer, salvo restaurando otro respaldo. Por eso, antes de tocar nada, el sistema <b>descarga automáticamente una copia de lo que hay ahora</b> (<code>ElLobo_respaldo_ANTES_de_restaurar_….json</code>): <b>guárdala</b>.</li>
+        <li>Hazlo con el restaurante sin servicio y sin nadie más usando el sistema.</li>
+        <li>Los usuarios y contraseñas no cambian. Se hace todo o nada: si algo falla, queda como estaba.</li>
+      </ul>
+    </div>
+    <details style="margin-bottom:14px;"><summary style="cursor:pointer;font-size:12px;color:var(--text2);">Ver el detalle tabla por tabla (ahora vs. respaldo)</summary>${tablaComparacionRestaurar(datos, actual)}</details>`;
+  abrirModalRestauracion('restaurar', '♻️ Restaurar desde un respaldo', PALABRA_RESTAURAR, '♻️ Restaurar ahora');
+}
+
+function abrirEmpezarDeCero() {
+  if (!adminAutenticado) { showToast('🔒 Empezar de cero es solo para administradores', 'warning'); return; }
+  document.getElementById('rest-cuerpo').innerHTML = `
+    <div class="rest-peligro"><b>⚠ Se borran TODOS los datos de trabajo del sistema. No se puede deshacer.</b>
+      <ul>
+        <li>Se borra: pedidos y ventas, fiados y abonos, cierres y aperturas de turno, gastos, egresos, movimientos de caja, ingresos extra, descuentos, notas, consumos, la auditoría de pedidos eliminados y la fecha del último respaldo.</li>
+        <li>Se conservan las <b>mesas</b> (quedan libres) y, si no marcas la casilla de abajo, el <b>inventario</b>. Los usuarios y contraseñas no cambian.</li>
+        <li><b>Se recomienda hacer un respaldo completo antes</b> (Datos → «Hacer respaldo completo»). Además, antes de borrar el sistema descarga automáticamente una copia de todo lo que hay ahora (<code>ElLobo_respaldo_ANTES_de_empezar_de_cero_….json</code>): <b>guárdala bien</b>; es la única forma de recuperar estos datos.</li>
+        <li>Hazlo con el restaurante sin servicio y sin nadie más usando el sistema.</li>
+      </ul>
+    </div>
+    <label style="display:flex;gap:10px;align-items:center;font-size:12px;text-transform:none;letter-spacing:0;font-family:inherit;font-weight:400;color:var(--text);margin-bottom:14px;cursor:pointer;">
+      <input type="checkbox" id="rest-inv" style="width:auto;flex:none;margin:0;padding:0;"> <span>Borrar también el inventario (productos y existencias)</span>
+    </label>`;
+  abrirModalRestauracion('cero', '🧹 Empezar de cero', PALABRA_EMPEZAR_DE_CERO, '🧹 Borrar todo y empezar de cero');
+}
+
+function abrirModalRestauracion(modo, titulo, palabra, textoBoton) {
+  restModo = modo;
+  document.getElementById('rest-titulo').textContent = titulo;
+  document.getElementById('rest-etq-palabra').textContent = `Escribe ${palabra} para confirmar`;
+  document.getElementById('rest-palabra').value = '';
+  document.getElementById('rest-clave').value = '';
+  const btn = document.getElementById('rest-confirmar');
+  btn.textContent = textoBoton;
+  btn.disabled = true;
+  document.getElementById('rest-error').style.display = 'none';
+  document.getElementById('rest-progreso').style.display = 'none';
+  document.getElementById('rest-resultado').style.display = 'none';
+  document.getElementById('rest-formulario').style.display = '';
+  document.getElementById('rest-cancelar').disabled = false;
+  document.getElementById('modal-restauracion').style.display = 'flex';
+  document.getElementById('rest-palabra').focus();
+}
+
+function cerrarModalRestauracion() {
+  if (restauracionEnCurso) return;             // en pleno proceso no se puede cerrar
+  document.getElementById('modal-restauracion').style.display = 'none';
+  document.getElementById('rest-palabra').value = '';
+  document.getElementById('rest-clave').value = '';
+}
+
+const palabraEsperada = () => restModo === 'cero' ? PALABRA_EMPEZAR_DE_CERO : PALABRA_RESTAURAR;
+const normalizarPalabra = s => String(s || '').trim().replace(/\s+/g, ' ').toUpperCase();
+function actualizarBotonRestauracion() {
+  const ok = normalizarPalabra(document.getElementById('rest-palabra').value) === palabraEsperada()
+    && document.getElementById('rest-clave').value.length > 0 && !restauracionEnCurso;
+  document.getElementById('rest-confirmar').disabled = !ok;
+}
+
+// El mensaje ya viene listo como HTML (con lo que venga de afuera escapado con escRest).
+function errorRestauracion(mensajeHtml) { return Object.assign(new Error(mensajeHtml), { esHtml: true }); }
+
+// Comprueba la contraseña del administrador con el servicio de acceso (sin tocar la sesión actual).
+async function verificarClaveAdmin(clave) {
+  const s = sesionActiva();
+  if (!s || s.rol !== 'admin') throw errorRestauracion('Esto es solo para administradores.');
+  let nueva;
+  try { nueva = await iniciarSesion(s.email, clave); }
+  catch (e) {
+    if (e.tipo === 'credenciales') throw errorRestauracion('La contraseña no es correcta.');
+    throw errorRestauracion(escRest(e.message));
+  }
+  cerrarEnServidor(nueva);                      // esa sesión de comprobación no hace falta
+  if (nueva.rol !== 'admin' || String(nueva.email).toLowerCase() !== String(s.email).toLowerCase()) {
+    throw errorRestauracion('Esa contraseña no corresponde al administrador de esta sesión.');
+  }
+}
+
+// Llama a la función de la base. Una respuesta con error de la función es un rechazo limpio (no se cambió nada);
+// si se corta la conexión no se sabe si llegó a terminar, y el mensaje lo dice.
+async function llamarFuncionRestauracion(nombre, cuerpo) {
+  let r;
+  try {
+    r = await sbFetch(`${SB_URL}/rest/v1/rpc/${nombre}`, { method: 'POST', body: JSON.stringify(cuerpo) });
+  } catch (e) {
+    throw errorRestauracion('Se cortó la conexión mientras se hacía. <b>No se sabe si alcanzó a terminar.</b> No lo repitas todavía: recarga la página y revisa en la pestaña Datos cuántos pedidos hay. Tu copia de lo anterior ya está descargada.');
+  }
+  let d = null;
+  try { d = await r.json(); } catch (e) { /* sin cuerpo */ }
+  if (r.ok) return d;
+  const codigo = d && d.code;
+  if (codigo === 'PGRST202' || (r.status === 404 && !codigo)) {
+    throw errorRestauracion('Falta instalar la función de restauración en Supabase (el archivo <code>sql/restaurar_respaldo.sql</code>). No se cambió nada.');
+  }
+  if (codigo === '42501') throw errorRestauracion('Tu usuario no tiene permiso para hacer esto (solo el administrador). No se cambió nada.');
+  if (codigo === '57014') throw errorRestauracion('La base tardó demasiado y canceló la operación. No se cambió nada. Inténtalo de nuevo o avísame.');
+  if (d && d.message && (codigo === '22023' || codigo === 'XX000' || /^[0-9A-Z]{5}$/.test(codigo || ''))) {
+    throw errorRestauracion(escRest(d.message));
+  }
+  if (r.status >= 500) {
+    throw errorRestauracion('El servidor no respondió bien. <b>No se sabe si alcanzó a terminar.</b> No lo repitas todavía: recarga la página y revisa en la pestaña Datos cuántos pedidos hay. Tu copia de lo anterior ya está descargada.');
+  }
+  throw errorRestauracion(escRest((d && d.message) || `Error ${r.status}`));
+}
+
+function paso(texto) {
+  const el = document.getElementById('rest-progreso');
+  if (el) { el.style.display = ''; el.textContent = texto; }
+}
+
+async function confirmarRestauracion() {
+  if (restauracionEnCurso) return;
+  if (!adminAutenticado) { showToast('🔒 Solo para administradores', 'warning'); return; }
+  const modo = restModo;
+  const archivoRest = restaurarArchivo;           // (si la sesión se pierde en pleno proceso, limpiarRestauracion() lo vacía)
+  if (modo === 'restaurar' && !archivoRest) return;
+  if (normalizarPalabra(document.getElementById('rest-palabra').value) !== palabraEsperada()) return;
+  const clave = document.getElementById('rest-clave').value;
+  if (!clave) return;
+  const errEl = document.getElementById('rest-error');
+  errEl.style.display = 'none';
+  restauracionEnCurso = true;
+  const inventarioTambien = modo === 'cero' && !!(document.getElementById('rest-inv') || {}).checked;
+  document.getElementById('rest-confirmar').disabled = true;
+  document.getElementById('rest-cancelar').disabled = true;
+  let copia = null;
+  try {
+    paso('1/3 · Comprobando tu contraseña…');
+    await verificarClaveAdmin(clave);
+    document.getElementById('rest-clave').value = '';
+
+    paso('2/3 · Guardando una copia de lo que hay ahora… (no cierres la página)');
+    try {
+      const r = await leerRespaldoCompleto((i, n, tabla) => `💾 Copia previa ${i}/${n}: ${tabla}… (no cierres la página)`);
+      const hora = new Date();
+      const sello = `${r.archivo.fecha}_${String(hora.getHours()).padStart(2, '0')}${String(hora.getMinutes()).padStart(2, '0')}`;
+      const nombre = `ElLobo_respaldo_ANTES_de_${modo === 'cero' ? 'empezar_de_cero' : 'restaurar'}_${sello}.json`;
+      descargarRespaldo(r.archivo, nombre);
+      copia = { nombre, conteos: r.conteos };
+    } catch (e) {
+      console.error(e);
+      throw errorRestauracion('No se pudo guardar la copia de lo que hay ahora (' + escRest(e.message) + '). <b>No se cambió nada.</b>');
+    } finally {
+      progresoRespaldo(null);
+    }
+
+    paso(modo === 'cero' ? '3/3 · Borrando…' : '3/3 · Restaurando… (puede tardar unos segundos)');
+    const resultado = modo === 'cero'
+      ? await llamarFuncionRestauracion('lobo_empezar_de_cero', { p_confirmacion: PALABRA_EMPEZAR_DE_CERO, p_borrar_inventario: inventarioTambien })
+      : await llamarFuncionRestauracion('lobo_restaurar_respaldo', { p_respaldo: archivoRest.datos, p_confirmacion: PALABRA_RESTAURAR });
+
+    const datosRestaurados = modo === 'restaurar' ? archivoRest.datos : null;
+    await loadState();                           // vuelve a leer todo y redibuja
+    mostrarResultadoRestauracion(modo, resultado, copia, datosRestaurados);
+  } catch (e) {
+    console.error(e);
+    errEl.innerHTML = `❌ ${e.esHtml ? e.message : escRest(e.message)}`;
+    errEl.style.display = '';
+    document.getElementById('rest-progreso').style.display = 'none';
+    document.getElementById('rest-cancelar').disabled = false;
+    document.getElementById('rest-clave').value = '';
+  } finally {
+    restauracionEnCurso = false;
+    actualizarBotonRestauracion();
+  }
+}
+
+function mostrarResultadoRestauracion(modo, resultado, copia, datosRestaurados) {
+  const antes = (resultado && resultado.antes) || {}, despues = (resultado && resultado.despues) || {};
+  // Comprobación extra: lo que quedó en cada tabla restaurada debe ser igual al archivo.
+  let discrepancias = [];
+  if (datosRestaurados) {
+    discrepancias = (resultado.restauradas || []).filter(t => despues[t] !== datosRestaurados.tablas[t].length);
+  }
+  const filas = TABLAS_RESPALDO.map(t => `<tr><td>${escRest(NOMBRES_TABLAS[t] || t)}</td><td>${nRest(antes[t])}</td><td>${nRest(despues[t])}</td></tr>`).join('');
+  const titulo = modo === 'cero' ? 'El sistema quedó vacío y listo para empezar.' : `Restauración completada: el sistema quedó igual al respaldo del ${escRest(datosRestaurados.fecha || '—')}.`;
+  document.getElementById('rest-titulo').style.color = 'var(--green)';
+  document.getElementById('rest-titulo').textContent = modo === 'cero' ? '🧹 Listo' : '♻️ Listo';
+  document.getElementById('rest-resultado').innerHTML = `
+    <div class="rest-ok">✅ <b>${titulo}</b></div>
+    ${discrepancias.length ? `<div class="rest-error">⚠ Ojo: en ${discrepancias.map(t => escRest(NOMBRES_TABLAS[t] || t)).join(', ')} la cantidad no coincide con el archivo. Avísame antes de seguir.</div>` : ''}
+    <table class="rest-tabla"><thead><tr><th>Tabla</th><th>Antes</th><th>Ahora</th></tr></thead><tbody>${filas}</tbody></table>
+    <div class="rest-aviso" style="margin-top:12px;">💾 La copia de lo que había antes se descargó como <b>${escRest(copia.nombre)}</b>. <b>Guárdala</b> en un lugar seguro (fuera del repositorio) hasta que confirmes que todo está bien.</div>
+    <div style="display:flex;justify-content:flex-end;"><button class="btn btn-primary" onclick="cerrarResultadoRestauracion()">Aceptar</button></div>`;
+  document.getElementById('rest-formulario').style.display = 'none';
+  document.getElementById('rest-resultado').style.display = '';
+}
+
+function cerrarResultadoRestauracion() {
+  document.getElementById('modal-restauracion').style.display = 'none';
+  document.getElementById('rest-titulo').style.color = 'var(--red)';
+  limpiarRestauracion();
+}
+
 // Días calendario entre dos fechas AAAA-MM-DD (sin depender de la zona horaria).
 function diasDesdeFecha(fechaStr, hoyStr = today()) {
   const aMs = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
