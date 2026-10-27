@@ -61,6 +61,8 @@ const b64url = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
  * @param opciones.sesionGuardada  sesión de caja guardada a medida (p. ej. vencida) — pisa a `usuario`
  * @param opciones.vigenciaToken   segundos de vida de los tokens nuevos (por defecto 3600)
  * @param opciones.esperarLogin   true → no espera a que cargue: espera la pantalla de entrada (p. ej. sesión guardada vencida y rechazada)
+ * @param opciones.url            página a abrir (por defecto el sistema real); p. ej. la copia de pruebas generada
+ * @param opciones.claveSesion    nombre con que la página guarda la sesión de caja (por defecto el de producción)
  * @param opciones.authFalla       'red' | '500' | '429' → el servicio de acceso falla así
  * @param opciones.rechazarRefresh true → toda renovación de token es rechazada (sesión revocada)
  * @param opciones.tablasFaltantes  tablas que "no existen" en Supabase (responden 404), p. ej. ['config']
@@ -79,6 +81,7 @@ async function abrirSistema(page, opciones = {}) {
     rest: [],        // { rol, metodo, tabla } de cada llamada a /rest/v1
     denegadas: [],   // 'rol OP tabla' que la matriz de permisos no deja hacer
     logoutScopes: [], // 'local' = cierra solo esta sesión (no saca a otros equipos)
+    hosts: new Set(), // direcciones de supabase.co con las que habló la página
     tokens: {},      // lo último emitido por correo (para inspeccionar)
     // Interruptores que una prueba puede mover EN MEDIO de la prueba:
     control: { rechazarRefresh: !!opciones.rechazarRefresh, authFalla: opciones.authFalla || null, ahora: fecha },
@@ -141,13 +144,14 @@ async function abrirSistema(page, opciones = {}) {
       try {
         if (!sessionStorage.getItem('__prueba_sembrada')) { localStorage.setItem(clave, valor); sessionStorage.setItem('__prueba_sembrada', '1'); }
       } catch (e) {}
-    }, ['ellobo.sesion.caja.v1', JSON.stringify(guardada)]);
+    }, [opciones.claveSesion || 'ellobo.sesion.caja.v1', JSON.stringify(guardada)]);
   }
 
   await page.route(/^https?:\/\//, async route => {
     const req = route.request();
     const url = new URL(req.url());
     if (url.hostname.endsWith('supabase.co')) {
+      reg.hosts.add(url.hostname);
       const cors = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'Content-Range' };
 
       // ── /auth/v1/... ──
@@ -270,7 +274,7 @@ async function abrirSistema(page, opciones = {}) {
     return route.fulfill({ status: 200, contentType: tipo, body: '' });
   });
 
-  await page.goto(URL_HTML);
+  await page.goto(opciones.url || URL_HTML);
 
   if (usuario === 'admin' || (typeof usuario === 'string' && usuario.includes('@'))) {
     // Entra tecleando en la pantalla de entrada, como lo haría un dueño.

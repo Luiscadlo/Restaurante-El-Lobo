@@ -60,7 +60,7 @@ El programa se niega, sin tocar nada, si: la llave es la pública, es del proyec
 ## Paso 4 — Comprobar que el sistema funciona con los datos restaurados  *(opcional, recomendado)*
 
 1. 🗄 Corre `sql/rls_seguridad.sql` y después `sql/candado_dias.sql` en el proyecto de pruebas, y crea un usuario `admin` (ver `docs/DESPLIEGUE_SEGURIDAD.md`, pasos 1, 2 y 6b). Los datos ya están cargados: el candado de días solo limita al rol `caja`, no a la restauración.
-2. 💬 Pídele a Claude una copia del sistema apuntando al proyecto de pruebas (cambia solo `SB_URL` y la llave **pública** de ese proyecto). Guárdala **fuera** del repositorio y ábrela en tu computador. 🖥
+2. 💬 Pídele a Claude la copia de pruebas del sistema apuntando a ese proyecto (`herramientas/generar_copia_pruebas.py`: cambia solo `SB_URL` y la llave **pública** de ese proyecto y pone el cartel «PRUEBAS»; ver `docs/PRUEBAS_REPLICA.md`). Guárdala **fuera** del repositorio y ábrela en tu computador, o publícala en la réplica. 🖥
 3. Compara con producción: el **Tablero** de un mes (ingresos, egresos, resultado) y 2–3 cierres de días concretos deben dar **las mismas cifras**.
 
 ## Paso 5 — Anotar el resultado y limpiar
