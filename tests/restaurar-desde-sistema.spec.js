@@ -118,6 +118,8 @@ test.describe('archivo que NO se puede restaurar', () => {
     ['una lista en vez de un respaldo', () => archivo([1, 2, 3]), 'no tiene la forma de un respaldo'],
     ['un respaldo de otra versión', () => archivo({ ...respaldoViejo(), version: 2 }), 'versión 1'],
     ['un respaldo al que le cambiaron un conteo (modificado a mano)', () => archivo({ ...respaldoViejo(), conteos: { ...respaldoViejo().conteos, pedidos: 99 } }), 'Pedidos y fiados'],
+    ['un respaldo sin la sección de conteos', () => { const r = respaldoViejo(); delete r.conteos; return archivo(r); }, 'No trae los conteos'],
+    ['un respaldo al que le agregaron filas (el conteo dice menos)', () => { const r = respaldoViejo(); r.conteos.pedidos = 3; return archivo(r); }, 'se modificó o se cortó'],
     ['un respaldo al que le borraron filas', () => { const r = respaldoViejo(); r.tablas.pedidos = r.tablas.pedidos.slice(0, 2); return archivo(r); }, 'se modificó o se cortó'],
     ['un respaldo con una tabla ajena', () => archivo(respaldoDe({ ...copia(DATOS_BASE), usuarios: [] })), 'no es de El Lobo'],
     ['un respaldo al que le falta una tabla obligatoria', () => { const r = respaldoViejo(); delete r.tablas.egresos; return archivo(r); }, 'Le falta la tabla'],
@@ -152,6 +154,23 @@ test.describe('archivo que NO se puede restaurar', () => {
     await elegir(page, respaldoViejo());
     await expect(page.locator('#restaurar-resumen .rest-error')).toContainText('No se pudo consultar lo que hay ahora en «Egresos»');
     await expect(page.locator('#btn-restaurar')).toBeDisabled();
+  });
+
+  test('la extensión en mayúsculas (RESPALDO.JSON, como la escriben algunos equipos) sí se acepta', async ({ page }) => {
+    await abrirAdmin(page);
+    await page.setInputFiles('#restaurar-archivo', archivo(respaldoViejo(), 'RESPALDO.JSON'));
+    await expect(page.locator('#restaurar-resumen .rest-ok')).toBeVisible();
+  });
+
+  test('si ya había un archivo bueno y se elige uno malo, el bueno se descarta (no queda nada cargado)', async ({ page }) => {
+    await abrirAdmin(page);
+    await elegirValido(page);
+    await page.setInputFiles('#restaurar-archivo', archivo('hola', 'otro.txt'));
+    await expect(page.locator('#restaurar-resumen .rest-error')).toBeVisible();
+    await expect(page.locator('#btn-restaurar')).toBeDisabled();
+    expect(await page.evaluate(() => restaurarArchivo)).toBeNull();
+    await page.evaluate(() => abrirRestaurar());
+    await expect(page.locator('#modal-restauracion')).toBeHidden();
   });
 
   test('después de un archivo malo, uno bueno sí se acepta', async ({ page }) => {
@@ -349,6 +368,36 @@ test.describe('restaurar', () => {
     await expect(page.locator('#rest-confirmar')).toBeDisabled();
     await page.evaluate(() => { cerrarModalRestauracion(); confirmarRestauracion(); confirmarRestauracion(); });
     await expect(page.locator('#modal-restauracion')).toBeVisible();
+    await esperarResultado(page);
+    expect(reg.rpc.length).toBe(1);
+  });
+
+  test('confirmar a la fuerza (sin palabra, sin contraseña o sin archivo) no comprueba nada ni descarga ni llama a la base', async ({ page }) => {
+    const { reg, descargas } = await abrirAdmin(page);
+    await elegirValido(page);
+    await page.click('#btn-restaurar');
+    const intentar = async (palabra, clave) => {
+      await page.evaluate(([a, b]) => { document.getElementById('rest-palabra').value = a; document.getElementById('rest-clave').value = b; return confirmarRestauracion(); }, [palabra, clave]);
+    };
+    await intentar('RESTAURA', CLAVE_ADMIN);                         // palabra incompleta
+    await intentar('RESTAURAR', '');                                // sin contraseña
+    await page.evaluate(() => { restaurarArchivo = null; });        // sin archivo cargado
+    await intentar('RESTAURAR', CLAVE_ADMIN);
+    expect(reg.auth.filter(a => a.startsWith('password'))).toEqual([]);
+    expect(descargas.length).toBe(0);
+    expect(reg.rpc).toEqual([]);
+    expect(reg.datos.pedidos.length).toBe(11);
+  });
+
+  test('en pleno proceso, escribir en los campos no vuelve a prender el botón de confirmar', async ({ page }) => {
+    const { reg } = await abrirAdmin(page, { rpcRetraso: 1500 });
+    await elegirValido(page);
+    await page.click('#btn-restaurar');
+    await abrirYConfirmar(page);
+    await page.click('#rest-confirmar');
+    await expect(page.locator('#rest-progreso')).toContainText('3/3');
+    await page.fill('#rest-clave', 'otra-cosa');                    // dispara la revisión del botón
+    await expect(page.locator('#rest-confirmar')).toBeDisabled();
     await esperarResultado(page);
     expect(reg.rpc.length).toBe(1);
   });
