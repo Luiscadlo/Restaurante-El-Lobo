@@ -6,7 +6,7 @@ Leyenda: 🗄 Supabase · 🖥 GitHub / Claude Code · 🌐 el sistema en el nav
 
 | | Sistema real | Réplica de pruebas |
 |---|---|---|
-| Página | `luiscadlo.github.io/Restaurante-El-Lobo/` (rama `main`) | `luiscadlo.github.io/Restaurante-El-Lobo-Pruebas/` (repositorio aparte) |
+| Página | `luiscadlo.github.io/Restaurante-El-Lobo/` (rama `main`) | **Un archivo HTML en el computador del dueño** (no se publica en internet). Opcional: un repositorio aparte con su propio enlace |
 | Base de datos | Supabase de producción | Supabase **Lobo-Pruebas** (otro proyecto) |
 | Datos | Los reales | Una **copia de un respaldo** (o datos de ensayo) |
 | Usuarios | `admin`, `caja` | Otros usuarios, con otras contraseñas |
@@ -32,19 +32,19 @@ Lo que la herramienta **se niega a hacer**: apuntar a producción (por la direcc
 4. 🗄 **Reglas de seguridad:** pegar `sql/rls_seguridad.sql` → Run. Debe dar `0 · 0 · 0 · 64 · 0`.
 5. 🗄 **Candado de días:** pegar `sql/candado_dias.sql` → Run. Debe dar `candados = 7`.
 6. 🗄 **Usuarios:** Authentication → Users → Add user → *Create new user* (marcar *Auto Confirm User*): `admin@elobo.test` y `caja@elobo.test`, con contraseñas largas y distintas de las de producción. Luego, en el SQL Editor, darles su rol (`docs/DESPLIEGUE_SEGURIDAD.md`, Paso 2). Cerrar el registro público (Paso 3 de esa guía).
-7. 🖥 **Repositorio de la página de pruebas:** en GitHub, crear el repositorio **público** `Restaurante-El-Lobo-Pruebas` (vacío) y activar *Settings → Pages → Deploy from a branch → `main` / (root)*.
-8. 💬 **Generar y publicar la copia:** se le pasa a Claude la *Project URL* y la llave **anon** del proyecto de pruebas (Project Settings → API Keys → «Legacy API Keys» → anon public; son públicas, **nunca la service_role**). Claude ejecuta:
-   `python herramientas/generar_copia_pruebas.py --url https://xxxx.supabase.co --llave-publica eyJ… -o ../Restaurante-El-Lobo-Pruebas`
-   y sube el resultado al repositorio de pruebas (si Claude no tiene acceso a ese repositorio, entrega los archivos y se suben desde la web de GitHub: *Add file → Upload files*).
-9. 🌐 **Comprobar:** abrir el enlace de la réplica (1–2 minutos después de subir). Debe verse el cartel rojo; entrar con `caja` y con `admin`; el Tablero de un mes debe dar **las mismas cifras** que producción para ese mes (si se cargó un respaldo de hoy).
+7. 💬 **Generar la copia:** se le pasa a Claude la *Project URL* y la llave **anon** del proyecto de pruebas (Project Settings → API Keys → «Legacy API Keys» → anon public; son públicas, **nunca la service_role**). Claude ejecuta:
+   `python herramientas/generar_copia_pruebas.py --url https://xxxx.supabase.co --llave-publica eyJ… -o CARPETA_FUERA_DEL_REPOSITORIO`
+   y entrega **un solo archivo HTML**. **Es la opción que usa El Lobo:** el dueño lo guarda en su computador y lo abre con doble clic (en Chrome). No hace falta repositorio ni enlace público, porque las pruebas las hace una sola persona. Limitaciones: es una foto del sistema del momento en que se generó (cuando hay un cambio que probar, Claude entrega un archivo nuevo) y, abierta como archivo, la pestaña Menú no carga.
+8. 🖥 *(Opcional, solo si algún día se quiere un enlace propio o más de una persona prueba)* **Publicarla:** crear el repositorio **público** `Restaurante-El-Lobo-Pruebas` (vacío), activar *Settings → Pages → Deploy from a branch → `main` / (root)* y subir lo que genera la herramienta (con `-o ../Restaurante-El-Lobo-Pruebas`; si Claude no tiene acceso a ese repositorio, se suben los archivos desde la web de GitHub: *Add file → Upload files*). Quedaría en `luiscadlo.github.io/Restaurante-El-Lobo-Pruebas/`.
+9. 🌐 **Comprobar:** abrir la copia (o el enlace, si se publicó). Debe verse el cartel rojo; entrar con `caja` y con `admin`; el Tablero de un mes completo debe dar **las mismas cifras** que producción para ese mes (si se cargó un respaldo).
 
 ## Flujo de cada cambio
 
 1. 💬 Claude hace el cambio en una rama y corre todas las pruebas automáticas, como siempre.
-2. 💬 Claude genera la copia de pruebas **desde esa rama** y la publica en la réplica. Si el cambio trae **SQL**, también se corre primero en el SQL Editor del proyecto **Lobo-Pruebas** (nunca primero en producción).
+2. 💬 Claude genera la copia de pruebas **desde esa rama** y se la entrega al dueño (o la publica, si hay repositorio de pruebas). Si el cambio trae **SQL**, también se corre primero en el SQL Editor del proyecto **Lobo-Pruebas** (nunca primero en producción).
 3. 🌐 Se prueba en la réplica con los datos copiados, a cualquier hora, sin afectar el servicio. Para probar el candado de días, el cierre de la cena o el cambio de las 9:00 a. m. se usa el reloj real: la réplica tiene el mismo candado.
 4. 🖥 Si funciona: se **fusiona el pull request** a `main` (el sistema real se actualiza en 1–2 minutos) y, si había SQL, se corre en producción con el restaurante sin servicio, como siempre (`docs/RUNBOOK.md`).
-5. 💬 Claude deja la réplica igual que `main` (genera de nuevo la copia desde `main`) para que no queden pruebas viejas publicadas.
+5. 💬 Claude entrega de nuevo la copia generada desde `main` (y la republica, si hay repositorio de pruebas) para que no quede una copia vieja con una prueba que ya pasó.
 6. Si no funciona: se corrige en la rama y se repite desde el paso 2. Producción nunca se enteró.
 
 **Regla:** cambios de pantalla pequeños (un texto, un color) pueden ir directo con las pruebas automáticas; todo lo que toque **SQL, permisos, cierres, fiados o cálculos de plata** pasa antes por la réplica.
