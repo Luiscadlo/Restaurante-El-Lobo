@@ -376,6 +376,7 @@ test.describe('restaurar', () => {
     const { reg, descargas } = await abrirAdmin(page);
     await elegirValido(page);
     await page.click('#btn-restaurar');
+    reg.auth.length = 0;                                            // (la entrada del administrador al abrir el sistema ya quedó anotada)
     const intentar = async (palabra, clave) => {
       await page.evaluate(([a, b]) => { document.getElementById('rest-palabra').value = a; document.getElementById('rest-clave').value = b; return confirmarRestauracion(); }, [palabra, clave]);
     };
