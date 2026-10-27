@@ -317,6 +317,13 @@ def test_cada_rechazo_trae_su_propio_motivo_claro(cluster, db, nombre):
     assert "No se cambió nada" in res[3]
 
 
+def test_una_fila_que_no_es_un_objeto_se_rechaza_por_eso_y_no_por_otra_causa(cluster, db):
+    # Sin esta revisión el archivo igual se rechazaría más adelante («ninguna columna conocida»), con el mismo código:
+    # se exige el mensaje propio, que es el que entiende quien lo lee.
+    res = restaurar(cluster, db, casos_malos()["fila que no es objeto"])
+    assert res[0] == "error" and res[2] == "respaldo_invalido" and "filas que no son válidas" in res[3], res
+
+
 @pytest.mark.parametrize("tabla", [t for t in TABLAS if t not in ("config", "pedidos_descuentos")])
 def test_a_cada_tabla_obligatoria_le_hace_falta_estar_en_el_archivo(cluster, db, tabla):
     r = respaldo_ejemplo()
