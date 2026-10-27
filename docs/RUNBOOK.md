@@ -62,7 +62,7 @@ No hay respaldo automático: el que había se eliminó cuando se activó la segu
 
 > El plan gratuito de Supabase **no** incluye copias diarias propias. Un respaldo cuenta como *verificado* solo después de restaurarlo en un proyecto de pruebas. Guía paso a paso (ensayo y desastre): [`docs/RESTAURAR.md`](RESTAURAR.md).
 >
-> **Último ensayo de restauración:** _pendiente_ (anota aquí la fecha, el respaldo usado y el resultado cuando se haga).
+> **Último ensayo de restauración: 27-oct-2026 — OK.** Respaldo usado: `ElLobo_respaldo_completo_2026-10-26.json` (generado el 26-oct ~10:32, no incluye lo posterior). Se restauró en el proyecto de pruebas `Lobo-Pruebas` (Opción A: `esquema_completo.sql`, los 9 archivos `ElLobo_restaurar_0N_de_09.sql` en orden, luego `rls_seguridad.sql` y `candado_dias.sql`). Resultado: **las 16 tablas con `OK`** (filas = esperado: pedidos 4145, cierres_dia 108, gastos_dia 372, egresos 166, aperturas_turno 111, movimientos_caja 37, pedidos_eliminados 50, mesas 15, clientes_fiado 10, abonos_fiado 19, notas_dia 22, pedidos_descuentos 8, config 1, inventario/consumos/ingresos_extra 0) y el **Tablero de septiembre 2026 de la copia de pruebas dio las mismas cifras que el de producción**. No se hizo la comparación fila por fila de la Opción B. La base de pruebas se conserva como réplica (`docs/PRUEBAS_REPLICA.md`).
 
 ## Desplegar un cambio al sistema
 
@@ -125,6 +125,6 @@ El Excel (Datos → Excel) y el Tablero deben dar lo mismo, con **una diferencia
 
 ## Lo que está pendiente (fuera de este manual)
 
-- Ensayo de restauración en un proyecto aparte: la guía y las herramientas ya existen (`docs/RESTAURAR.md`); la consulta de esquema ya se corrió (2026-10-24) y el ensayo sobre ese esquema real, con datos de ejemplo, pasa en un Postgres de prueba (`tests/python/test_ensayo_esquema_real.py`); falta hacer el ensayo en un proyecto de Supabase aparte con un respaldo real.
+- ~~Ensayo de restauración en un proyecto aparte~~ — hecho el 27-oct-2026 con un respaldo real (ver «Respaldos»). Repetirlo cuando cambie la estructura de la base o al menos una vez al año.
 - Confirmación del contador sobre impuestos y facturación electrónica.
 - Decidir si algún día se automatiza el respaldo (hoy es manual cada domingo; el usuario `respaldo` de solo lectura ya está previsto para eso).
