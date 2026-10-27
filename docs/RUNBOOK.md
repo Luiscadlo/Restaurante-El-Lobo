@@ -66,7 +66,7 @@ No hay respaldo automático: el que había se eliminó cuando se activó la segu
 
 ## Desplegar un cambio al sistema
 
-1. 🖥 El cambio llega como **pull request** (nunca directo a `main`).
+1. 🖥 El cambio llega como **pull request** (nunca directo a `main`). Si toca SQL, permisos, cierres, fiados o cálculos de plata, se prueba **antes** en la réplica de pruebas (`docs/PRUEBAS_REPLICA.md`).
 2. 🖥 Revisa los archivos cambiados y que las **pruebas estén en verde** (`npm test` y `npm run test:motor`).
 3. Si el cambio toca la base de datos (un `.sql`), **córrelo en Supabase antes de fusionar** y haz un respaldo primero.
 4. 🖥 Fusiona (*Merge pull request*). Anota el identificador (hash) del merge.
