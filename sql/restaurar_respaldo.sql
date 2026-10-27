@@ -225,7 +225,8 @@ begin
   from unnest(c_tablas) x
   where x <> 'mesas' and (x <> 'inventario' or coalesce(p_borrar_inventario, false));
   execute 'truncate table ' || v_lista || ' restart identity';
-  update public.mesas set estado = 'libre', updated_at = now();
+  -- «where true»: Supabase rechaza desde la app un UPDATE sin WHERE (seguro anti-accidentes); aquí sí se quieren todas las mesas.
+  update public.mesas set estado = 'libre', updated_at = now() where true;
 
   foreach t in array c_tablas loop
     execute format('select count(*) from public.%I', t) into v_n;

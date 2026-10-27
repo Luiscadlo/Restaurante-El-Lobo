@@ -19,6 +19,7 @@ Si no hay PostgreSQL instalado, se saltan solas.   Correr:  python -m pytest tes
 """
 import json
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -105,12 +106,25 @@ def sembrar_base_actual(cluster, db):
     """)
 
 
+def _hay_safeupdate():
+    """Supabase carga en sus conexiones de la API la extensión «pg-safeupdate»: un UPDATE o DELETE SIN WHERE se rechaza
+    («UPDATE requires a WHERE clause»). Si esa librería está compilada en este PostgreSQL, las llamadas la usan igual."""
+    pg_config = shutil.which("pg_config") or next(iter(sorted(Path("/usr/lib/postgresql").glob("*/bin/pg_config"), reverse=True)), None)
+    if not pg_config:
+        return False
+    carpeta = subprocess.run([str(pg_config), "--pkglibdir"], capture_output=True, text=True).stdout.strip()
+    return bool(carpeta) and (Path(carpeta) / "safeupdate.so").exists()
+
+
+SAFEUPDATE = _hay_safeupdate()
+
+
 def llamar(cluster, db, rol, sentencia, claims=None, rol_pg="authenticated", timeout=None):
     """Corre UNA llamada como ese rol (con su token) en una transacción que se confirma si sale bien.
     Devuelve ('ok', json) o ('error', sqlstate, detalle, mensaje)."""
     if claims is None:
         claims = {"role": rol_pg, "email": f"{rol or 'nadie'}@elobo.test", "app_metadata": ({"rol": rol} if rol else {})}
-    guion = ("\\set VERBOSITY verbose\nbegin;\n"
+    guion = ("\\set VERBOSITY verbose\n" + ("load 'safeupdate';\n" if SAFEUPDATE else "") + "begin;\n"
              f"do $c$ begin perform set_config('request.jwt.claims', {lit(json.dumps(claims))}, true); end $c$;\n"
              f"set local role {rol_pg};\n" + (f"set local statement_timeout = '{timeout}';\n" if timeout else "")
              + sentencia + "\ncommit;\n")
@@ -363,6 +377,24 @@ def test_ni_anon_ni_public_pueden_ejecutarlas_y_authenticated_si(cluster, db):
 def test_la_bitacora_tiene_la_seguridad_por_fila_activada(cluster, db):
     assert cluster.valor(db, "select c.relrowsecurity::text from pg_class c join pg_namespace n on n.oid = c.relnamespace "
                              "where n.nspname = 'seguridad' and c.relname = 'restauraciones'") == "true"
+
+
+def test_ningun_update_ni_delete_del_sql_va_sin_where():
+    # Supabase rechaza desde la app un UPDATE/DELETE sin WHERE («UPDATE requires a WHERE clause»): así falló «Empezar de cero»
+    # en la primera prueba real. Esta revisión corre siempre, aunque este PostgreSQL no tenga la librería (la de abajo).
+    texto = re.sub(r"--[^\n]*", "", RESTAURAR.read_text(encoding="utf-8"))
+    sentencias = [m.group(0) for m in re.finditer(r"(?im)^\s*(?:update\s+[\w.\"]+\s+set|delete\s+from\s+[\w.\"]+)[^;]*;", texto)]
+    assert sentencias, "la revisión no encontró ni un UPDATE: la expresión está mal"
+    for s in sentencias:
+        assert re.search(r"\bwhere\b", s, re.I), f"sin WHERE: {s.strip()}"
+
+
+@pytest.mark.skipif(not SAFEUPDATE, reason="este PostgreSQL no tiene compilada la librería safeupdate (pg-safeupdate)")
+def test_la_prueba_imita_el_seguro_de_supabase_contra_update_sin_where(cluster, db):
+    # Si esta falla, las demás pruebas dejaron de imitar a Supabase en este punto.
+    res = llamar(cluster, db, "admin", "update public.mesas set estado = 'libre';\nselect '{}';")
+    assert res[0] == "error" and "UPDATE requires a WHERE clause" in res[3], res
+    assert llamar(cluster, db, "admin", "update public.mesas set estado = 'libre' where true;\nselect '{}';")[0] == "ok"
 
 
 def test_el_sql_le_avisa_a_la_api_que_hay_funciones_nuevas():
