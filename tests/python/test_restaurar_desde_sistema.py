@@ -156,6 +156,8 @@ def cluster():
         c.psql_ok("plantilla_restaurar", ESQUEMA.read_text(encoding="utf-8"))
         c.psql_ok("plantilla_restaurar", RLS.read_text(encoding="utf-8"))
         c.psql_ok("plantilla_restaurar", CANDADO.read_text(encoding="utf-8"))
+        # Supabase da permiso de ejecutar a anon / authenticated en toda función que se cree en public: el SQL tiene que quitárselo a anon.
+        c.psql_ok("plantilla_restaurar", "alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;")
         c.psql_ok("plantilla_restaurar", RESTAURAR.read_text(encoding="utf-8"))
         yield c
     finally:
@@ -178,6 +180,7 @@ def test_el_admin_restaura_y_todo_queda_igual_al_archivo(cluster, db):
     out = res[1]
     assert out["ok"] is True and out["accion"] == "restaurar"
     assert out["antes"]["pedidos"] == 2 and out["despues"]["pedidos"] == 5
+    assert sorted(out["restauradas"]) == sorted(TABLAS) and out["sin_cambios"] == []
     assert conteos(cluster, db) == r["conteos"]
     # Lo de «hoy» ya no está (se REEMPLAZÓ, no se mezcló) y lo del archivo sí, con los mismos id.
     assert cluster.valor(db, "select count(*) from public.pedidos where id in (900, 901)") == "0"
@@ -214,6 +217,15 @@ def test_tambien_con_tablas_que_generan_el_id_siempre_como_en_produccion(cluster
     assert cluster.valor(db, "select string_agg(id::text, ',' order by id) from public.pedidos") == "1,2,3,4,5"
     cluster.psql_ok(db, "insert into public.pedidos (fecha, hora, turno, pedido, monto_unit, monto_almuerzo, monto_total) values ('2026-10-06', '12:00', 'almuerzo', 'nuevo', 1, 1, 1);")
     assert cluster.valor(db, "select max(id) from public.pedidos") == "6"
+
+
+def test_una_columna_calculada_que_viene_en_el_archivo_no_se_escribe_y_la_base_la_recalcula(cluster, db):
+    cluster.psql_ok(db, "alter table public.egresos add column doble numeric generated always as (monto * 2) stored;")
+    t = respaldo_ejemplo()["tablas"]["egresos"]
+    for f in t:
+        f["doble"] = 999999                                   # un respaldo hecho con esa columna la traería
+    assert restaurar(cluster, db, respaldo_ejemplo(tablas={"egresos": t}))[0] == "ok"
+    assert cluster.valor(db, "select doble::text from public.egresos where id = 1") == "240000"
 
 
 def test_una_base_vacia_se_restaura_igual(cluster, db):
@@ -291,6 +303,65 @@ def test_un_archivo_malo_se_rechaza_y_la_base_queda_exactamente_igual(cluster, d
     assert foto(cluster, db) == antes, f"{nombre}: la base cambió aunque la restauración falló"
 
 
+MOTIVOS = {"version distinta": "respaldo_invalido", "sin tablas": "respaldo_invalido", "sin conteos": "respaldo_invalido",
+           "conteo declarado distinto": "respaldo_conteo", "conteo faltante": "respaldo_conteo", "tabla ajena": "respaldo_tabla_desconocida",
+           "tabla obligatoria faltante": "respaldo_tabla_faltante", "tabla que no es lista": "respaldo_invalido",
+           "fila que no es objeto": "respaldo_invalido", "no es un objeto": "respaldo_invalido", "ninguna columna conocida": "respaldo_invalido"}
+
+
+@pytest.mark.parametrize("nombre", list(MOTIVOS))
+def test_cada_rechazo_trae_su_propio_motivo_claro(cluster, db, nombre):
+    res = restaurar(cluster, db, casos_malos()[nombre])
+    assert res[0] == "error" and res[1] == "22023", res
+    assert res[2] == MOTIVOS[nombre], f"{nombre}: el motivo era {res[2]!r}: {res[3]}"
+    assert "No se cambió nada" in res[3]
+
+
+@pytest.mark.parametrize("tabla", [t for t in TABLAS if t not in ("config", "pedidos_descuentos")])
+def test_a_cada_tabla_obligatoria_le_hace_falta_estar_en_el_archivo(cluster, db, tabla):
+    r = respaldo_ejemplo()
+    del r["tablas"][tabla], r["conteos"][tabla]
+    antes = foto(cluster, db)
+    res = restaurar(cluster, db, r)
+    assert res[0] == "error" and res[2] == "respaldo_tabla_faltante" and tabla in res[3], res
+    assert foto(cluster, db) == antes
+
+
+def test_si_la_base_descarta_filas_al_cargar_la_verificacion_lo_detecta_y_se_deshace_todo(cluster, db):
+    # Un disparador que «se traga» las filas de egresos: el archivo dice 2 y quedarían 0.
+    cluster.psql_ok(db, """
+        create function public.t_descarta() returns trigger language plpgsql as $$ begin return null; end $$;
+        create trigger t_descarta before insert on public.egresos for each row execute function public.t_descarta();
+    """)
+    antes = foto(cluster, db)
+    res = restaurar(cluster, db, respaldo_ejemplo())
+    assert res[0] == "error" and res[1] == "XX000" and res[2] == "restaurar_verificacion" and "egresos" in res[3], res
+    assert foto(cluster, db) == antes
+
+
+def test_las_funciones_corren_con_los_permisos_del_dueno_y_con_el_camino_de_busqueda_fijo(cluster, db):
+    filas = cluster.consulta(db, "select p.proname || '|' || p.prosecdef::text || '|' || coalesce(array_to_string(p.proconfig, ','), '-') "
+                                 "from pg_proc p join pg_namespace n on n.oid = p.pronamespace "
+                                 "where n.nspname = 'public' and p.proname in ('lobo_restaurar_respaldo', 'lobo_empezar_de_cero') order by 1")
+    assert filas == ["lobo_empezar_de_cero|true|search_path=pg_catalog, public", "lobo_restaurar_respaldo|true|search_path=pg_catalog, public"]
+
+
+def test_ni_anon_ni_public_pueden_ejecutarlas_y_authenticated_si(cluster, db):
+    for f in ("lobo_restaurar_respaldo", "lobo_empezar_de_cero"):
+        assert cluster.valor(db, f"select has_function_privilege('anon', p.oid, 'execute')::text from pg_proc p where p.proname = '{f}'") == "false", f
+        assert cluster.valor(db, f"select has_function_privilege('authenticated', p.oid, 'execute')::text from pg_proc p where p.proname = '{f}'") == "true", f
+        assert cluster.valor(db, f"select count(*) from pg_proc p, aclexplode(p.proacl) a where p.proname = '{f}' and a.grantee = 0") == "0", f
+
+
+def test_la_bitacora_tiene_la_seguridad_por_fila_activada(cluster, db):
+    assert cluster.valor(db, "select c.relrowsecurity::text from pg_class c join pg_namespace n on n.oid = c.relnamespace "
+                             "where n.nspname = 'seguridad' and c.relname = 'restauraciones'") == "true"
+
+
+def test_el_sql_le_avisa_a_la_api_que_hay_funciones_nuevas():
+    assert "notify pgrst, 'reload schema';" in RESTAURAR.read_text(encoding="utf-8")
+
+
 def test_los_rechazos_dicen_por_que_y_que_no_se_cambio_nada(cluster, db):
     res = restaurar(cluster, db, casos_malos()["conteo declarado distinto"])
     assert res[0] == "error" and res[2] == "respaldo_conteo" and "No se cambió nada" in res[3] and "pedidos" in res[3]
@@ -349,6 +420,10 @@ def test_sin_palabra_nula_tampoco(cluster, db):
 
 # ── 4. Empezar de cero ────────────────────────────────────────────────────
 def test_empezar_de_cero_borra_el_trabajo_y_conserva_mesas_libres_e_inventario(cluster, db):
+    # La base de ejemplo trae pedidos con id explícito (900, 901) y el contador sin usar: primero se «gasta» el contador,
+    # para que el reinicio sea observable (si no, el siguiente pedido sería el 1 aunque el contador no se reiniciara).
+    cluster.psql_ok(db, "insert into public.pedidos (fecha, hora, turno, pedido, monto_unit, monto_almuerzo, monto_total) values ('2026-10-05', '12:00', 'almuerzo', 'previo', 1, 1, 1);")
+    assert cluster.valor(db, "select max(id) from public.pedidos where pedido = 'previo'") == "1"
     res = cero(cluster, db)
     assert res[0] == "ok", res
     c = conteos(cluster, db)
@@ -358,7 +433,7 @@ def test_empezar_de_cero_borra_el_trabajo_y_conserva_mesas_libres_e_inventario(c
         assert c[t] == 0, f"{t} debía quedar vacía y tiene {c[t]}"
     assert c["mesas"] == 5 and c["inventario"] == 1
     assert cluster.valor(db, "select count(*) from public.mesas where estado <> 'libre'") == "0"
-    assert res[1]["antes"]["pedidos"] == 2 and res[1]["despues"]["pedidos"] == 0
+    assert res[1]["antes"]["pedidos"] == 3 and res[1]["despues"]["pedidos"] == 0       # los 2 de la base de ejemplo + el «previo»
     # Los contadores empiezan de nuevo
     cluster.psql_ok(db, "insert into public.pedidos (fecha, hora, turno, pedido, monto_unit, monto_almuerzo, monto_total) values ('2026-10-06', '12:00', 'almuerzo', 'nuevo', 1, 1, 1);")
     assert cluster.valor(db, "select max(id) from public.pedidos") == "1"
@@ -368,6 +443,14 @@ def test_empezar_de_cero_puede_borrar_tambien_el_inventario(cluster, db):
     assert cero(cluster, db, borrar_inventario=True)[0] == "ok"
     c = conteos(cluster, db)
     assert c["inventario"] == 0 and c["mesas"] == 5
+
+
+def test_la_bitacora_distingue_empezar_de_cero_con_y_sin_inventario(cluster, db):
+    assert cero(cluster, db)[0] == "ok"
+    assert cero(cluster, db, borrar_inventario=False)[0] == "ok"
+    assert cero(cluster, db, borrar_inventario=True)[0] == "ok"
+    assert cluster.consulta(db, "select accion from seguridad.restauraciones order by id") == [
+        "empezar_de_cero", "empezar_de_cero", "empezar_de_cero_con_inventario"]
 
 
 @pytest.mark.parametrize("rol", ["caja", "respaldo", None])
