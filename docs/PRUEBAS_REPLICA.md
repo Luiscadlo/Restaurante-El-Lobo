@@ -28,7 +28,7 @@ Lo que la herramienta **se niega a hacer**: apuntar a producción (por la direcc
 
 1. 🗄 **Crear el proyecto** (supabase.com → New project; nombre `Lobo-Pruebas`; región «Americas»; en *Security* dejar *Enable Data API* ✔, *Automatically expose new tables* ✔ y *Enable automatic RLS* sin marcar). Guardar la contraseña de la base en el gestor de contraseñas. El plan gratuito permite 2 proyectos activos: producción y este.
 2. 🗄 **Crear las tablas:** SQL Editor → pegar todo `sql/esquema_completo.sql` → Run. Los pares «real / esperado» deben ser iguales y `tablas_sin_rls_real` = 0.
-3. 🗄 **Cargar los datos** de un respaldo real: `docs/RESTAURAR.md`, Paso 3 (Opción A: Claude genera los `ElLobo_restaurar_0N_de_0M.sql` con `herramientas/respaldo_a_sql.py`; se pegan en orden; todas las filas de la tabla final deben decir `OK`). Este es, a la vez, **el ensayo de restauración**.
+3. 🗄 **Cargar los datos** de un respaldo real. Camino corto: instalar las funciones (`sql/restaurar_respaldo.sql`, después de las reglas y el candado, pasos 4 y 5), crear el usuario admin (paso 6), abrir la copia (paso 7) y usar **Datos → Restaurar desde un respaldo**. Camino técnico (equivalente): `docs/RESTAURAR.md`, Camino B, Paso 3 (Claude genera los `ElLobo_restaurar_0N_de_0M.sql` con `herramientas/respaldo_a_sql.py`; se pegan en orden; todas las filas de la tabla final deben decir `OK`). Cualquiera de los dos es, a la vez, **el ensayo de restauración**.
 4. 🗄 **Reglas de seguridad:** pegar `sql/rls_seguridad.sql` → Run. Debe dar `0 · 0 · 0 · 64 · 0`.
 5. 🗄 **Candado de días:** pegar `sql/candado_dias.sql` → Run. Debe dar `candados = 7`.
 6. 🗄 **Usuarios:** Authentication → Users → Add user → *Create new user* (marcar *Auto Confirm User*): `admin@elobo.test` y `caja@elobo.test`, con contraseñas largas y distintas de las de producción. Luego, en el SQL Editor, darles su rol (`docs/DESPLIEGUE_SEGURIDAD.md`, Paso 2). Cerrar el registro público (Paso 3 de esa guía).
@@ -51,7 +51,7 @@ Lo que la herramienta **se niega a hacer**: apuntar a producción (por la direcc
 
 ## Mantenimiento
 
-- **Refrescar los datos de la réplica** (volver a copiar el estado del restaurante): descargar un respaldo nuevo (Datos → Respaldo completo), vaciar las tablas de la réplica (el SQL `truncate…` que imprime `restaurar_respaldo.py`, solo en el proyecto de **pruebas**) y repetir el Paso 3. No toques producción.
+- **Refrescar los datos de la réplica** (volver a copiar el estado del restaurante): en el sistema **real**, Datos → **Hacer respaldo completo** (guarda el `.json` fuera del repositorio); luego, en la **réplica** (con el cartel rojo de PRUEBAS), entra como administrador → Datos → **Restaurar desde un respaldo**, elige ese archivo y confirma. Reemplaza todo lo que hubiera en la réplica, en segundos y sin pegar SQL. (Requiere haber corrido una vez `sql/restaurar_respaldo.sql` en el proyecto de pruebas.) No toques producción: nunca restaures un respaldo viejo encima del sistema real salvo que de verdad quieras volver a ese día.
 - **Cambió la estructura de producción** (tabla o columna nueva): se corre el mismo SQL en la réplica **antes**; después se regenera `sql/esquema_completo.sql` (`docs/RESTAURAR.md`, Paso 0).
 - **El proyecto gratuito se pausa** si pasa una semana sin uso: entra al panel de Supabase y pulsa *Restore project* (tarda 1–2 minutos; no se pierde nada).
 - **Pasó mucho tiempo sin usarla:** antes de probar un cambio, comprueba que la réplica está al día con producción (mismo SQL aplicado, mismos usuarios con rol).
