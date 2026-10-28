@@ -5147,6 +5147,9 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
       estadoFinal === 'pagado' ? { label: '↩ Deshacer', onClick: () => revertirPago(idsInsertados) } : null
     );
 
+    // Si quedó como fiado de un cliente, se anota para el aviso de saldo a favor (más abajo; después se limpia la selección).
+    const clienteParaAvisoSaldo = selectedUbicacion === 'fiar' ? clienteFiadoSeleccionadoId : null;
+
     // Pedido completo enviado: se limpia todo (cola de almuerzos, extras y ubicación)
     almuerzosEnCola = [];
     extrasIngresoPendientes = [];
@@ -5178,6 +5181,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     aplicarReglaGratisPorTurno();
     onHoraChange();
     renderAll();
+    await ofrecerSaldoAFavor(clienteParaAvisoSaldo);
   } catch (err) {
     console.error(err);
     showToast('⚠ Error al registrar pedido: ' + err.message, 'warning');
@@ -6727,6 +6731,7 @@ async function asignarClienteAHuerfano(idsGrupo, key) {
     setSyncBadge('ok');
     showToast('✅ Cliente asignado a ese fiado', 'ok');
     renderAll();
+    await ofrecerSaldoAFavor(clienteId);
   } catch (e) {
     console.error(e);
     showToast(`⚠ Error al asignar el cliente: ${(e.message||'').slice(0,160)}`, 'warning');
@@ -6994,7 +6999,7 @@ async function eliminarAbonoFiado(abonoId) {
 // "Aplicar saldo a favor": salda pedidos completos con lo que el cliente ya
 // abonó y sobró (p. ej. tras revertir un pago vía abono). No entra plata
 // nueva — esa plata ya entró con los abonos —, así que no toca ningún cierre.
-async function aplicarSaldoAFavor(clienteId) {
+async function aplicarSaldoAFavor(clienteId, alDejarUnFiado = false) {
   const cliente = ST.clientesFiado.find(c => c.id === clienteId);
   if (!cliente) return;
   const { sobrante } = calcularSaldoFiado(clienteId);
@@ -7009,6 +7014,7 @@ async function aplicarSaldoAFavor(clienteId) {
   }
   const totalCubierto = cubiertos.reduce((a,c) => a + c.total, 0);
   if (!confirm(
+    (alDejarUnFiado ? `${cliente.nombre} tiene saldo a favor y ya quedó un fiado a su nombre.\n\n` : '') +
     `Aplicar saldo a favor de ${cliente.nombre}: ${fmt(sobrante)}.\n\n` +
     `Se saldarán ${cubiertos.length} pedido(s) completo(s) por ${fmt(totalCubierto)} ` +
     `(${cubiertos.map(c => `${fechaCorta(c.grupo.orders[0].fecha)}: ${fmt(c.total)}`).join(', ')}).\n` +
@@ -7027,6 +7033,27 @@ async function aplicarSaldoAFavor(clienteId) {
   } catch (e) {
     console.error(e);
     showToast(`⚠ Error al aplicar el saldo a favor: ${(e.message||'').slice(0,160)}`, 'warning');
+  }
+}
+
+// Aviso de saldo a favor al dejar un fiado a nombre de un cliente. Se llama desde los TRES lugares donde un pedido
+// pasa a ser fiado de alguien: registrarlo como «Fiar» en Pedidos, pasar un pendiente a fiado y asignarle cliente a
+// un fiado sin nombre. Un pedido pendiente o pagado al instante NO lleva cliente, así que nunca llega aquí.
+//  · Sin saldo a favor: no hace nada.
+//  · Con saldo que alcanza a pagar algún pedido completo (del más viejo al más nuevo, como siempre): pregunta si se
+//    aplica ahora — es el mismo «✔ Aplicar saldo a favor» de la tarjeta; no entra plata nueva a ningún cierre.
+//  · Con saldo que no alcanza: solo avisa; el saldo de su tarjeta de Fiados ya sale con ese descuento.
+// Nunca lanza error: un fallo aquí no debe estropear el registro del fiado que ya quedó guardado.
+async function ofrecerSaldoAFavor(clienteId) {
+  try {
+    const cliente = clienteId ? ST.clientesFiado.find(c => c.id === clienteId) : null;
+    if (!cliente) return;
+    const { sobrante } = calcularSaldoFiado(clienteId);
+    if (sobrante < 0.5) return;
+    if (gruposQueCubreSaldoAFavor(clienteId).length) { await aplicarSaldoAFavor(clienteId, true); return; }
+    showToast(`ℹ ${cliente.nombre} tiene ${fmt(sobrante)} a favor: ya se descuenta de su saldo en Fiados (no alcanza para saldar por completo el siguiente pedido)`, 'info');
+  } catch (e) {
+    console.error(e);
   }
 }
 
@@ -8019,6 +8046,7 @@ async function moverPedidoAFiado() {
     showToast(`✅ ${ids.length > 1 ? 'Pedido completo pasado' : 'Pedido pasado'} a Fiado`, 'ok');
     cerrarModalCambiarMesa();
     renderAll();
+    await ofrecerSaldoAFavor(clienteId);
   } catch (e) {
     console.error(e);
     showToast('⚠ Error al pasar a fiado', 'warning');
