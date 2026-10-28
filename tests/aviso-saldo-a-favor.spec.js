@@ -107,7 +107,9 @@ test.describe('1) Pedidos → «Fiar» con un cliente', () => {
     // Estado: ya no está pendiente y a Luisca le quedan 5.000 a favor.
     expect(await page.evaluate(() => ST.pendientes.filter(p => p.cliente_fiado_id === 7).length)).toBe(0);
     expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 5000 });
-    expect((await toastsTexto(page)).join(' | ')).toContain('saldado(s) con su saldo a favor');
+    const avisos = (await toastsTexto(page)).join(' | ');
+    expect(avisos).toContain('saldado(s) con su saldo a favor');
+    expect(avisos).not.toContain('ya se descuenta de su saldo');      // ese aviso es solo para cuando NO alcanza
     expect(reg.denegadas).toEqual([]);
     expect(reg.errores).toEqual([]);
   });
@@ -176,6 +178,7 @@ test.describe('1) Pedidos → «Fiar» con un cliente', () => {
     const dialogos = armarDialogos(page);
     const reg = await abrir(page);
     await page.evaluate(async () => {
+      clienteFiadoSeleccionadoId = 7;                          // un cliente que quedó elegido de antes… pero el pedido no es fiado
       selectedUbicacion = 'mesa_4';
       almuerzosEnCola = [{ pedido: 'Completo', sopa: '', arroz: '', proteina: '', acomp: '', detalle: '', cantidad: 1, monto_unit: 15000, monto_almuerzo: 15000, para_llevar: false }];
       await agregarIngreso('pendiente');                       // pendiente de una mesa
