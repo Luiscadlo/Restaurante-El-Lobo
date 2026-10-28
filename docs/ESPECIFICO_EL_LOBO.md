@@ -267,7 +267,7 @@ Hay 119 pruebas web (humo, reglas de plata, respaldo, seguridad, flujos del most
 | Alta | `guardarCierreManual` (6580) | Reescribe un cierre completo (y gastos) cuando el sistema no se pudo usar. |
 | Alta | `renderTablero` (8179) | Todas las cifras del Tablero (ingresos = Σ cierres, egresos, utilidad…). |
 | Alta | `calcularAcumuladosCaja` (9412) | Saldos de la sección Caja. |
-| Media | `aplicarSaldoAFavor`, `saldarFiadosConSaldoAFavor`, `gruposQueCubreSaldoAFavor` | Fiados saldados con saldo a favor. |
+| Media | `aplicarSaldoAFavor`, `saldarFiadosConSaldoAFavor`, `gruposQueCubreSaldoAFavor`, `ofrecerSaldoAFavor` | Fiados saldados con saldo a favor; `ofrecerSaldoAFavor` es el aviso al dejar un fiado a nombre de un cliente (se llama desde `agregarIngreso`, `moverPedidoAFiado` y `asignarClienteAHuerfano`). |
 | Media | `marcarGrupoFiadoPagado`, `moverPedidoAFiado`, `marcarPedidoIndividualPagado`, `marcarGrupoDomicilioPagado`, `marcarGrupoSinMesaPagado`, `marcarGrupoGratisPagado` | Cobros por tipo de pedido. |
 | Media | `calcularConsumoGratisTurno`, `calcularGastosTurno`, `cargarPlatosFamiliaDeCierre` | Piezas del cierre. |
 | Media | `agregarEgreso`, `guardarEdicionEgreso`, `agregarIngresoExtra`, `agregarMovimientoCaja` y sus ediciones/borrados | Flujos de administrador (hoy las pruebas de flujos recorren solo el mostrador de caja). |
