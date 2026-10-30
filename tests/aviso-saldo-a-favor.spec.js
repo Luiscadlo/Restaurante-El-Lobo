@@ -795,4 +795,16 @@ test.describe('4) El reparto del saldo que se calcula por adelantado', () => {
     expect(respuesta).toBe('nada');
     expect(dialogos).toEqual([]);
   });
+
+  test('la ventana también muestra un nombre con símbolos como texto, sin interpretarlo como código', async ({ page }) => {
+    const dialogos = armarDialogos(page, { eleccion: 'volver' });
+    const datos = datosAviso();
+    datos.clientes_fiado.push({ id: 11, nombre: '<i>Raro</i> & Co', created_at: '2026-10-01T10:20:00-05:00' });
+    datos.abonos_fiado.push(abonoDe(4, 11, 20000));
+    await abrir(page, { datos });
+    await registrarFiado(page, 11, 14000);
+    expect(dialogos).toHaveLength(1);
+    expect(dialogos[0].mensaje).toContain('💰 <i>Raro</i> & Co tiene saldo a favor');     // título tal cual
+    expect(dialogos[0].mensaje).toContain('<i>Raro</i> & Co tiene $20.000 a favor y este pedido cuesta $14.000');   // y el cuerpo
+  });
 });
