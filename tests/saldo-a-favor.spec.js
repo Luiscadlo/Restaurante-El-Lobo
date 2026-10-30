@@ -8,12 +8,13 @@
 const { test, expect } = require('@playwright/test');
 const { abrirSistema, FECHA_HOY } = require('./helpers/backend-falso');
 const { datos: BASE } = require('./fixtures/datos');
+const { aceptarAvisos } = require('./helpers/ventanas');
 
 const copia = x => JSON.parse(JSON.stringify(x));
 const escritura = (reg, metodo, tabla) => reg.escrituras.filter(e => e.metodo === metodo && e.tabla === tabla);
 const irA = (page, id) => page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
 
-test.beforeEach(async ({ page }) => { page.on('dialog', d => d.accept()); });
+test.beforeEach(async ({ page }) => { aceptarAvisos(page); });
 
 // Luisca (id 7): sin deuda ni abonos. Marta Pérez (id 8): debe 12.000. Sin cierres guardados.
 function datosSaldo() {
@@ -203,12 +204,13 @@ test.describe('formulario «Registrar saldo a favor»', () => {
   test('si el cierre de este turno ya está guardado: pide confirmar; al cancelar no se guarda nada', async ({ page }) => {
     const reg = await abrir(page);
     await page.evaluate(h => { ST.cierresDia = [{ id: 1, fecha: h, turno: 'almuerzo', efectivo: 0, transferencia: 0 }]; }, FECHA_HOY);
-    page.removeAllListeners('dialog');
-    let mensaje = '';
-    page.once('dialog', d => { mensaje = d.message(); d.dismiss(); });
+    await page.evaluate(() => { window.__noAceptarAvisos = true; });                 // aquí se contesta a mano
     await llenar(page, { cliente: 7, monto: '5000' });
     await registrar(page);
-    await expect.poll(() => mensaje).toContain('ya está guardado');
+    const ventana = page.locator('#modal-sistema');                                  // la pregunta sale en una ventana del sistema, no del navegador
+    await expect(ventana).toBeVisible();
+    await expect(ventana).toContainText('ya está guardado');
+    await ventana.locator('button[data-eleccion="no"]').click();                     // «Volver»
     expect(escritura(reg, 'POST', 'abonos_fiado')).toHaveLength(0);
     expect(await page.evaluate(() => ST.abonosFiado.length)).toBe(0);
     expect(await page.inputValue('#saf-monto')).toBe('5.000');                       // el formulario NO se limpia: se puede reintentar
@@ -244,7 +246,7 @@ test.describe('formulario «Registrar saldo a favor»', () => {
     expect(await zona(page)).not.toContain('Luisca');
 
     const pagina2 = await page.context().newPage();
-    pagina2.on('dialog', d => d.accept());
+    aceptarAvisos(pagina2);
     await abrirSistema(pagina2, { datos: datosSaldo() });                            // caja
     await irA(pagina2, 'fiados');
     await pagina2.selectOption('#saf-cliente', '7');

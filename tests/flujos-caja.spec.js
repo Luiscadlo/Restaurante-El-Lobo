@@ -11,12 +11,13 @@
 const { test, expect } = require('@playwright/test');
 const { abrirSistema } = require('./helpers/backend-falso');
 const { datos: DATOS_BASE } = require('./fixtures/datos');
+const { aceptarAvisos } = require('./helpers/ventanas');
 
 const copia = x => JSON.parse(JSON.stringify(x));
 const escritura = (reg, metodo, tabla) => reg.escrituras.filter(e => e.metodo === metodo && e.tabla === tabla);
 
 test.beforeEach(async ({ page }) => {
-  page.on('dialog', d => d.accept());   // los "¿Seguro?" se aceptan
+  aceptarAvisos(page);   // los "¿Seguro?" (ventana del sistema) se aceptan
 });
 
 async function irA(page, id) {

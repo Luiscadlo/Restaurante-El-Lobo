@@ -17,39 +17,60 @@ const copia = x => JSON.parse(JSON.stringify(x));
 const escritura = (reg, metodo, tabla) => reg.escrituras.filter(e => e.metodo === metodo && e.tabla === tabla);
 const irA = (page, id) => page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
 
-// Recoge todos los diálogos y responde según `cfg`:
-//   · los del navegador (preguntas de nombre y el confirm del botón «✔ Aplicar saldo a favor» de la tarjeta):
-//     cfg.confirmar → true acepta, false cancela;   cfg.nombre → lo que se escribe cuando el sistema pregunta un nombre;
-//   · la ventana propia de saldo a favor (#modal-saldo-favor): se pulsa el botón de cfg.eleccion ('usar' | 'no' | 'volver';
-//     por defecto 'usar', o 'no' si cfg.confirmar === false; 'no' = «Cobrar normal», que solo existe en «Pagado inmediatamente»;
-//     si la ventana no tiene ese botón se pulsa «Volver»). cfg.elecciones (lista) da una respuesta distinta a cada
-//     ventana, en orden. Cada ventana queda en `vistos` como { tipo: 'modal', mensaje: <todo su texto, botones incluidos> }.
+// Atiende las ventanas del sistema (el navegador ya NO muestra avisos propios: si saliera alguno, queda en `vistos` con su
+// tipo —'confirm', 'prompt'…— y se cierra, y las pruebas que comparan `vistos` fallarían):
+//   · la ventana #modal-sistema (preguntas de saldo a favor y los «¿Seguro?», p. ej. el botón «✔ Aplicar saldo a favor» de la
+//     tarjeta): se pulsa el botón de cfg.eleccion ('usar' | 'no' | 'volver'; por defecto 'usar', o 'no' si cfg.confirmar === false;
+//     'no' = «Cobrar normal» en «Pagado inmediatamente» y «Volver» en los «¿Seguro?»; 'usar' vale también para «Aceptar» de un
+//     «¿Seguro?»); si la ventana no tiene ese botón se pulsa «Volver». cfg.elecciones (lista) da una respuesta distinta a cada
+//     ventana, en orden;
+//   · el selector de cliente (#modal-elegir-cliente, al pasar un pendiente a fiado): cfg.cliente → se pulsa ese cliente de la
+//     lista; cfg.clienteNuevo → se escribe ese nombre y se pulsa «+ Crear cliente nuevo»; si no hay ninguno de los dos, «Volver»;
+//   · cfg.ignorarVentana: no toca #modal-sistema (la prueba lo contesta a mano).
+// Cada ventana queda en `vistos` como { tipo: 'modal' | 'selector', mensaje: <todo su texto, botones incluidos> }.
 // Hay que llamarla ANTES de abrir el sistema.
 function armarDialogos(page, cfg = {}) {
   const vistos = [];
-  page.on('dialog', async d => {
-    vistos.push({ tipo: d.type(), mensaje: d.message() });
-    if (d.type() === 'prompt') await d.accept(cfg.nombre || '');
-    else if (cfg.confirmar === false) await d.dismiss();
-    else await d.accept();
-  });
-  page.exposeFunction('__loboModalVisto', texto => { vistos.push({ tipo: 'modal', mensaje: texto }); });
+  page.on('dialog', async d => { vistos.push({ tipo: d.type(), mensaje: d.message() }); await d.dismiss(); });
+  page.exposeFunction('__loboModalVisto', (texto, tipo) => { vistos.push({ tipo: tipo || 'modal', mensaje: texto }); });
   page.addInitScript(c => {
     let n = 0, atendiendo = false;
+    const visible = el => el && getComputedStyle(el).display !== 'none';
     setInterval(async () => {
-      const m = document.getElementById('modal-saldo-favor');
-      if (atendiendo || !m || getComputedStyle(m).display === 'none') return;
+      if (atendiendo) return;
+      const sel = document.getElementById('modal-elegir-cliente');
+      const m = document.getElementById('modal-sistema');
+      if (visible(sel)) {
+        atendiendo = true;
+        try {
+          if (!sel.querySelector('#ecl-lista').children.length) return;
+          await window.__loboModalVisto(sel.innerText, 'selector');
+          if (c.cliente) {
+            const fila = [...sel.querySelectorAll('#ecl-lista [data-id]')].find(e => e.firstChild.textContent === c.cliente);
+            (fila || sel.querySelector('#ecl-volver')).click();
+          } else if (c.clienteNuevo) {
+            const caja = sel.querySelector('#ecl-buscar');
+            caja.value = c.clienteNuevo; caja.dispatchEvent(new Event('input'));
+            (sel.querySelector('#ecl-lista [data-nuevo]') || sel.querySelector('#ecl-volver')).click();
+          } else sel.querySelector('#ecl-volver').click();
+          await new Promise(r => setTimeout(r, 60));
+        } finally { atendiendo = false; }
+        return;
+      }
+      if (c.ignorarVentana || !visible(m)) return;                  // ignorarVentana: la prueba contesta ella misma la ventana #modal-sistema
       atendiendo = true;
       try {
-        const botones = [...m.querySelectorAll('#msf-opciones button')];
+        const botones = [...m.querySelectorAll('#sis-opciones button')];
         if (!botones.length) return;
         await window.__loboModalVisto(m.innerText);
         const quiere = (c.elecciones && c.elecciones[n]) || c.eleccion;
         n += 1;
-        (botones.find(b => b.dataset.eleccion === quiere) || botones.find(b => b.dataset.eleccion === 'volver') || botones[0]).click();
+        const por = v => botones.find(b => b.dataset.eleccion === v);
+        (por(quiere) || (quiere === 'usar' && por('si')) || por('volver') || botones[0]).click();
       } finally { atendiendo = false; }
     }, 15);
-  }, { eleccion: cfg.eleccion || (cfg.confirmar === false ? 'no' : 'usar'), elecciones: cfg.elecciones || null });
+  }, { eleccion: cfg.eleccion || (cfg.confirmar === false ? 'no' : 'usar'), elecciones: cfg.elecciones || null,
+       cliente: cfg.cliente || null, clienteNuevo: cfg.clienteNuevo || null, ignorarVentana: !!cfg.ignorarVentana });
   return vistos;
 }
 
@@ -412,7 +433,7 @@ test.describe('1b) Pedidos → «Fiar» → «Pagado inmediatamente»', () => {
 
 // ── La ventana de saldo a favor: botones con nombre propio, «Volver» y Esc no dejan rastro ──────────────────────────────
 // Pedido del dueño (30-oct): el «Cancelar» de una ventana del navegador confundía (parecía que se descontaba el saldo).
-const MODAL = '#modal-saldo-favor';
+const MODAL = '#modal-sistema';
 const estadoFormulario = page => page.evaluate(() => ({ ubicacion: selectedUbicacion, cliente: clienteFiadoSeleccionadoId, cola: almuerzosEnCola.length }));
 test.describe('1c) Ventana de saldo a favor: Volver, Esc y botones', () => {
   for (const [boton, estado] of [['«Registrar pedido como pendiente»', 'pendiente'], ['«Pagado inmediatamente»', 'pagado']]) {
@@ -439,7 +460,7 @@ test.describe('1c) Ventana de saldo a favor: Volver, Esc y botones', () => {
     const lanzado = registrarFiado(page, 7, 15000).then(() => { terminado = true; });
     await expect(page.locator(MODAL)).toBeVisible();
     // «Registrar pedido como pendiente» con saldo que alcanza: SOLO dos botones —usar el saldo o volver—, con nombre propio.
-    const botones = await page.locator(`${MODAL} #msf-opciones button`).allInnerTexts();
+    const botones = await page.locator(`${MODAL} #sis-opciones button`).allInnerTexts();
     expect(botones).toHaveLength(2);
     expect(botones[0]).toContain('✔ Usar saldo a favor');
     expect(botones[1]).toContain('Volver');
@@ -470,7 +491,7 @@ test.describe('1c) Ventana de saldo a favor: Volver, Esc y botones', () => {
     await abrir(page);
     const lanzado = registrarFiado(page, 7, 15000, 'pagado');
     await expect(page.locator(MODAL)).toBeVisible();
-    const botones = await page.locator(`${MODAL} #msf-opciones button`).allInnerTexts();
+    const botones = await page.locator(`${MODAL} #sis-opciones button`).allInnerTexts();
     expect(botones).toHaveLength(3);
     expect(botones[0]).toContain('✔ Pagar con saldo a favor');
     expect(botones[1]).toContain('💵 Cobrar normal (efectivo)');
@@ -481,11 +502,11 @@ test.describe('1c) Ventana de saldo a favor: Volver, Esc y botones', () => {
   });
 
   test('Pendientes→Fiar y Fiados→Asignar: la pregunta sale ANTES de mover; Esc/«Volver» no cambian nada', async ({ page }) => {
+    armarDialogos(page, { cliente: 'Luisca', ignorarVentana: true });                    // el selector de cliente se contesta solo; la pregunta de saldo, a mano
     const reg = await abrir(page);
-    page.on('dialog', d => d.accept('Luisca'));
     const mover = page.evaluate(async () => { cambioMesaIds = [903]; await moverPedidoAFiado(); });
     await expect(page.locator(MODAL)).toBeVisible();
-    const botones = await page.locator(`${MODAL} #msf-opciones button`).allInnerTexts();
+    const botones = await page.locator(`${MODAL} #sis-opciones button`).allInnerTexts();
     expect(botones).toHaveLength(2);
     expect(botones[0]).toContain('✔ Usar saldo a favor');
     expect(botones[1]).toContain('Volver');
@@ -622,12 +643,12 @@ test.describe('1) Pedidos → «Fiar» con un cliente', () => {
   });
 });
 
-test.describe('2) Pendientes → «📒 Fiar» (se pregunta el nombre)', () => {
+test.describe('2) Pendientes → «📒 Fiar» (se pregunta el cliente en una ventana del sistema)', () => {
   test('a un cliente con saldo que alcanza: pregunta el nombre y luego (antes de mover) ofrece el saldo; al aceptar queda saldado y la mesa libre', async ({ page }) => {
-    const dialogos = armarDialogos(page, { nombre: 'Luisca' });
+    const dialogos = armarDialogos(page, { cliente: 'Luisca' });
     const reg = await abrir(page);
     await pasarPendienteAFiado(page, [903]);
-    expect(dialogos.map(d => d.tipo)).toEqual(['prompt', 'modal']);
+    expect(dialogos.map(d => d.tipo)).toEqual(['selector', 'modal']);
     expect(dialogos[1].mensaje).toContain('Luisca tiene $20.000 a favor y este pedido pasa a ser fiado suyo ($9.000)');
     expect(dialogos[1].mensaje).toContain('Se saldarían 1 pedido(s) completo(s) por $9.000');
     expect(dialogos[1].mensaje).toContain('Volver');
@@ -643,37 +664,39 @@ test.describe('2) Pendientes → «📒 Fiar» (se pregunta el nombre)', () => {
     expect(reg.denegadas).toEqual([]);
   });
 
-  test('a un cliente sin saldo (Marta): solo pregunta el nombre', async ({ page }) => {
-    const dialogos = armarDialogos(page, { nombre: 'marta perez' });
+  test('a un cliente sin saldo (Marta): solo pregunta el cliente', async ({ page }) => {
+    const dialogos = armarDialogos(page, { cliente: 'Marta Pérez' });
     const reg = await abrir(page);
     await pasarPendienteAFiado(page, [903]);
-    expect(dialogos.map(d => d.tipo)).toEqual(['prompt']);
+    expect(dialogos.map(d => d.tipo)).toEqual(['selector']);
     expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(1);       // solo el cambio a fiado
     expect(await saldo(page, 8)).toMatchObject({ pendiente: 21000, sobrante: 0 });
   });
 
   test('a un cliente nuevo (sin historial): se crea y no hay aviso', async ({ page }) => {
-    const dialogos = armarDialogos(page, { nombre: 'Cliente Nuevo' });
+    const dialogos = armarDialogos(page, { clienteNuevo: 'Cliente Nuevo' });
     const reg = await abrir(page);
     await pasarPendienteAFiado(page, [903]);
-    expect(dialogos.map(d => d.tipo)).toEqual(['prompt']);
+    expect(dialogos.map(d => d.tipo)).toEqual(['selector']);
     expect(escritura(reg, 'POST', 'clientes_fiado')).toHaveLength(1);
     expect((await toastsTexto(page)).join(' | ')).not.toContain('a favor');
   });
 
   test('a un cliente con saldo que no alcanza (Pedro): avisa sin preguntar', async ({ page }) => {
-    const dialogos = armarDialogos(page, { nombre: 'Pedro Gómez' });
+    const dialogos = armarDialogos(page, { cliente: 'Pedro Gómez' });
     await abrir(page);
     await pasarPendienteAFiado(page, [903]);
-    expect(dialogos.map(d => d.tipo)).toEqual(['prompt']);
+    expect(dialogos.map(d => d.tipo)).toEqual(['selector']);
     expect((await toastsTexto(page)).join(' | ')).toContain('Pedro Gómez tiene $5.000 a favor');
   });
 
-  test('si se cancela el nombre, el pedido no pasa a fiado y no hay aviso', async ({ page }) => {
-    const dialogos = armarDialogos(page, { nombre: '' });
+  test('si se pulsa «Volver» en el selector, el pedido no pasa a fiado (nunca queda un fiado sin nombre) y no hay aviso', async ({ page }) => {
+    const dialogos = armarDialogos(page);                                                // sin cliente → «Volver»
     const reg = await abrir(page);
     await pasarPendienteAFiado(page, [903]);
-    expect(dialogos.map(d => d.tipo)).toEqual(['prompt']);
+    expect(dialogos.map(d => d.tipo)).toEqual(['selector']);
+    expect(reg.escrituras).toEqual([]);                                                  // ni el pedido, ni la mesa, ni un cliente
+    expect(await page.evaluate(() => ST.pendientes.find(p => p.id === 903))).toMatchObject({ mesa: 3, es_fiar: false });
     expect((await toastsTexto(page)).join(' | ')).not.toContain('a favor');
     expect(reg.errores).toEqual([]);
   });
