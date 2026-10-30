@@ -73,6 +73,7 @@ def datos_ejemplo():
         "aperturas_turno": [], "notas_dia": [{"id": 1, "fecha": "2026-10-01", "texto": None}], "gastos_dia": [],
         "egresos": [{"id": 1, "fecha": "2026-10-01", "cat": "Otro", "cuenta": "efectivo", "description": "Gas", "monto": D("45000")}],
         "movimientos_caja": [], "ingresos_extra": [], "pedidos_eliminados": [],
+        "configuracion": [{"id": 1, "clave": "mesas", "valor": 10, "vigente_desde": "2026-09-01T15:00:00+00:00", "creado_por": "luis", "creado_en": "2026-09-01T15:00:00+00:00"}],
     }
 
 
@@ -132,7 +133,7 @@ def correr(monkeypatch, *argumentos, llave=LLAVE):
 def test_simulacro_sin_destino_solo_revisa_el_archivo(monkeypatch, archivo):
     codigo, texto = correr(monkeypatch, archivo)
     assert codigo == 0 and "SIMULACRO sin conexión" in texto
-    assert "16 tablas" in texto and "pedidos" in texto
+    assert "17 tablas" in texto and "pedidos" in texto
 
 
 def test_simulacro_con_destino_no_escribe_nada(monkeypatch, archivo, servidor):
@@ -164,7 +165,9 @@ def test_restaura_todo_en_orden_y_verifica(monkeypatch, archivo, servidor, datos
     assert servidor.filas("notas_dia")[0]["texto"] is None
     # El SQL de contadores se imprime para las tablas con id numérico.
     assert "pg_get_serial_sequence('public.pedidos', 'id')" in texto
-    assert "public.config" not in texto.split("ÚLTIMO PASO")[1]          # config no tiene id
+    ultimo = texto.split("ÚLTIMO PASO")[1]
+    assert not re.search(r"public\.config\b", ultimo)                     # config no tiene id…
+    assert "pg_get_serial_sequence('public.configuracion', 'id')" in ultimo   # …configuracion sí: su contador tiene que seguir al día
 
 
 def test_carga_en_tandas(monkeypatch, archivo, servidor):
@@ -492,7 +495,8 @@ def test_sql_de_contadores_y_de_vaciado(datos):
     respaldo = rr.Respaldo(datos, "exportar", None, [])
     sql = rr.sql_secuencias(respaldo)
     assert "select setval(pg_get_serial_sequence('public.pedidos', 'id'), max(id)) from public.pedidos having max(id) is not null;" in sql
-    assert "config" not in sql and "aperturas_turno" not in sql           # sin id numérico o sin filas
+    assert not re.search(r"public\.config\b", sql) and "aperturas_turno" not in sql   # sin id numérico o sin filas
+    assert "select setval(pg_get_serial_sequence('public.configuracion', 'id'), max(id)) from public.configuracion having max(id) is not null;" in sql
     assert rr.sql_vaciar(["a", "b"]) == "truncate table public.a, public.b restart identity cascade;"
 
 

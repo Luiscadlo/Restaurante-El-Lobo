@@ -334,7 +334,7 @@ test.describe('respaldoCompleto', () => {
     const reg = await abrirSistema(page, { tablasFaltantes: ['config'], usuario: 'admin' });
     const archivo = await respaldar(page);
     expect(Object.keys(archivo.tablas)).not.toContain('config');
-    expect(Object.keys(archivo.tablas).length).toBe(15);
+    expect(Object.keys(archivo.tablas).length).toBe(16);
     await expect(page.locator('.toast.warning', { hasText: 'no quedó registrado' })).toBeVisible();
     expect(reg.escrituras).toEqual([]);
   });

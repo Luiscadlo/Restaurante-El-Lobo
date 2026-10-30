@@ -40,7 +40,7 @@ VARIABLE_URL = "LOBO_URL_DESTINO"
 
 # Las tablas que respalda el sistema, con los «padres» antes que los «hijos» (se corrige con --esquema).
 TABLAS_CONOCIDAS = [
-    "config", "mesas", "clientes_fiado", "inventario", "pedidos", "abonos_fiado", "cierres_dia", "aperturas_turno",
+    "config", "configuracion", "mesas", "clientes_fiado", "inventario", "pedidos", "abonos_fiado", "cierres_dia", "aperturas_turno",
     "notas_dia", "gastos_dia", "consumos", "egresos", "movimientos_caja", "ingresos_extra",
     "pedidos_eliminados", "pedidos_descuentos",
 ]

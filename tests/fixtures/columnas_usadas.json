@@ -121,6 +121,13 @@
    "clave",
    "valor"
   ],
+  "configuracion": [
+   "clave",
+   "creado_por",
+   "id",
+   "valor",
+   "vigente_desde"
+  ],
   "egresos": [
    "cat",
    "created_at",

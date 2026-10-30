@@ -119,7 +119,7 @@ def mundo(cluster, tmp_path_factory):
     return {"carpeta": carpeta, "datos": datos, "respaldo_real": respaldo_real, "final": final, "reales": reales}
 
 
-def test_los_datos_de_ejemplo_son_las_16_tablas_que_respalda_el_sistema(mundo):
+def test_los_datos_de_ejemplo_son_las_17_tablas_que_respalda_el_sistema(mundo):
     assert sorted(mundo["datos"]) == sorted(rr.TABLAS_CONOCIDAS)
 
 

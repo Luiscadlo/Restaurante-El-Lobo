@@ -155,7 +155,7 @@ def test_la_verificacion_final_da_lo_esperado(cluster, copia):
     fila = cluster.consulta("copia", consulta_final)[0].split("|")
     real_esperado = [(int(fila[i]), int(fila[i + 1])) for i in range(0, len(fila), 2)]
     assert all(real == esperado for real, esperado in real_esperado), fila
-    assert real_esperado[0][0] == 16
+    assert real_esperado[0][0] == 17
 
 
 def test_los_datos_pasan_identicos_como_json(cluster, origen, copia):

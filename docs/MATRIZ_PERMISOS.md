@@ -24,6 +24,7 @@ Cada persona entra con **su** usuario. Hay tres roles: **admin** (los dueños, c
 | `aperturas_turno` | Todo | Ver, crear y cambiar | Ver |
 | `notas_dia` | Todo | Ver, crear y borrar | Ver |
 | `config` (aviso de respaldo) | Todo | Solo ver | Ver |
+| `configuracion` (valores del negocio, con historial) | Ver y **solo agregar** (nadie modifica ni borra) | Solo ver | Ver |
 | `pedidos_eliminados` (rastro de lo borrado) | Todo | **Solo agregar** (no puede leer, cambiar ni borrar el rastro) | Ver |
 | `pedidos_descuentos` (rastro de descuentos) | Todo | **Solo agregar** | Ver |
 | `egresos` | Todo | **Nada** | Ver |

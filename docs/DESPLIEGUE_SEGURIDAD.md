@@ -172,7 +172,7 @@ end $$;
 - [ ] Tablero, Ingresos, Egresos, Caja, Auditoría y Datos abren y muestran cifras.
 - [ ] En Auditoría, el filtro por día funciona: **Hoy**, **Ayer**, o elige una fecha en «Desde» y ves solo ese día.
 - [ ] Auditoría muestra la eliminación que acabas de hacer (y el descuento).
-- [ ] **Datos → Respaldo completo** descarga el JSON con las 16 tablas.
+- [ ] **Datos → Respaldo completo** descarga el JSON con las 17 tablas (la 17.ª es la historia de la configuración, `docs/CONFIGURACION.md`).
 
 **Que la llave pública ya no abre nada** — con la sesión cerrada (pantalla de entrada), abre la consola del navegador (F12 → Console; si pide, escribe `allow pasting` y Enter) y pega:
 

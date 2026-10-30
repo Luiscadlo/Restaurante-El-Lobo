@@ -18,8 +18,8 @@
 1. Es **un solo HTML** con 339 funciones globales, 84 variables globales y 353 manejadores en línea (`onclick=`, `onchange=`…) dentro del marcado. Sin módulos ni paso de compilación.
 2. Todo lo propio de El Lobo está **mezclado dentro del código**: catálogo de platos, precios, número de mesas, reglas de turnos, nombres de cuentas y textos. Nada vive en configuración ni en la base de datos.
 3. Hay **cuatro copias del catálogo de platos** que hay que mantener a mano: `PL` (sistema), `<option>` escritas en el marcado (precios de almuerzos), `_CATALOGO_CR` (motor Python) y `DEFAULT` (generador de menú).
-4. Los precios de almuerzos están **duplicados**: la constante `PRECIOS` y las opciones del selector; el recargo "para llevar" ($1.000) está escrito como número suelto en **6 lugares**.
-5. La base tiene **16 tablas**; el sistema habla con ellas por **5 funciones** de acceso (`sbGetAll`, `sbInsert`, `sbInsertConCuenta`, `sbPatch`, `sbDelete`) con 112 llamadas en total.
+4. Los precios de almuerzos están **duplicados**: la constante `PRECIOS` y las opciones del selector. (El recargo "para llevar", el empaque y el número de mesas ya no: salen de ⚙️ Configuración, `docs/CONFIGURACION.md`.)
+5. La base tiene **17 tablas** (la 17.ª, `configuracion`, es de la etapa 1); el sistema habla con ellas por **5 funciones** de acceso (`sbGetAll`, `sbInsert`, `sbInsertConCuenta`, `sbPatch`, `sbDelete`) con 112 llamadas en total.
 6. Las reglas de plata viven repartidas entre `calcularTotalPedido`, `repartirDescuento`, `recalcularResultadoCierre`, `calcularVentasFijas`, `calcularSaldoFiado` y `renderTablero`; de esas, solo algunas tienen prueba que las nombre (sección 7).
 7. Los **domingos no laborables y los festivos de Colombia** solo existen en el motor Python; el sistema web no tiene esa regla.
 8. Dependencias de internet: **una librería** (`xlsx`, para exportar a Excel) y **una hoja de fuentes** de Google, además de Supabase y GitHub Pages. No hay *service worker* ni *manifest*: **no es una PWA instalable y no funciona sin conexión**.
@@ -47,10 +47,10 @@
 
 | Qué | Dónde | Qué hace | Para el producto |
 |---|---|---|---|
-| `NUM_MESAS = 8` | 2149 | Número de mesas del salón; el mapa y los selectores se dibujan con un bucle `1…NUM_MESAS` (líneas 3580, 4765, 7110). **Ojo:** el comentario del estado global dice "15 filas de la tabla mesas" y los datos de prueba traen 15; la pantalla solo usa 8. | Configuración (o leer de la tabla `mesas`). |
+| ~~`NUM_MESAS = 8`~~ → `numMesas()` | módulo CFG | **Ya configurable** (⚙️ Configuración, ver `docs/CONFIGURACION.md`): el mapa y los selectores se dibujan con un bucle `1…numMesas()`; de siempre: 8. **Ojo:** la tabla `mesas` trae 15 filas; subir el número crea las que falten. | ✅ Hecho (etapa 1). |
 | `puedeParaLlevar` | 2152 | "Para llevar" aplica a mesas y "sin mesa", no a domicilio ni fiado. | Regla de negocio configurable. |
-| Recargo "para llevar" **$1.000** | números sueltos en 3513, 4074, 7527, 7564, 7727, 7764 | Suma $1.000 por almuerzo para llevar. **No es una constante**: está escrito en 6 lugares. | Una sola configuración. |
-| `EMPAQUE_DOMICILIO = 1000` | 2157 | Empaque desechable por **cada almuerzo** de un domicilio; solo en el turno de almuerzo (comida rápida no lo cobra). El valor del envío en sí se escribe a mano en cada pedido. | Configuración. |
+| ~~Recargo "para llevar" **$1.000**~~ → `recargoParaLlevar()` | módulo CFG | **Ya configurable** (de siempre: $1.000). Los pedidos nuevos usan el de hoy; **editar un pedido viejo** usa el que regía cuando se hizo (`recargoParaLlevar(p.created_at)`). | ✅ Hecho (etapa 1). |
+| ~~`EMPAQUE_DOMICILIO = 1000`~~ → `valorEmpaque()` | módulo CFG | **Ya configurable** (de siempre: $1.000). Empaque desechable por **cada almuerzo** de un domicilio; solo en el turno de almuerzo (comida rápida no lo cobra). El valor del envío en sí se escribe a mano en cada pedido. | ✅ Hecho (etapa 1). |
 | Ubicaciones | `selectedUbicacion` | `mesa_N`, `domicilio`, `sinmesa` (cliente de pie), `fiar` (fiado), `gratis`. | Núcleo del modelo de pedidos; lo "propio" son los nombres. |
 
 ### 1.3 Turnos, horarios y "consumo familiar"
@@ -83,7 +83,7 @@ El sistema web **no tiene** ninguna regla de domingos ni festivos. Solo el motor
 | Nombres de archivos exportados | `ElLobo_respaldo_completo_*.json` (3103), `ElLobo_datos_*.xlsx` (3316) | Y el motor espera la hoja con esos nombres. |
 | Claves de almacenamiento | `ellobo.sesion.caja.v1` (2181), `elLobo_auditoria_vistos` (9786), candado `ellobo-auth` (2279), `elLobo_catalogo` (menú) | Prefijo propio del negocio. |
 | Textos de pantalla | Todo el marcado | Todo en español de Colombia; no hay sistema de traducción. |
-| Respaldo | `RESPALDO_AVISO_DIAS = 7` y `RESPALDO_ROJO_DIAS = 10` (2997) | Umbrales del aviso; configurables en el producto. |
+| Respaldo | ~~`RESPALDO_ROJO_DIAS = 10`~~ → `CFG.v('respaldo_rojo_dias')` y `CFG.v('respaldo_dia_semana')` | **Ya configurables** (de siempre: domingo y rojo a los 10 días). | ✅ Hecho (etapa 1). |
 
 ---
 

@@ -8,7 +8,7 @@
 --       exactamente como estaba.
 --   · public.lobo_empezar_de_cero(confirmacion, borrar_inventario)  → la usa el botón «🧹 Empezar de cero».
 --       Borra los datos de trabajo (ventas, cierres, gastos, caja, fiados…). Las MESAS se conservan (vuelven a
---       «libre»: el sistema no tiene cómo crearlas) y el inventario también, salvo que se pida borrarlo.
+--       «libre»), la CONFIGURACIÓN del negocio también, y el inventario, salvo que se pida borrarlo.
 --   · seguridad.restauraciones → bitácora de cada restauración / borrado (quién, cuándo, cuántas filas había
 --       antes y después). Nadie la ve desde el sistema: se consulta en Supabase → SQL Editor.
 --
@@ -51,15 +51,15 @@ security definer
 set search_path = pg_catalog, public
 as $fn$
 declare
-  -- Las 16 tablas del «Respaldo completo» (las mismas que TABLAS_RESPALDO en el sistema), en el ORDEN DE CARGA:
+  -- Las 17 tablas del «Respaldo completo» (las mismas que TABLAS_RESPALDO en el sistema), en el ORDEN DE CARGA:
   -- primero las que otras tablas referencian por llave foránea (pedidos y abonos_fiado → clientes_fiado;
   -- consumos → inventario), para que cada fila encuentre a su «padre».
   c_tablas constant text[] := array[
     'inventario', 'clientes_fiado', 'pedidos', 'egresos', 'consumos', 'gastos_dia', 'mesas', 'cierres_dia',
     'aperturas_turno', 'notas_dia', 'movimientos_caja', 'ingresos_extra', 'pedidos_eliminados', 'abonos_fiado',
-    'pedidos_descuentos', 'config'];
+    'pedidos_descuentos', 'config', 'configuracion'];
   -- Pueden faltar en respaldos viejos: si no vienen, esa tabla se deja como está.
-  c_opcionales constant text[] := array['config', 'pedidos_descuentos'];
+  c_opcionales constant text[] := array['config', 'pedidos_descuentos', 'configuracion'];
   t text;
   v_filas jsonb;
   v_n bigint;
@@ -199,7 +199,7 @@ declare
   c_tablas constant text[] := array[
     'inventario', 'clientes_fiado', 'pedidos', 'egresos', 'consumos', 'gastos_dia', 'mesas', 'cierres_dia',
     'aperturas_turno', 'notas_dia', 'movimientos_caja', 'ingresos_extra', 'pedidos_eliminados', 'abonos_fiado',
-    'pedidos_descuentos', 'config'];
+    'pedidos_descuentos', 'config', 'configuracion'];
   t text;
   v_n bigint;
   v_lista text;
@@ -220,10 +220,11 @@ begin
     v_antes := v_antes || jsonb_build_object(t, v_n);
   end loop;
 
-  -- Se conservan las mesas (el sistema no puede crearlas) y, salvo que se pida lo contrario, el inventario.
+  -- Se conservan las mesas (el sistema no puede crearlas), la configuración del negocio (es de cómo funciona el
+  -- restaurante, no un dato de trabajo) y, salvo que se pida lo contrario, el inventario.
   select string_agg(format('public.%I', x), ', ') into v_lista
   from unnest(c_tablas) x
-  where x <> 'mesas' and (x <> 'inventario' or coalesce(p_borrar_inventario, false));
+  where x not in ('mesas', 'configuracion') and (x <> 'inventario' or coalesce(p_borrar_inventario, false));
   execute 'truncate table ' || v_lista || ' restart identity';
   -- «where true»: Supabase rechaza desde la app un UPDATE sin WHERE (seguro anti-accidentes); aquí sí se quieren todas las mesas.
   update public.mesas set estado = 'libre', updated_at = now() where true;
