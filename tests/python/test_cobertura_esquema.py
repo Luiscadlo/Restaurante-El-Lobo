@@ -25,6 +25,7 @@ from pgtemporal import ClusterTemporal  # noqa: E402
 RAIZ = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ / "herramientas"))
 import esquema_a_sql as conv  # noqa: E402
+import generar_rls  # noqa: E402
 
 AQUI = Path(__file__).resolve().parent
 USADAS = json.loads((RAIZ / "tests" / "fixtures" / "columnas_usadas.json").read_text(encoding="utf-8"))
@@ -33,7 +34,9 @@ RLS = RAIZ / "sql" / "rls_seguridad.sql"
 CONSULTA = RAIZ / "sql" / "consulta_esquema.sql"
 MATRIZ = json.loads((RAIZ / "sql" / "matriz_permisos.json").read_text(encoding="utf-8"))
 # La última fila del script de seguridad: tablas_sin_rls | vistas_sin_proteger | anon_con_permisos | politicas | reglas_ajenas_abiertas
-VERIFICACION_RLS = re.compile(r"^\s*0\s*\|\s*0\s*\|\s*0\s*\|\s*%d\s*\|\s*0\s*$" % (4 * len(MATRIZ["tablas"])), re.M)
+# Una política por cada operación (S/I/U/D) que algún rol tenga en la matriz: las tablas «solo agregar» (p. ej. configuracion) tienen menos de 4.
+_TABLAS_M, _ROLES_M = generar_rls.cargar()
+VERIFICACION_RLS = re.compile(r"^\s*0\s*\|\s*0\s*\|\s*0\s*\|\s*%d\s*\|\s*0\s*$" % generar_rls.total_politicas(_TABLAS_M, _ROLES_M), re.M)
 
 
 @pytest.fixture(scope="module")
@@ -85,7 +88,7 @@ def test_la_comparacion_detecta_lo_que_falta(ejemplo):
 
 
 def test_la_lista_de_columnas_usadas_es_razonable():
-    assert len(USADAS["requeridas"]) == 16 and sum(len(c) for c in USADAS["requeridas"].values()) > 100
+    assert len(USADAS["requeridas"]) == 17 and sum(len(c) for c in USADAS["requeridas"].values()) > 100
     html = (RAIZ / "Contabilidad" / "ElLobo-Sistema Contable.html").read_text(encoding="utf-8")
     tablas_respaldo = set(re.findall(r"'(\w+)'", re.search(r"const TABLAS_RESPALDO = \[(.*?)\];", html, re.S).group(1)))
     assert set(USADAS["requeridas"]) == tablas_respaldo
@@ -125,7 +128,7 @@ def real(cluster):
     return columnas_de(cluster, "real")
 
 
-def test_esquema_completo_cubre_las_16_tablas_y_las_columnas_que_usa_el_sistema(real):
+def test_esquema_completo_cubre_las_17_tablas_y_las_columnas_que_usa_el_sistema(real):
     sin_tabla, req, opc = faltantes(real)
     assert sin_tabla == [] and req == [], f"Faltan tablas {sin_tabla} o columnas {req}"
     if opc:

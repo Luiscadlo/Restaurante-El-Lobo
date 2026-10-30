@@ -172,7 +172,7 @@ end $$;
 - [ ] Tablero, Ingresos, Egresos, Caja, Auditoría y Datos abren y muestran cifras.
 - [ ] En Auditoría, el filtro por día funciona: **Hoy**, **Ayer**, o elige una fecha en «Desde» y ves solo ese día.
 - [ ] Auditoría muestra la eliminación que acabas de hacer (y el descuento).
-- [ ] **Datos → Respaldo completo** descarga el JSON con las 16 tablas.
+- [ ] **Datos → Respaldo completo** descarga el JSON con las 17 tablas (la 17.ª es la historia de la configuración, `docs/CONFIGURACION.md`).
 
 **Que la llave pública ya no abre nada** — con la sesión cerrada (pantalla de entrada), abre la consola del navegador (F12 → Console; si pide, escribe `allow pasting` y Enter) y pega:
 
@@ -189,7 +189,7 @@ Después **borra los datos de "PRUEBA"** que hayas creado.
 La tarea programada automática (entraba con la llave pública) **dejó de poder leer** al activar el Paso 6 y se **eliminó**: el respaldo es a mano.
 
 - **Cada domingo:** entra como **administrador**, ve a **Datos → Respaldo completo**, pulsa el botón y guarda el archivo **fuera del repositorio** (que es público).
-- El aviso «Toca el respaldo semanal» sale **desde cada domingo** y se queda, cada día, **hasta que un respaldo completo termine bien** (solo se registra si bajaron todas las filas de las 16 tablas). Se pone rojo si pasan 10 días. Solo lo ve el administrador: si esa semana no entras como administrador, no lo verás.
+- El aviso «Toca el respaldo semanal» sale **desde cada domingo** y se queda, cada día, **hasta que un respaldo completo termine bien** (solo se registra si bajaron todas las filas de las 17 tablas). Se pone rojo si pasan 10 días. Solo lo ve el administrador: si esa semana no entras como administrador, no lo verás.
 - (Si algún día se quiere automático: un usuario `respaldo` de solo lectura y una tarea nueva; la contraseña la pondría el dueño en Supabase, nunca por el chat.)
 
 ## Si algo sale mal (tarjeta de reversa)

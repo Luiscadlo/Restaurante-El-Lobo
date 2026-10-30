@@ -14,6 +14,7 @@
     "aperturas_turno",
     "notas_dia",
     "config",
+    "configuracion",
     "egresos",
     "movimientos_caja",
     "ingresos_extra"
@@ -33,6 +34,7 @@
       "aperturas_turno": "SIUD",
       "notas_dia": "SIUD",
       "config": "SIUD",
+      "configuracion": "SI",
       "egresos": "SIUD",
       "movimientos_caja": "SIUD",
       "ingresos_extra": "SIUD"
@@ -50,7 +52,8 @@
       "cierres_dia": "SIUD",
       "aperturas_turno": "SIU",
       "notas_dia": "SID",
-      "config": "S"
+      "config": "S",
+      "configuracion": "S"
     },
     "respaldo": {
       "pedidos": "S",
@@ -66,6 +69,7 @@
       "aperturas_turno": "S",
       "notas_dia": "S",
       "config": "S",
+      "configuracion": "S",
       "egresos": "S",
       "movimientos_caja": "S",
       "ingresos_extra": "S"

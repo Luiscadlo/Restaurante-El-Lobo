@@ -117,11 +117,18 @@ const config = [
   { clave: 'ultimo_respaldo', valor: { generado_en: '2026-10-18T22:00:00.000Z', fecha: '2026-10-18', conteos: { pedidos: 11 } }, actualizado_en: '2026-10-18T22:00:00-05:00' },
 ];
 
+// Configuración del negocio (con historia «vigente desde»). Mismos valores que ya tiene el sistema escritos a mano:
+// la pantalla se ve igual que sin configuración, y las pruebas lo comprueban.
+const configuracion = [
+  { id: 1, clave: 'mesas', valor: 8, vigente_desde: '2026-09-01T10:00:00-05:00', creado_por: 'luis', creado_en: '2026-09-01T10:00:00-05:00' },
+  { id: 2, clave: 'negocio_nombre', valor: 'El Lobo', vigente_desde: '2026-09-01T10:00:00-05:00', creado_por: 'luis', creado_en: '2026-09-01T10:00:00-05:00' },
+];
+
 module.exports = {
   FECHA_HOY,
   datos: {
     pedidos, egresos, inventario, consumos: [], gastos_dia, mesas, cierres_dia, aperturas_turno,
     notas_dia: [], movimientos_caja: [], ingresos_extra: [], pedidos_eliminados, clientes_fiado,
-    abonos_fiado, pedidos_descuentos, config,
+    abonos_fiado, pedidos_descuentos, config, configuracion,
   },
 };

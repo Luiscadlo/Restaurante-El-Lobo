@@ -5,10 +5,10 @@ const { abrirSistema, TABLAS_LOADSTATE, TABLAS_CAJA } = require('./helpers/backe
 const { entrarComoAdmin } = require('./helpers/sesion');
 
 const PESTANAS = ['ingresos', 'pendientes', 'fiados', 'diaadia', 'inventario', 'menu',
-                  'dashboard', 'ingfin', 'egresos', 'caja', 'auditoria', 'datos'];
+                  'dashboard', 'ingfin', 'egresos', 'caja', 'auditoria', 'datos', 'config'];
 // Pestañas con candado → prefijo de su par "{prefijo}-login" / "{prefijo}-contenido".
 const CON_CANDADO = { dashboard: 'tablero', ingfin: 'ingfin', egresos: 'egresos',
-                      caja: 'caja', auditoria: 'auditoria', datos: 'datos' };
+                      caja: 'caja', auditoria: 'auditoria', datos: 'datos', config: 'config' };
 
 async function irA(page, id) {
   await page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
@@ -24,7 +24,7 @@ test('como caja: pide solo las 12 tablas operativas (nada de finanzas ni auditor
   expect(reg.denegadas).toEqual([]);     // y no intenta nada que caja no pueda
 });
 
-test('como admin: pide las 16 tablas completas de loadState', async ({ page }) => {
+test('como admin: pide las 17 tablas completas de loadState', async ({ page }) => {
   const reg = await abrirSistema(page, { usuario: 'admin' });
   expect(reg.errores).toEqual([]);
   expect([...new Set(reg.peticiones)].sort()).toEqual([...TABLAS_LOADSTATE].sort());
@@ -34,7 +34,7 @@ test('como admin: pide las 16 tablas completas de loadState', async ({ page }) =
   expect(reg.denegadas).toEqual([]);
 });
 
-test('las 12 pestañas existen', async ({ page }) => {
+test('las 13 pestañas existen', async ({ page }) => {
   await abrirSistema(page);
   const ids = await page.evaluate(() =>
     [...document.querySelectorAll('.tab')].map(t => (t.getAttribute('onclick') || '').match(/showTab\('([^']+)'/)?.[1]).filter(Boolean));

@@ -206,7 +206,7 @@ test.describe('qué cambia, antes de pedir nada', () => {
     await expect(fila).toContainText('11');
     await expect(fila).toContainText('6');
     await expect(fila.locator('.rest-menos')).toContainText('−5');
-    await expect(resumen.locator('tbody tr')).toHaveCount(16);
+    await expect(resumen.locator('tbody tr')).toHaveCount(17);
   });
 
   test('la ventana de confirmación repite el aviso, tiene el botón apagado y no se cierra tocando afuera', async ({ page }) => {
@@ -313,6 +313,35 @@ test.describe('restaurar', () => {
     expect(JSON.stringify(reg.rpc)).not.toContain(CLAVE_ADMIN);
     expect(await page.evaluate(() => document.getElementById('rest-clave').value)).toBe('');
     expect(await page.evaluate(c => JSON.stringify(localStorage) + JSON.stringify(sessionStorage) + document.documentElement.innerHTML.includes(c), CLAVE_ADMIN)).not.toContain(CLAVE_ADMIN);
+  });
+
+  test('un respaldo trae también la historia de la configuración y la pantalla ya la usa', async ({ page }) => {
+    const { reg } = await abrirAdmin(page);
+    const d = copia(DATOS_BASE);
+    d.configuracion = [{ id: 1, clave: 'mesas', valor: 12, vigente_desde: '2026-10-01T10:00:00-05:00', creado_por: 'luis', creado_en: '2026-10-01T10:00:00-05:00' }];
+    await elegirValido(page, respaldoDe(d));
+    await page.click('#btn-restaurar');
+    await abrirYConfirmar(page);
+    await page.click('#rest-confirmar');
+    await esperarResultado(page);
+    expect(reg.datos.configuracion).toEqual(d.configuracion);                     // tal cual venía: mismos id, fechas y autor
+    expect(await page.evaluate(() => [numMesas(), ST.configuracion.length])).toEqual([12, 1]);
+    await expect(page.locator('#ing-mesas-grid .mesa-btn')).toHaveCount(12);
+    expect(reg.errores).toEqual([]);
+  });
+
+  test('un respaldo hecho antes de existir la configuración la deja como está', async ({ page }) => {
+    const { reg } = await abrirAdmin(page);
+    const d = copia(DATOS_BASE);
+    delete d.configuracion;
+    await elegirValido(page, respaldoDe(d));
+    await page.click('#btn-restaurar');
+    await abrirYConfirmar(page);
+    await page.click('#rest-confirmar');
+    await esperarResultado(page);
+    expect(reg.datos.configuracion.length).toBe(2);
+    expect(await page.evaluate(() => [numMesas(), ST.configuracion.length])).toEqual([8, 2]);
+    expect(reg.errores).toEqual([]);
   });
 
   test('«Aceptar» cierra el resultado, limpia el archivo elegido y deja la pestaña lista para otra vez', async ({ page }) => {
@@ -576,6 +605,9 @@ test.describe('empezar de cero', () => {
     expect(reg.datos.mesas.every(m => m.estado === 'libre')).toBe(true);
     expect(reg.datos.inventario.length).toBe(2);
     expect(await page.evaluate(() => [ST.clientesFiado.length, ST.cierresDia.length, ST.mesas.length, ST.inventario.length])).toEqual([0, 0, 15, 2]);
+    // La configuración del negocio NO es un dato de trabajo: se conserva (y la pantalla sigue con los mismos valores).
+    expect(reg.datos.configuracion.length).toBe(2);
+    expect(await page.evaluate(() => [ST.configuracion.length, numMesas(), nombreNegocio()])).toEqual([2, 8, 'El Lobo']);
     await expect(page.locator('#rest-resultado')).toContainText('El sistema quedó vacío');
     expect(reg.errores).toEqual([]);
   });
@@ -618,7 +650,7 @@ test('la lista de tablas opcionales y los nombres de la pantalla cubren exactame
   await abrirAdmin(page);
   const { tablas, nombres, opcionales } = await page.evaluate(() => ({ tablas: TABLAS_RESPALDO, nombres: Object.keys(NOMBRES_TABLAS), opcionales: TABLAS_OPCIONALES_EN_ARCHIVO }));
   expect([...nombres].sort()).toEqual([...tablas].sort());
-  expect([...opcionales].sort()).toEqual(['config', 'pedidos_descuentos']);
+  expect([...opcionales].sort()).toEqual(['config', 'configuracion', 'pedidos_descuentos']);
   const sql = fs.readFileSync(require('path').resolve(__dirname, '../sql/restaurar_respaldo.sql'), 'utf-8');
   const deSql = /c_opcionales constant text\[\] := array\[(.*?)\];/s.exec(sql)[1].match(/'([a-z_]+)'/g).map(s => s.replace(/'/g, ''));
   expect([...deSql].sort()).toEqual([...opcionales].sort());

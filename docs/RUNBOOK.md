@@ -49,12 +49,16 @@ Contraseñas: siempre en un gestor de contraseñas; nunca en el chat, en el cód
 - ¿"Tu sesión venció"? Volver a entrar. (La sesión de caja se recuerda en cada equipo; **Salir** la borra.)
 - ¿Sale error de conexión? Mira si hay internet y si Supabase está en línea (https://status.supabase.com).
 
+## Configuración del negocio
+
+Número de mesas, recargo de «para llevar», empaque de domicilio, nombre del negocio y día del respaldo se cambian en la pestaña **⚙️ Configuración** (solo administrador): cada cambio rige desde que se guarda, no recalcula nada del pasado y queda en un historial con quién lo hizo. Los demás equipos lo toman al recargar la página. Guía completa e instalación: `docs/CONFIGURACION.md`.
+
 ## Respaldos
 
 **Hay dos capas** (ninguna reemplaza a la otra) y un Excel aparte:
 
 1. **Datos → 💾 Respaldo completo** (solo administrador): descarga un JSON con **todas** las tablas, comprueba que cada una trae todas sus filas y solo entonces anota la fecha del respaldo. Hazlo **cada domingo** y guarda el archivo **fuera del repositorio** (carpeta privada, nube personal).
-2. **Aviso en pantalla** (solo administrador): desde cada domingo aparece en ámbar si todavía no hay un respaldo de esa semana, y se pone rojo a los 10 días. Se apaga solo al terminar bien un respaldo completo.
+2. **Aviso en pantalla** (solo administrador): desde cada domingo (o el día que se elija en ⚙️ Configuración) aparece en ámbar si todavía no hay un respaldo de esa semana, y se pone rojo a los 10 días (también configurable). Se apaga solo al terminar bien un respaldo completo.
 
 No hay respaldo automático: el que había se eliminó cuando se activó la seguridad (RLS), porque ya no podía leer con la llave pública. Detalle en `docs/DESPLIEGUE_SEGURIDAD.md` (Paso 8).
 

@@ -48,7 +48,7 @@ Hazlo con el restaurante **sin servicio** y sin nadie más usando el sistema. Lo
 
 **No hay duplicados ni mezcla:** la restauración **reemplaza** (vacía las tablas y carga el archivo); nunca suma. Si lo repites con el mismo archivo, el resultado es el mismo.
 
-Un respaldo **viejo** que no trae `config` o `pedidos_descuentos` (tablas que se agregaron después) se acepta: esas dos tablas se dejan como están y la pantalla lo dice («no viene: se deja igual»).
+Un respaldo **viejo** que no trae `config`, `pedidos_descuentos` o `configuracion` (tablas que se agregaron después) se acepta: esas tablas se dejan como están y la pantalla lo dice («no viene: se deja igual»). Si el respaldo SÍ trae `configuracion`, la historia de la configuración vuelve tal cual (mismos id, fechas y autores).
 
 ## «🧹 Empezar de cero»
 

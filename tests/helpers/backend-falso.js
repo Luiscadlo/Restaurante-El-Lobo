@@ -30,11 +30,11 @@ const { evaluarCandado, TABLAS_CON_CANDADO } = require('./candado');
 const HTML = path.resolve(__dirname, '../../Contabilidad/ElLobo-Sistema Contable.html');
 const URL_HTML = pathToFileURL(HTML).href;
 
-// Tablas que pide loadState() según el rol. Admin = las 16; caja = solo las operativas (12).
+// Tablas que pide loadState() según el rol. Admin = las 17; caja = solo las operativas (12; entre ellas la configuración, que sí puede leer).
 const TABLAS_LOADSTATE = [
   'pedidos', 'egresos', 'inventario', 'consumos', 'gastos_dia', 'mesas', 'cierres_dia',
   'aperturas_turno', 'notas_dia', 'movimientos_caja', 'ingresos_extra', 'pedidos_eliminados',
-  'clientes_fiado', 'abonos_fiado', 'pedidos_descuentos', 'config',
+  'clientes_fiado', 'abonos_fiado', 'pedidos_descuentos', 'config', 'configuracion',
 ];
 const TABLAS_SOLO_ADMIN = ['egresos', 'movimientos_caja', 'ingresos_extra', 'pedidos_eliminados', 'pedidos_descuentos'];
 const TABLAS_CAJA = TABLAS_LOADSTATE.filter(t => !TABLAS_SOLO_ADMIN.includes(t));
@@ -51,6 +51,31 @@ const USUARIOS = {
 const USUARIO_POR_ROL = { caja: 'caja@elobo.test', admin: 'dueno1@elobo.test' };
 
 function copiaProfunda(x) { return JSON.parse(JSON.stringify(x)); }
+
+// Réplica de seguridad.validar_configuracion (sql/configuracion.sql): mismas claves, mismos rangos, mismos textos de error.
+// Devuelve null si el valor es válido, o { code, message, details } como lo devolvería PostgREST.
+const RANGOS_CONFIG = {
+  mesas: [1, 60, 'El número de mesas'], recargo_para_llevar: [0, 50000, 'El recargo de «para llevar»'],
+  empaque_domicilio: [0, 50000, 'El empaque de domicilio'], respaldo_dia_semana: [0, 6, 'El día del respaldo semanal'],
+  respaldo_rojo_dias: [7, 60, 'Los días para el aviso rojo del respaldo'],
+};
+function validarConfiguracion(clave, valor) {
+  const mal = message => ({ code: '22023', message, details: 'configuracion_invalida', hint: null });
+  if (RANGOS_CONFIG[clave]) {
+    const [min, max, nombre] = RANGOS_CONFIG[clave];
+    if (typeof valor !== 'number') return mal(`${nombre} debe ser un número.`);
+    if (!Number.isInteger(valor) || valor < min || valor > max) return mal(`${nombre} debe ser un número entero entre ${min} y ${max}.`);
+    return null;
+  }
+  if (clave === 'negocio_nombre' || clave === 'negocio_emoji') {
+    if (typeof valor !== 'string') return mal(`El valor de ${clave} debe ser un texto.`);
+    const largo = [...valor].length;
+    if (clave === 'negocio_nombre' && (valor.trim().length < 1 || largo > 40 || valor !== valor.trim())) return mal('El nombre del negocio debe tener entre 1 y 40 caracteres, sin espacios al principio ni al final.');
+    if (clave === 'negocio_emoji' && largo > 8) return mal('El símbolo del negocio puede tener hasta 8 caracteres.');
+    return null;
+  }
+  return { code: '22023', message: `La configuración "${clave}" no existe.`, details: 'configuracion_clave_desconocida', hint: null };
+}
 const b64url = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
 
 /**
@@ -231,7 +256,7 @@ async function abrirSistema(page, opciones = {}) {
           const malo = !rp || rp.version !== 1 || typeof rp.tablas !== 'object' || typeof rp.conteos !== 'object'
             || Object.keys(rp.tablas).some(t => !TABLAS_LOADSTATE.includes(t))
             || Object.entries(rp.tablas).some(([t, f]) => !Array.isArray(f) || rp.conteos[t] !== f.length)
-            || TABLAS_LOADSTATE.some(t => !(t in rp.tablas) && !['config', 'pedidos_descuentos'].includes(t));
+            || TABLAS_LOADSTATE.some(t => !(t in rp.tablas) && !['config', 'pedidos_descuentos', 'configuracion'].includes(t));
           if (malo) return err(400, '22023', 'El archivo no es un respaldo completo de El Lobo (versión 1). No se cambió nada.', 'respaldo_invalido');
           const antes = contar();
           for (const [t, filas] of Object.entries(rp.tablas)) { datos[t] = copiaProfunda(filas); reponerSombra(t); }
@@ -243,6 +268,7 @@ async function abrirSistema(page, opciones = {}) {
         const antes = contar();
         for (const t of TABLAS_LOADSTATE) {
           if (t === 'mesas') { datos.mesas = (datos.mesas || []).map(m => ({ ...m, estado: 'libre' })); continue; }
+          if (t === 'configuracion') continue;          // la configuración del negocio no es un dato de trabajo: se conserva
           if (t === 'inventario' && !cuerpoRpc.p_borrar_inventario) continue;
           datos[t] = []; reponerSombra(t);
         }
@@ -300,6 +326,23 @@ async function abrirSistema(page, opciones = {}) {
       }
       let cuerpo = null;
       try { cuerpo = req.postDataJSON(); } catch (e) { /* sin cuerpo */ }
+      // Configuración: el disparador de la base valida, y pone él mismo vigente_desde / creado_en / creado_por.
+      if (tabla === 'configuracion' && metodo === 'POST') {
+        const nuevas = (Array.isArray(cuerpo) ? cuerpo : [cuerpo || {}]);
+        const malo = nuevas.map(f => validarConfiguracion(f.clave, f.valor)).find(Boolean);
+        if (malo) { reg.denegadas.push(`${rol} I configuracion (valor inválido)`); return route.fulfill({ status: 400, contentType: 'application/json', headers: cors, body: JSON.stringify(malo) }); }
+        const correo = (() => { try { return JSON.parse(Buffer.from(bearer.split('.')[1], 'base64url').toString()).email || ''; } catch (e) { return ''; } })();
+        const sello = reg.control.ahora.toISOString();
+        const guardadas = nuevas.map(f => {
+          const maxId = (datos.configuracion || []).reduce((m, x) => Math.max(m, x.id || 0), 0);
+          const fila = { id: maxId + 1, clave: f.clave, valor: f.valor, vigente_desde: sello, creado_por: (correo.split('@')[0] || 'desconocido').slice(0, 60), creado_en: sello };
+          (datos.configuracion = datos.configuracion || []).push(fila);
+          return fila;
+        });
+        reg.escrituras.push({ metodo, tabla, consulta: url.search, cuerpo, rol, prefer: cabeceras['prefer'] || '' });
+        if (!pideFila) return route.fulfill({ status: 201, contentType: 'application/json', body: '' });
+        return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(guardadas) });
+      }
       // Candado de días (solo caja, solo las tablas con candado): se evalúa contra la sombra, como el disparador de Postgres.
       const conCandado = TABLAS_CON_CANDADO.includes(tabla);
       if (conCandado) {

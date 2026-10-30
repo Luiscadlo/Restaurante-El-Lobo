@@ -227,6 +227,13 @@ drop policy if exists "lobo_config_update" on public.config;
 create policy "lobo_config_update" on public.config for update to authenticated using ((select seguridad.rol_app()) in ('admin')) with check ((select seguridad.rol_app()) in ('admin'));
 drop policy if exists "lobo_config_delete" on public.config;
 create policy "lobo_config_delete" on public.config for delete to authenticated using ((select seguridad.rol_app()) in ('admin'));
+-- configuracion
+drop policy if exists "lobo_configuracion_select" on public.configuracion;
+create policy "lobo_configuracion_select" on public.configuracion for select to authenticated using ((select seguridad.rol_app()) in ('admin', 'caja', 'respaldo'));
+drop policy if exists "lobo_configuracion_insert" on public.configuracion;
+create policy "lobo_configuracion_insert" on public.configuracion for insert to authenticated with check ((select seguridad.rol_app()) in ('admin'));
+drop policy if exists "lobo_configuracion_update" on public.configuracion;
+drop policy if exists "lobo_configuracion_delete" on public.configuracion;
 -- egresos
 drop policy if exists "lobo_egresos_select" on public.egresos;
 create policy "lobo_egresos_select" on public.egresos for select to authenticated using ((select seguridad.rol_app()) in ('admin', 'respaldo'));
@@ -258,7 +265,7 @@ create policy "lobo_ingresos_extra_delete" on public.ingresos_extra for delete t
 commit;
 
 -- Verificación (el editor de Supabase muestra este resultado). Lo esperado:
---   tablas_sin_rls = 0 · vistas_sin_proteger = 0 · anon_con_permisos = 0 · politicas = 64 · reglas_ajenas_abiertas = 0
+--   tablas_sin_rls = 0 · vistas_sin_proteger = 0 · anon_con_permisos = 0 · politicas = 66 · reglas_ajenas_abiertas = 0
 select
   (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and c.relkind in ('r', 'p') and not c.relrowsecurity) as tablas_sin_rls,

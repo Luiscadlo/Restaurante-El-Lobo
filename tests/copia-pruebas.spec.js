@@ -11,6 +11,7 @@ const os = require('os');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { abrirSistema, USUARIOS } = require('./helpers/backend-falso');
+const { datos: DATOS_BASE } = require('./fixtures/datos');
 
 const REF_PRUEBAS = 'abcdefghijklmnopqrst';
 const HOST_PRUEBAS = `${REF_PRUEBAS}.supabase.co`;
@@ -46,6 +47,14 @@ test.describe('la copia de pruebas', () => {
     await abrirSistema(real, { usuario: null, esperarLogin: true });
     await expect(real.locator('#aviso-pruebas')).toHaveCount(0);
     expect(await real.title()).not.toContain('PRUEBAS');
+  });
+
+  test('si el administrador cambia el nombre del negocio, el título conserva el aviso de PRUEBAS', async ({ page }) => {
+    const d = JSON.parse(JSON.stringify(DATOS_BASE));
+    d.configuracion = [{ id: 1, clave: 'negocio_nombre', valor: 'Café Lobo', vigente_desde: '2026-10-01T10:00:00-05:00', creado_por: 'luis', creado_en: '2026-10-01T10:00:00-05:00' }];
+    const reg = await abrirSistema(page, { url: URL_COPIA, claveSesion: CLAVE_PRUEBAS, datos: d });
+    expect(await page.title()).toBe('🧪 PRUEBAS — Café Lobo — Sistema Contable');          // cambia el nombre, no la marca de que es la copia
+    expect(reg.errores).toEqual([]);
   });
 
   test('habla SOLO con el proyecto de pruebas (ni una petición a producción)', async ({ page }) => {

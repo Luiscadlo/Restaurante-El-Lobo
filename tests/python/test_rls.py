@@ -44,7 +44,7 @@ class Cluster(ClusterTemporal):
         super().__init__()
         self._preparar_plantilla()
 
-    # Base "plantilla": imita lo que Supabase ya trae + las 16 tablas (id, v) con una fila de ejemplo.
+    # Base "plantilla": imita lo que Supabase ya trae + las 17 tablas (id, v) con una fila de ejemplo.
     def _preparar_plantilla(self):
         self.psql_ok("postgres", "create database lobo_plantilla;")
         tablas = TABLAS + ["tabla_desconocida"]
@@ -164,6 +164,11 @@ def _esperado(perfil, tabla, op):
 
 
 # ── Pruebas ─────────────────────────────────────────────────────────────────
+# Tablas donde NADIE —ni el administrador— modifica o borra: solo se agrega (historial de la configuración).
+SOLO_AGREGAN = {"configuracion"}
+POLITICAS_ESPERADAS = sum(1 for t in TABLAS for letra in "SIUD" if any(letra in MATRIZ["roles"].get(r, {}).get(t, "") for r in MATRIZ["roles"]))
+
+
 def test_la_matriz_es_coherente():
     """Sin esto el sistema no podría usar la matriz: modificar o borrar exige poder leer."""
     for rol, permisos in MATRIZ["roles"].items():
@@ -175,7 +180,10 @@ def test_la_matriz_es_coherente():
     for tabla, ops in MATRIZ["roles"]["respaldo"].items():
         assert set(ops) <= {"S"}, f"respaldo no debe escribir en {tabla}"
     # admin: todo
-    assert all(MATRIZ["roles"]["admin"].get(t) == "SIUD" for t in TABLAS)
+    assert all(MATRIZ["roles"]["admin"].get(t) == ("SI" if t in SOLO_AGREGAN else "SIUD") for t in TABLAS)
+    # las tablas que solo se agregan: ningún rol modifica ni borra
+    for t in SOLO_AGREGAN:
+        assert all(not (set(MATRIZ["roles"][r].get(t, "")) & {"U", "D"}) for r in MATRIZ["roles"]), f"{t} es de solo agregar"
 
 
 def test_el_sql_esta_al_dia_con_la_matriz():
@@ -315,7 +323,7 @@ def test_la_verificacion_final_da_lo_esperado(cluster, base):
     assert ultima, salida
     sin_rls, vistas, anon, politicas, ajenas = [int(x) for x in ultima[-1].split("|")]
     assert (sin_rls, vistas, anon, ajenas) == (0, 0, 0, 0)
-    assert politicas == 4 * len(TABLAS)
+    assert politicas == POLITICAS_ESPERADAS
 
 
 # ── Reglas viejas "allow all" de la base real ────────────────────────────────
@@ -378,5 +386,5 @@ def test_la_verificacion_final_cuenta_las_reglas_ajenas_abiertas(cluster, base_c
     _, salida, _ = cluster.psql(base_con_reglas_viejas, SQL_APLICAR.read_text(encoding="utf-8"))
     filas = [f.strip() for f in salida.splitlines() if re.fullmatch(r"\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*", f)]
     assert "reglas_ajenas_abiertas" in salida
-    assert filas and re.sub(r"\s+", "", filas[-1]) == f"0|0|0|{4 * len(TABLAS)}|0", salida[-500:]
+    assert filas and re.sub(r"\s+", "", filas[-1]) == f"0|0|0|{POLITICAS_ESPERADAS}|0", salida[-500:]
 

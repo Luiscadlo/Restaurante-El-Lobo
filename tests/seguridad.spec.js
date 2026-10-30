@@ -349,7 +349,7 @@ test.describe('caja y autorización de administrador', () => {
   });
 
   const TABS_CAJA = ['Pedidos', 'Pendientes', 'Fiados', 'Cierre', 'Inventario', 'Menú'];
-  const TABS_DUENO = ['Tablero', 'Ingresos', 'Egresos', 'Caja', 'Auditoría', 'Datos'];
+  const TABS_DUENO = ['Tablero', 'Ingresos', 'Egresos', 'Caja', 'Auditoría', 'Datos', '⚙️ Configuración'];
   const tabsVisibles = page => page.evaluate(() => [...document.querySelectorAll('nav .tab')]
     .filter(t => getComputedStyle(t).display !== 'none').map(t => t.textContent.replace(/\s+\d+\s*$/, '').trim()));
 
@@ -361,13 +361,13 @@ test.describe('caja y autorización de administrador', () => {
     }
   });
 
-  test('un dueño que entra directo ve las 12 secciones, sin candados', async ({ page }) => {
+  test('un dueño que entra directo ve las 13 secciones, sin candados', async ({ page }) => {
     await abrirSistema(page, { usuario: 'admin' });
     expect(await tabsVisibles(page)).toEqual([...TABS_CAJA, ...TABS_DUENO]);
     expect(await tabsVisibles(page)).not.toContainEqual(expect.stringContaining('🔒'));
   });
 
-  test('si el dueño se autoriza en el sitio aparecen las 6 secciones, y al cerrar vuelven a ocultarse y se regresa a Pedidos', async ({ page }) => {
+  test('si el dueño se autoriza en el sitio aparecen las 7 secciones, y al cerrar vuelven a ocultarse y se regresa a Pedidos', async ({ page }) => {
     await abrirSistema(page);
     await irA(page, 'egresos');
     await page.fill('#egresos-email', 'dueno1');

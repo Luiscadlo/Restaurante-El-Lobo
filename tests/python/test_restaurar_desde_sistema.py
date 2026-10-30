@@ -40,7 +40,8 @@ HTML = RAIZ / "Contabilidad" / "ElLobo-Sistema Contable.html"
 
 TABLAS = ['pedidos', 'egresos', 'inventario', 'consumos', 'gastos_dia', 'mesas', 'cierres_dia', 'aperturas_turno',
           'notas_dia', 'movimientos_caja', 'ingresos_extra', 'pedidos_eliminados', 'clientes_fiado', 'abonos_fiado',
-          'pedidos_descuentos', 'config']
+          'pedidos_descuentos', 'config', 'configuracion']
+OPCIONALES = ('config', 'pedidos_descuentos', 'configuracion')      # pueden faltar en un respaldo viejo
 TEXTO_DIFICIL = "Línea 1\nLínea 2 con 'comillas', \"dobles\", $$ dólares $$, barra \\ y \\n, tilde ñ, emoji 😀, tab\t."
 
 pytestmark = pytest.mark.skipif(not (ESQUEMA.exists() and RESTAURAR.exists()), reason="Falta el SQL")
@@ -85,6 +86,10 @@ def respaldo_ejemplo(n_pedidos=5, **cambios):
         "abonos_fiado": [{"id": 1, "cliente_fiado_id": 1, "fecha": "2026-10-05", "monto": 5000, "cuenta": "efectivo", "nota": None, "turno": "almuerzo"}],
         "pedidos_descuentos": [{"id": 1, "grupo_pedido": "g1", "pedido_ids": "1,2", "fecha": "2026-10-05", "valor_lista": 28000, "descuento_nuevo": 2000, "motivo": "cliente frecuente"}],
         "config": [{"clave": "ultimo_respaldo", "valor": {"fecha": "2026-10-04", "conteos": {"pedidos": 5}}, "actualizado_en": "2026-10-04T03:00:00+00:00"}],
+        # La historia de la configuración se restaura tal cual: con sus ids, su «vigente desde» y quién la guardó.
+        "configuracion": [{"id": 1, "clave": "mesas", "valor": 10, "vigente_desde": "2026-09-01T15:00:00+00:00", "creado_por": "luis", "creado_en": "2026-09-01T15:00:00+00:00"},
+                          {"id": 2, "clave": "mesas", "valor": 12, "vigente_desde": "2026-10-01T15:00:00+00:00", "creado_por": "luis", "creado_en": "2026-10-01T15:00:00+00:00"},
+                          {"id": 3, "clave": "negocio_nombre", "valor": "El Lobo", "vigente_desde": "2026-10-01T15:00:00+00:00", "creado_por": "luis", "creado_en": "2026-10-01T15:00:00+00:00"}],
     }
     t.update(cambios.pop("tablas", {}))
     r = {"version": 1, "generado_en": "2026-10-05T23:00:00.000Z", "fecha": "2026-10-05", "tablas": t}
@@ -102,6 +107,7 @@ def sembrar_base_actual(cluster, db):
         insert into public.clientes_fiado (id, nombre) values (50, 'Cliente de hoy');
         insert into public.inventario (id, nombre) values (60, 'Sal');
         insert into public.config (clave, valor) values ('ultimo_respaldo', '{"fecha":"2026-10-20"}');
+        insert into public.configuracion (id, clave, valor, vigente_desde) values (40, 'mesas', '9', '2026-10-20T15:00:00+00:00');
         insert into public.notas_dia (fecha, texto) values ('2026-10-20', 'nota de hoy');
     """)
 
@@ -264,16 +270,17 @@ def test_columnas_que_faltan_toman_su_valor_por_defecto_y_las_ajenas_se_ignoran(
     assert cluster.valor(db, "select estado from public.pedidos where id = 1") == "pendiente"
 
 
-def test_un_respaldo_viejo_sin_config_ni_descuentos_los_deja_como_estan(cluster, db):
+def test_un_respaldo_viejo_sin_config_ni_descuentos_ni_configuracion_los_deja_como_estan(cluster, db):
     t = respaldo_ejemplo()["tablas"]
-    t.pop("config"), t.pop("pedidos_descuentos")
+    t.pop("config"), t.pop("pedidos_descuentos"), t.pop("configuracion")
     r = {"version": 1, "generado_en": "2026-09-01T00:00:00Z", "fecha": "2026-09-01", "tablas": t, "conteos": {k: len(v) for k, v in t.items()}}
     cluster.psql_ok(db, "insert into public.pedidos_descuentos (id, grupo_pedido) values (77, 'g-hoy');")
     res = restaurar(cluster, db, r)
     assert res[0] == "ok", res
-    assert sorted(res[1]["sin_cambios"]) == ["config", "pedidos_descuentos"]
+    assert sorted(res[1]["sin_cambios"]) == ["config", "configuracion", "pedidos_descuentos"]
     assert cluster.valor(db, "select count(*) from public.config where clave = 'ultimo_respaldo' and valor->>'fecha' = '2026-10-20'") == "1"
     assert cluster.valor(db, "select count(*) from public.pedidos_descuentos where id = 77") == "1"
+    assert cluster.valor(db, "select count(*) from public.configuracion where id = 40") == "1"        # la configuración de hoy no se toca
     assert cluster.valor(db, "select count(*) from public.pedidos") == "5"
 
 
@@ -338,7 +345,7 @@ def test_una_fila_que_no_es_un_objeto_se_rechaza_por_eso_y_no_por_otra_causa(clu
     assert res[0] == "error" and res[2] == "respaldo_invalido" and "filas que no son válidas" in res[3], res
 
 
-@pytest.mark.parametrize("tabla", [t for t in TABLAS if t not in ("config", "pedidos_descuentos")])
+@pytest.mark.parametrize("tabla", [t for t in TABLAS if t not in OPCIONALES])
 def test_a_cada_tabla_obligatoria_le_hace_falta_estar_en_el_archivo(cluster, db, tabla):
     r = respaldo_ejemplo()
     del r["tablas"][tabla], r["conteos"][tabla]
@@ -467,10 +474,12 @@ def test_empezar_de_cero_borra_el_trabajo_y_conserva_mesas_libres_e_inventario(c
     assert res[0] == "ok", res
     c = conteos(cluster, db)
     for t in TABLAS:
-        if t in ("mesas", "inventario"):
+        if t in ("mesas", "inventario", "configuracion"):
             continue
         assert c[t] == 0, f"{t} debía quedar vacía y tiene {c[t]}"
     assert c["mesas"] == 5 and c["inventario"] == 1
+    assert c["configuracion"] == 1          # la configuración del negocio NO es un dato de trabajo: se conserva
+    assert res[1]["antes"]["configuracion"] == 1 and res[1]["despues"]["configuracion"] == 1
     assert cluster.valor(db, "select count(*) from public.mesas where estado <> 'libre'") == "0"
     assert res[1]["antes"]["pedidos"] == 3 and res[1]["despues"]["pedidos"] == 0       # los 2 de la base de ejemplo + el «previo»
     # Los contadores empiezan de nuevo
