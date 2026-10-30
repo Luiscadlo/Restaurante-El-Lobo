@@ -68,16 +68,313 @@ async function abrir(page, opciones = {}) {
 }
 
 // Registra un pedido como fiado de un cliente (lo mismo que hace el botón «Registrar pedido»).
-const registrarFiado = (page, clienteId, monto) => page.evaluate(async ([cid, m]) => {
+const registrarFiado = (page, clienteId, monto, estado = 'pendiente') => page.evaluate(async ([cid, m, e]) => {
   selectedUbicacion = 'fiar';
   clienteFiadoSeleccionadoId = cid;
   almuerzosEnCola = [{ pedido: 'Completo', sopa: '', arroz: '', proteina: '', acomp: '', detalle: '', cantidad: 1,
                        monto_unit: m, monto_almuerzo: m, para_llevar: false }];
-  await agregarIngreso('pendiente');
-}, [clienteId, monto]);
+  await agregarIngreso(e);
+}, [clienteId, monto, estado]);
 const pasarPendienteAFiado = (page, ids) => page.evaluate(async i => { cambioMesaIds = i; await moverPedidoAFiado(); }, ids);
 const toastsTexto = page => page.locator('.toast').allInnerTexts();
 const saldo = (page, id) => page.evaluate(i => { const s = calcularSaldoFiado(i); return { pendiente: s.totalPendiente, sobrante: s.sobrante, saldo: s.saldo }; }, id);
+
+// ── El aviso EN el formulario de Pedidos (antes de pulsar el botón de registrar) ───────────────────────────────────────
+// Lo que el dueño esperaba ver al probar (30-oct): al elegir el cliente de un fiado, el formulario ya le dice si tiene
+// saldo a favor y si alcanzaría para ESTE pedido. Es solo informativo: la pregunta de verdad sale al registrar.
+const AVISO = '#cliente-fiado-saldo-aviso';
+async function elegirFiarConCliente(page, texto, nombreCompleto) {
+  await page.locator('#btn-fiar').click();
+  await page.locator('#ing-cliente-fiado').fill(texto);
+  await page.locator('#ac-cliente-fiado .autocomplete-item', { hasText: nombreCompleto || texto }).first().dispatchEvent('mousedown');
+}
+const textoAviso = page => page.locator(AVISO).innerText();
+
+test.describe('0) El aviso dentro del formulario de Pedidos → «Fiar»', () => {
+  test('no se ve mientras no haya un cliente elegido, ni al abrir «Fiar»', async ({ page }) => {
+    await abrir(page);
+    await expect(page.locator(AVISO)).toBeHidden();
+    await page.locator('#btn-fiar').click();
+    await expect(page.locator(AVISO)).toBeHidden();
+  });
+
+  test('cliente con saldo a favor: aparece al elegirlo, se actualiza con el pedido y la cantidad, y es solo informativo', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const reg = await abrir(page);
+    await elegirFiarConCliente(page, 'Luis', 'Luisca');
+    await expect(page.locator(AVISO)).toBeVisible();
+    expect(await textoAviso(page)).toContain('Luisca tiene $20.000 a favor');
+    expect(await textoAviso(page)).toContain('te preguntaré');                         // todavía sin pedido elegido
+
+    await page.locator('#ing-pedido').selectOption('completo');                         // 14.000 ≤ 20.000
+    expect(await textoAviso(page)).toContain('Con este pedido ($14.000) le alcanza');
+    expect(await textoAviso(page)).toContain('no entra plata nueva a caja');
+
+    await page.locator('#ing-cantidad').fill('2');                                      // 28.000 > 20.000
+    expect(await textoAviso(page)).toContain('No alcanza para pagar este pedido completo ($28.000)');
+    expect(await textoAviso(page)).toContain('Si lo dejas fiado, el saldo se le descuenta en Fiados');
+
+    await page.locator('#ing-cantidad').fill('1');                                      // vuelve a alcanzar
+    expect(await textoAviso(page)).toContain('Con este pedido ($14.000) le alcanza');
+
+    await page.locator('#ing-pedido').selectOption('asado200');                         // 20.000 = 20.000: justo alcanza
+    expect(await textoAviso(page)).toContain('Con este pedido ($20.000) le alcanza');
+
+    // Solo informa: nada preguntó, nada escribió, nada denegado.
+    expect(dialogos).toEqual([]);
+    expect(reg.escrituras).toEqual([]);
+    expect(reg.denegadas).toEqual([]);
+    expect(reg.errores).toEqual([]);
+  });
+
+  test('el descuento del pedido cuenta en lo que se compara con el saldo', async ({ page }) => {
+    await abrir(page);
+    await elegirFiarConCliente(page, 'Luis', 'Luisca');
+    await page.locator('#ing-pedido').selectOption('asado200');                         // 20.000
+    await page.locator('#ing-cantidad').fill('2');                                      // 40.000 → no alcanza
+    expect(await textoAviso(page)).toContain('No alcanza para pagar este pedido completo ($40.000)');
+    await page.locator('#ing-descuento').fill('20000');                                 // descuento de 20.000 → 20.000: alcanza
+    expect(await textoAviso(page)).toContain('Con este pedido ($20.000) le alcanza');
+  });
+
+  test('cliente SIN saldo a favor (Marta debe 12.000): no aparece nada, ni con un pedido elegido', async ({ page }) => {
+    await abrir(page);
+    await elegirFiarConCliente(page, 'Marta', 'Marta Pérez');
+    await expect(page.locator('#cliente-fiado-seleccionado')).toBeVisible();
+    await expect(page.locator(AVISO)).toBeHidden();
+    await page.locator('#ing-pedido').selectOption('completo');
+    await expect(page.locator(AVISO)).toBeHidden();
+  });
+
+  test('un fiado viejo del mismo cliente se paga primero: el aviso lo cuenta igual que lo hará «Aplicar saldo»', async ({ page }) => {
+    const extra = { pedidos: [fiadoDe(910, 7, 6000, 'g-luisca-viejo', { fecha: '2026-10-10' })] };
+    await abrir(page, { extra });
+    await elegirFiarConCliente(page, 'Luis', 'Luisca');
+    await page.locator('#ing-pedido').selectOption('completo');                         // 20.000 − 6.000 viejo = 14.000 → alcanza justo
+    expect(await textoAviso(page)).toContain('Le alcanza para 1 fiado(s) más viejo(s) y para este pedido ($14.000)');
+    await page.locator('#ing-pedido').selectOption('asado200');                         // 20.000 − 6.000 = 14.000 < 20.000
+    expect(await textoAviso(page)).toContain('Se usaría primero en sus fiados más viejos (1); este pedido ($20.000) no alcanzaría');
+  });
+
+  test('si el saldo no alcanza ni para el fiado viejo (Pedro: 5.000 a favor y 12.000 viejos), dice que no alcanza', async ({ page }) => {
+    await abrir(page);
+    await elegirFiarConCliente(page, 'Pedro', 'Pedro Gómez');
+    expect(await textoAviso(page)).toContain('Pedro Gómez tiene $5.000 a favor');
+    await page.locator('#ing-pedido').selectOption('completo');
+    expect(await textoAviso(page)).toContain('No alcanza para pagar este pedido completo ($14.000)');
+  });
+
+  test('«✕ quitar», cambiar de cliente o de tipo de pedido lo hacen desaparecer (o cambiar) sin dejar restos', async ({ page }) => {
+    await abrir(page);
+    await elegirFiarConCliente(page, 'Luis', 'Luisca');
+    await expect(page.locator(AVISO)).toBeVisible();
+    await page.locator('#cliente-fiado-seleccionado button', { hasText: 'quitar' }).click();
+    await expect(page.locator(AVISO)).toBeHidden();
+    expect(await page.locator(AVISO).textContent()).toBe('');
+
+    await page.locator('#ing-cliente-fiado').fill('Ana');                               // otro cliente con saldo: 5.000
+    await page.locator('#ac-cliente-fiado .autocomplete-item', { hasText: 'Ana Ríos' }).first().dispatchEvent('mousedown');
+    expect(await textoAviso(page)).toContain('Ana Ríos tiene $5.000 a favor');
+    expect(await textoAviso(page)).not.toContain('Luisca');
+
+    await page.locator('#cliente-fiado-seleccionado button', { hasText: 'quitar' }).click();
+    await page.locator('#ing-cliente-fiado').fill('Marta');                             // y ahora uno sin saldo
+    await page.locator('#ac-cliente-fiado .autocomplete-item', { hasText: 'Marta Pérez' }).first().dispatchEvent('mousedown');
+    await expect(page.locator(AVISO)).toBeHidden();
+
+    await page.locator('#cliente-fiado-seleccionado button', { hasText: 'quitar' }).click();
+    await elegirFiarConCliente(page, 'Luis', 'Luisca');                                 // al cambiar de tipo de pedido se va con el cliente
+    await expect(page.locator(AVISO)).toBeVisible();
+    await page.evaluate(() => seleccionarUbicacion('sinmesa'));                        // (el botón «Gratis» solo existe en comidas rápidas)
+    await expect(page.locator(AVISO)).toBeHidden();
+    await page.locator('#btn-fiar').click();
+    await expect(page.locator(AVISO)).toBeHidden();                                     // el cliente no vuelve solo
+  });
+
+  test('con la sesión de administrador se ve igual', async ({ page }) => {
+    await abrir(page, { usuario: 'admin' });
+    await elegirFiarConCliente(page, 'Luis', 'Luisca');
+    await page.locator('#ing-pedido').selectOption('completo');
+    expect(await textoAviso(page)).toContain('Luisca tiene $20.000 a favor');
+    expect(await textoAviso(page)).toContain('Con este pedido ($14.000) le alcanza');
+  });
+
+  test('de punta a punta con la pantalla: se ve el aviso, se pulsa «Registrar pedido como pendiente», sale la pregunta y al aceptar queda saldado; el formulario queda limpio', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const reg = await abrir(page);
+    await elegirFiarConCliente(page, 'Luis', 'Luisca');
+    await page.locator('#ing-pedido').selectOption('completo');
+    expect(await textoAviso(page)).toContain('Con este pedido ($14.000) le alcanza');
+    await page.locator('#btn-reg').click();
+    await expect.poll(() => dialogos.length).toBe(1);
+    expect(dialogos[0].mensaje).toContain('Aplicar saldo a favor de Luisca: $20.000');
+    expect(dialogos[0].mensaje).toContain('Se saldarán 1 pedido(s) completo(s) por $14.000');
+    await expect.poll(() => escritura(reg, 'PATCH', 'pedidos').length).toBe(1);
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 6000 });
+    await expect(page.locator(AVISO)).toBeHidden();                                     // formulario limpio: sin cliente ni aviso
+    expect(await page.evaluate(() => clienteFiadoSeleccionadoId)).toBeNull();
+    expect(reg.denegadas).toEqual([]);
+    expect(reg.errores).toEqual([]);
+  });
+
+  test('un nombre con símbolos no se interpreta como código en el aviso', async ({ page }) => {
+    const datos = datosAviso();
+    datos.clientes_fiado.push({ id: 11, nombre: '<i>Raro</i> & Co', created_at: '2026-10-01T10:20:00-05:00' });
+    datos.abonos_fiado.push(abonoDe(4, 11, 3000));
+    await abrirSistema(page, { datos });
+    await elegirFiarConCliente(page, 'Raro', 'Raro');
+    expect(await textoAviso(page)).toContain('<i>Raro</i> & Co tiene $3.000 a favor');
+    expect(await page.locator(`${AVISO} i`).count()).toBe(0);
+  });
+});
+
+// ── «Pagado inmediatamente» con un cliente de «Fiar» (pedido del dueño, 30-oct) ───────────────────────────────────────
+// Antes este botón no preguntaba nada ni usaba el saldo. Ahora, si el saldo alcanza para el pedido completo, pregunta ANTES
+// de guardar: Aceptar = se paga con el saldo (sin plata nueva en caja); Cancelar = se cobra normal con el método elegido.
+const ingresoEfectivo = page => page.evaluate(() => ST.ingresos.reduce((a, p) => a + efectivoDe(p), 0));
+test.describe('1b) Pedidos → «Fiar» → «Pagado inmediatamente»', () => {
+  test('saldo que alcanza + ACEPTAR: se paga con el saldo, sin sumar plata a ningún cierre, y una sola pregunta', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const reg = await abrir(page);
+    const efectivoAntes = await ingresoEfectivo(page);
+    await registrarFiado(page, 7, 15000, 'pagado');
+
+    expect(dialogos).toHaveLength(1);                                                    // no vuelve a preguntar al aplicar
+    expect(dialogos[0].tipo).toBe('confirm');
+    expect(dialogos[0].mensaje).toContain('Luisca tiene $20.000 a favor');
+    expect(dialogos[0].mensaje).toContain('¿Pagar este pedido ($15.000) con su saldo a favor?');
+    expect(dialogos[0].mensaje).toContain('le quedarían $5.000 a favor');
+    expect(dialogos[0].mensaje).toContain('No entra plata nueva a caja');
+    expect(dialogos[0].mensaje).toContain('CANCELAR → NO se usa el saldo');
+
+    // Se guardó una sola vez, como fiado de Luisca, y quedó saldado con su saldo (monto en 0, «vía abono»).
+    const guardado = escritura(reg, 'POST', 'pedidos');
+    expect(guardado).toHaveLength(1);
+    expect(guardado[0].cuerpo).toMatchObject({ es_fiar: true, cliente_fiado_id: 7, monto_total: 15000, estado: 'pendiente' });
+    const patch = escritura(reg, 'PATCH', 'pedidos');
+    expect(patch).toHaveLength(1);
+    expect(patch[0].cuerpo).toMatchObject({ estado: 'pagado', monto_efectivo: 0, monto_transferencia: 0, pagado_via_abono: true, fecha_pago: FECHA_HOY });
+    expect(escritura(reg, 'POST', 'abonos_fiado')).toHaveLength(0);
+    expect(escritura(reg, 'POST', 'movimientos_caja')).toHaveLength(0);
+    expect(reg.escrituras.filter(e => e.tabla === 'cierres_dia')).toHaveLength(0);
+    expect(await ingresoEfectivo(page)).toBe(efectivoAntes);                             // la caja de hoy no cambia
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 5000 });
+    expect(await page.evaluate(() => ST.pendientes.filter(p => p.cliente_fiado_id === 7).length)).toBe(0);
+    expect((await toastsTexto(page)).join(' | ')).toContain('saldado(s) con su saldo a favor');
+    expect(reg.denegadas).toEqual([]);
+    expect(reg.errores).toEqual([]);
+  });
+
+  test('saldo que alcanza + CANCELAR: se cobra normal con el método elegido, entra a la caja y el saldo no se toca', async ({ page }) => {
+    const dialogos = armarDialogos(page, { confirmar: false });
+    const reg = await abrir(page);
+    const efectivoAntes = await ingresoEfectivo(page);
+    await registrarFiado(page, 7, 15000, 'pagado');
+
+    expect(dialogos).toHaveLength(1);
+    const guardado = escritura(reg, 'POST', 'pedidos');
+    expect(guardado).toHaveLength(1);                                                    // el pedido SÍ se registra
+    expect(guardado[0].cuerpo).toMatchObject({ estado: 'pagado', metodo: 'efectivo', monto_total: 15000 });
+    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(0);
+    expect(await ingresoEfectivo(page)).toBe(efectivoAntes + 15000);                     // plata normal de hoy
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 20000 });       // su saldo queda intacto
+    const avisos = (await toastsTexto(page)).join(' | ');
+    expect(avisos).toContain('Venta registrada');
+    expect(avisos).not.toContain('saldado(s)');
+    expect(avisos).not.toContain('ya se descuenta');
+    expect(reg.errores).toEqual([]);
+  });
+
+  test('saldo que NO alcanza (Pedro: 5.000 a favor): no pregunta, se cobra normal y solo avisa cuánto tiene a favor', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const reg = await abrir(page);
+    const efectivoAntes = await ingresoEfectivo(page);
+    await registrarFiado(page, 9, 8000, 'pagado');
+    expect(dialogos).toEqual([]);
+    const guardado = escritura(reg, 'POST', 'pedidos');
+    expect(guardado).toHaveLength(1);
+    expect(guardado[0].cuerpo).toMatchObject({ estado: 'pagado', metodo: 'efectivo', monto_total: 8000 });
+    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(0);
+    expect(await ingresoEfectivo(page)).toBe(efectivoAntes + 8000);
+    const avisos = (await toastsTexto(page)).join(' | ');
+    expect(avisos).toContain('Pedro Gómez tiene $5.000 a favor');
+    expect(avisos).toContain('no alcanza para pagar este pedido completo ($8.000)');
+    expect(avisos).not.toContain('ya se descuenta de su saldo en Fiados');                // ese aviso es de cuando queda fiado, no de pago al instante
+    expect(await saldo(page, 9)).toMatchObject({ pendiente: 12000, sobrante: 5000 });    // nada cambió en su cuenta
+  });
+
+  test('cliente sin saldo a favor (Marta): «Pagado inmediatamente» sigue igual que siempre, sin preguntas ni avisos', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const reg = await abrir(page);
+    await registrarFiado(page, 8, 8000, 'pagado');
+    expect(dialogos).toEqual([]);
+    expect(escritura(reg, 'POST', 'pedidos')[0].cuerpo).toMatchObject({ estado: 'pagado', metodo: 'efectivo' });
+    expect((await toastsTexto(page)).join(' | ')).not.toContain('a favor');
+  });
+
+  test('con un fiado viejo que el saldo cubre primero: la pregunta lo dice, y al aceptar se saldan ambos (el viejo primero)', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const extra = { pedidos: [fiadoDe(910, 7, 6000, 'g-luisca-viejo', { fecha: '2026-10-10' })] };
+    const reg = await abrir(page, { extra });
+    await registrarFiado(page, 7, 14000, 'pagado');                                      // 6.000 + 14.000 = 20.000 justo
+    expect(dialogos).toHaveLength(1);
+    expect(dialogos[0].mensaje).toContain('Antes se saldarían 1 fiado(s) más viejo(s) por $6.000');
+    expect(dialogos[0].mensaje).toContain('le quedarían $0 a favor');
+    const patch = escritura(reg, 'PATCH', 'pedidos');
+    expect(patch).toHaveLength(2);
+    expect(decodeURIComponent(patch[0].consulta)).toContain('id=eq.910');                // el viejo primero
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 0 });
+  });
+
+  test('el viejo no alcanza a quedar pagado junto con el nuevo → no pregunta, se cobra normal (misma regla del más viejo al más nuevo)', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const extra = { pedidos: [fiadoDe(910, 7, 6000, 'g-luisca-viejo', { fecha: '2026-10-10' })] };
+    const reg = await abrir(page, { extra });
+    await registrarFiado(page, 7, 15000, 'pagado');                                      // 6.000 + 15.000 = 21.000 > 20.000
+    expect(dialogos).toEqual([]);
+    expect(escritura(reg, 'POST', 'pedidos')[0].cuerpo).toMatchObject({ estado: 'pagado', metodo: 'efectivo' });
+    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(0);
+    expect((await toastsTexto(page)).join(' | ')).toContain('no alcanza para pagar este pedido completo ($15.000)');
+  });
+
+  test('un pago al instante SIN «Fiar» (mesa, sin mesa) no pregunta nada aunque el sistema tenga clientes con saldo', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const reg = await abrir(page);
+    await page.evaluate(async () => {
+      selectedUbicacion = 'sinmesa';
+      almuerzosEnCola = [{ pedido: 'Completo', sopa: '', arroz: '', proteina: '', acomp: '', detalle: '', cantidad: 1, monto_unit: 14000, monto_almuerzo: 14000, para_llevar: false }];
+      await agregarIngreso('pagado');
+    });
+    expect(dialogos).toEqual([]);
+    expect(escritura(reg, 'POST', 'pedidos')[0].cuerpo).toMatchObject({ estado: 'pagado', es_fiar: false, cliente_fiado_id: null });
+    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(0);
+  });
+
+  test('«↩ Deshacer» de un pago hecho con saldo: vuelve a ser fiado del cliente y su saldo a favor se recupera', async ({ page }) => {
+    armarDialogos(page);
+    await abrir(page);
+    await registrarFiado(page, 7, 15000, 'pagado');
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 5000 });
+    const ids = await page.evaluate(() => ST.ingresos.filter(p => p.cliente_fiado_id === 7).map(p => p.id));
+    await page.evaluate(i => revertirPago(i), ids);
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 15000, sobrante: 20000 });
+  });
+
+  test('de punta a punta con la pantalla: el botón «Pagado inmediatamente» muestra la pregunta; al aceptar queda pagado con el saldo', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const reg = await abrir(page);
+    await elegirFiarConCliente(page, 'Luis', 'Luisca');
+    await page.locator('#ing-pedido').selectOption('completo');
+    await page.locator('#btn-reg-pagado').click();
+    await expect.poll(() => dialogos.length).toBe(1);
+    expect(dialogos[0].mensaje).toContain('¿Pagar este pedido ($14.000) con su saldo a favor?');
+    await expect.poll(() => escritura(reg, 'PATCH', 'pedidos').length).toBe(1);
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 6000 });
+    await expect(page.locator(AVISO)).toBeHidden();
+    expect(reg.denegadas).toEqual([]);
+    expect(reg.errores).toEqual([]);
+  });
+});
 
 test.describe('1) Pedidos → «Fiar» con un cliente', () => {
   test('saldo que alcanza: pregunta, y al aceptar salda el pedido con el saldo sin sumar plata a ningún cierre (con caja)', async ({ page }) => {
