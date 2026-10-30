@@ -255,6 +255,7 @@ function datosSeguro() {
   d.notas_dia = [{ id: 1, fecha: FECHA_HOY, texto: 'una nota', created_at: hoyIso }];
   d.ingresos_extra = [{ id: 1, fecha: FECHA_HOY, descripcion: 'extra', monto: 5000, cuenta: 'efectivo', created_at: hoyIso }];
   d.movimientos_caja = [{ id: 1, fecha: FECHA_HOY, tipo: 'gasto', cuenta: 'efectivo', descripcion: 'mov', monto: 1000, created_at: hoyIso }];
+  d.egresos = d.egresos.concat([{ id: 3, fecha: FECHA_HOY, cat: 'proveedor', monto: 120000, description: 'Compra de hoy', created_at: hoyIso }]);   // de hoy: la lista de Egresos lo muestra y se puede editar
   d.pedidos.push({ ...copia(BASE.pedidos[0]), id: 950, estado: 'pendiente', metodo: 'fiado', es_fiar: true, cliente_fiado_id: 1, monto_total: 9000, monto_unit: 9000, monto_almuerzo: 9000, grupo_pedido: 'g-fiado-luisca' });
   return d;
 }
@@ -396,6 +397,42 @@ test.describe('3) Los «¿Seguro?» salen en una ventana del sistema', () => {
     await ventana.locator('button[data-eleccion="si"]').click();
     await b;
     expect(escritura(reg, 'POST', 'movimientos_caja')).toHaveLength(1);
+  });
+
+  test('editar un egreso para que deje la cuenta en negativo: «Volver» no guarda el cambio; «Continuar» sí', async ({ page }) => {
+    const reg = await abrirSistema(page, { datos: datosSeguro(), usuario: 'admin' });
+    await page.evaluate(() => editarEgreso(3));
+    await page.evaluate(() => { document.getElementById('egr-edit-monto-3').value = '999999999'; });
+    const ventana = page.locator(VENTANA);
+    const a = page.evaluate(() => guardarEdicionEgreso(3));
+    await expect(ventana).toBeVisible();
+    await expect(page.locator('#sis-titulo')).toContainText('quedaría en negativo');
+    await ventana.locator('button[data-eleccion="no"]').click();
+    await a;
+    expect(escritura(reg, 'PATCH', 'egresos')).toHaveLength(0);
+    const b = page.evaluate(() => guardarEdicionEgreso(3));
+    await expect(ventana).toBeVisible();
+    await ventana.locator('button[data-eleccion="si"]').click();
+    await b;
+    expect(escritura(reg, 'PATCH', 'egresos')).toHaveLength(1);
+  });
+
+  test('editar un movimiento de caja para que deje la cuenta en negativo: «Volver» no guarda el cambio; «Continuar» sí', async ({ page }) => {
+    const reg = await abrirSistema(page, { datos: datosSeguro(), usuario: 'admin' });
+    await page.evaluate(() => editarMovimientoCaja(1));
+    await page.evaluate(() => { document.getElementById('caja-edit-monto-1').value = '999999999'; });
+    const ventana = page.locator(VENTANA);
+    const a = page.evaluate(() => guardarEdicionMovimientoCaja(1));
+    await expect(ventana).toBeVisible();
+    await expect(page.locator('#sis-titulo')).toContainText('quedaría en negativo');
+    await ventana.locator('button[data-eleccion="no"]').click();
+    await a;
+    expect(escritura(reg, 'PATCH', 'movimientos_caja')).toHaveLength(0);
+    const b = page.evaluate(() => guardarEdicionMovimientoCaja(1));
+    await expect(ventana).toBeVisible();
+    await ventana.locator('button[data-eleccion="si"]').click();
+    await b;
+    expect(escritura(reg, 'PATCH', 'movimientos_caja')).toHaveLength(1);
   });
 
   test('sobrescribir un cierre manual que ya existe: pregunta en una ventana del sistema', async ({ page }) => {
