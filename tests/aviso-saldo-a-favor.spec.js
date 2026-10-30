@@ -21,7 +21,8 @@ const irA = (page, id) => page.evaluate(i => showTab(i, document.querySelector(`
 //   · los del navegador (preguntas de nombre y el confirm del botón «✔ Aplicar saldo a favor» de la tarjeta):
 //     cfg.confirmar → true acepta, false cancela;   cfg.nombre → lo que se escribe cuando el sistema pregunta un nombre;
 //   · la ventana propia de saldo a favor (#modal-saldo-favor): se pulsa el botón de cfg.eleccion ('usar' | 'no' | 'volver';
-//     por defecto 'usar', o 'no' si cfg.confirmar === false). cfg.elecciones (lista) da una respuesta distinta a cada
+//     por defecto 'usar', o 'no' si cfg.confirmar === false; 'no' = «Cobrar normal», que solo existe en «Pagado inmediatamente»;
+//     si la ventana no tiene ese botón se pulsa «Volver»). cfg.elecciones (lista) da una respuesta distinta a cada
 //     ventana, en orden. Cada ventana queda en `vistos` como { tipo: 'modal', mensaje: <todo su texto, botones incluidos> }.
 // Hay que llamarla ANTES de abrir el sistema.
 function armarDialogos(page, cfg = {}) {
@@ -45,7 +46,7 @@ function armarDialogos(page, cfg = {}) {
         await window.__loboModalVisto(m.innerText);
         const quiere = (c.elecciones && c.elecciones[n]) || c.eleccion;
         n += 1;
-        (botones.find(b => b.dataset.eleccion === quiere) || botones.find(b => b.dataset.eleccion === 'no') || botones[0]).click();
+        (botones.find(b => b.dataset.eleccion === quiere) || botones.find(b => b.dataset.eleccion === 'volver') || botones[0]).click();
       } finally { atendiendo = false; }
     }, 15);
   }, { eleccion: cfg.eleccion || (cfg.confirmar === false ? 'no' : 'usar'), elecciones: cfg.elecciones || null });
@@ -130,7 +131,8 @@ test.describe('0) El aviso dentro del formulario de Pedidos → «Fiar»', () =>
 
     await page.locator('#ing-pedido').selectOption('completo');                         // 14.000 ≤ 20.000
     expect(await textoAviso(page)).toContain('Con este pedido ($14.000) le alcanza');
-    expect(await textoAviso(page)).toContain('no entra plata nueva a caja');
+    expect(await textoAviso(page)).toContain('te preguntaré si lo paga con su saldo o se cobra normal');
+    expect(await textoAviso(page)).not.toContain('caja');                                // la explicación completa está en la ventana, no aquí
 
     await page.locator('#ing-cantidad').fill('2');                                      // 28.000 > 20.000
     expect(await textoAviso(page)).toContain('No alcanza para pagar este pedido completo ($28.000)');
@@ -427,13 +429,13 @@ test.describe('1c) Ventana de saldo a favor: Volver, Esc y botones', () => {
     let terminado = false;
     const lanzado = registrarFiado(page, 7, 15000).then(() => { terminado = true; });
     await expect(page.locator(MODAL)).toBeVisible();
-    // La ventana dice lo que hace cada botón y ninguno se llama «Aceptar» ni «Cancelar».
+    // «Registrar pedido como pendiente» con saldo que alcanza: SOLO dos botones —usar el saldo o volver—, con nombre propio.
     const botones = await page.locator(`${MODAL} #msf-opciones button`).allInnerTexts();
-    expect(botones).toHaveLength(3);
+    expect(botones).toHaveLength(2);
     expect(botones[0]).toContain('✔ Usar saldo a favor');
-    expect(botones[1]).toContain('Dejarlo fiado, sin usar el saldo');
-    expect(botones[2]).toContain('Volver');
-    expect(botones.join(' ')).not.toMatch(/Aceptar|Cancelar/);
+    expect(botones[1]).toContain('Volver');
+    expect(botones[1]).toContain('Pagado inmediatamente');                               // y le dice qué hacer si no quiere usar su saldo
+    expect(botones.join(' ')).not.toMatch(/Aceptar|Cancelar|Dejarlo fiado/);
 
     await page.locator(MODAL).click({ position: { x: 4, y: 4 } });                      // clic en el fondo oscuro
     await expect(page.locator(MODAL)).toBeVisible();
@@ -446,35 +448,58 @@ test.describe('1c) Ventana de saldo a favor: Volver, Esc y botones', () => {
     expect(await page.evaluate(() => ST.ingresos.length + ST.pendientes.length)).toBe(antes);
     expect(await estadoFormulario(page)).toEqual({ ubicacion: 'fiar', cliente: 7, cola: 1 });
 
-    // Y el mismo formulario se puede volver a registrar: ahora se elige «Dejarlo fiado».
+    // Y el mismo formulario se puede volver a registrar: ahora se elige «Usar saldo a favor».
     const segundo = page.evaluate(() => agregarIngreso('pendiente'));
-    await page.locator(`${MODAL} button[data-eleccion="no"]`).click();
+    await page.locator(`${MODAL} button[data-eleccion="usar"]`).click();
     await segundo;
     expect(escritura(reg, 'POST', 'pedidos')).toHaveLength(1);
-    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(0);
-    expect(await saldo(page, 7)).toMatchObject({ pendiente: 15000, sobrante: 20000, saldo: -5000 });
+    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(1);
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 5000 });
   });
 
-  test('en Pendientes→Fiar y Fiados→Asignar (el pedido ya se movió) Esc o «No usar por ahora» lo dejan fiado, sin saldar', async ({ page }) => {
+  test('«Pagado inmediatamente» con saldo que alcanza tiene TRES botones: pagar con saldo, cobrar normal y volver', async ({ page }) => {
+    await abrir(page);
+    const lanzado = registrarFiado(page, 7, 15000, 'pagado');
+    await expect(page.locator(MODAL)).toBeVisible();
+    const botones = await page.locator(`${MODAL} #msf-opciones button`).allInnerTexts();
+    expect(botones).toHaveLength(3);
+    expect(botones[0]).toContain('✔ Pagar con saldo a favor');
+    expect(botones[1]).toContain('💵 Cobrar normal (efectivo)');
+    expect(botones[2]).toContain('Volver');
+    await page.keyboard.press('Escape');
+    await lanzado;
+    await expect(page.locator(MODAL)).toBeHidden();
+  });
+
+  test('Pendientes→Fiar y Fiados→Asignar: la pregunta sale ANTES de mover; Esc/«Volver» no cambian nada', async ({ page }) => {
     const reg = await abrir(page);
     page.on('dialog', d => d.accept('Luisca'));
     const mover = page.evaluate(async () => { cambioMesaIds = [903]; await moverPedidoAFiado(); });
     await expect(page.locator(MODAL)).toBeVisible();
     const botones = await page.locator(`${MODAL} #msf-opciones button`).allInnerTexts();
-    expect(botones).toHaveLength(2);                                                     // aquí no hay «Volver»: ya se movió
-    expect(botones[1]).toContain('No usar por ahora');
+    expect(botones).toHaveLength(2);
+    expect(botones[0]).toContain('✔ Usar saldo a favor');
+    expect(botones[1]).toContain('Volver');
+    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(0);                          // todavía no se movió nada
     await page.keyboard.press('Escape');
     await mover;
-    expect(escritura(reg, 'PATCH', 'pedidos').filter(e => e.cuerpo && e.cuerpo.pagado_via_abono)).toHaveLength(0);
-    expect(await saldo(page, 7)).toMatchObject({ pendiente: 9000, sobrante: 20000 });
+    expect(reg.escrituras).toEqual([]);                                                  // ni el pedido, ni la mesa
+    expect(await page.evaluate(() => ST.pendientes.find(p => p.id === 903))).toMatchObject({ mesa: 3, es_fiar: false });
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 20000 });
+
     await irA(page, 'fiados');
-    await expect(page.locator('#fiados-clientes-zone button', { hasText: 'Aplicar saldo a favor' })).toHaveCount(1);   // sigue disponible
+    await page.selectOption('#huerfano-cliente-g-huerfano', '7');
+    const asignar = page.locator('button', { hasText: /^Asignar$/ }).click();
+    await expect(page.locator(MODAL)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await asignar;
+    expect(reg.escrituras).toEqual([]);
+    expect(await page.evaluate(() => ST.pendientes.find(p => p.id === 902).cliente_fiado_id)).toBeNull();
   });
 
   test('tarjeta de Fiados: si hay pedidos pendientes y saldo a favor, bajo el neto se ve la cuenta; si no hay ambos, no', async ({ page }) => {
-    armarDialogos(page, { eleccion: 'no' });
-    await abrir(page);
-    await registrarFiado(page, 7, 14000);                                                // «Dejarlo fiado»: 14.000 en pedidos, 20.000 a favor
+    const extra = { pedidos: [fiadoDe(910, 7, 14000, 'g-luisca-viejo', { fecha: '2026-10-10' })] };   // un fiado pendiente de Luisca (por ejemplo tras «↩ Deshacer»)
+    await abrir(page, { extra });
     await irA(page, 'fiados');
     const tarjetaLuisca = page.locator('#fiados-clientes-zone .pending-group', { hasText: 'Luisca' });
     await expect(tarjetaLuisca.locator('.pending-group-total')).toContainText('a favor $6.000');             // el neto de siempre
@@ -496,7 +521,8 @@ test.describe('1) Pedidos → «Fiar» con un cliente', () => {
     expect(dialogos[0].tipo).toBe('modal');
     expect(dialogos[0].mensaje).toContain('Luisca tiene $20.000 a favor y este pedido cuesta $15.000');
     expect(dialogos[0].mensaje).toContain('✔ Usar saldo a favor');
-    expect(dialogos[0].mensaje).toContain('Dejarlo fiado, sin usar el saldo');
+    expect(dialogos[0].mensaje).toContain('Volver');
+    expect(dialogos[0].mensaje).not.toContain('Dejarlo fiado');                          // con saldo que alcanza, un fiado no puede quedar «sin usar el saldo»
     expect(dialogos[0].mensaje).toContain('No entra plata nueva a caja');
 
     // El pedido nuevo quedó pagado con el saldo: monto en 0 en efectivo y transferencia, marcado «vía abono».
@@ -529,22 +555,6 @@ test.describe('1) Pedidos → «Fiar» con un cliente', () => {
     expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 5000 });
   });
 
-  test('si dice que no: el fiado queda pendiente, el saldo se descuenta en su tarjeta y el botón «Aplicar saldo» sigue ahí', async ({ page }) => {
-    const dialogos = armarDialogos(page, { confirmar: false });
-    const reg = await abrir(page);
-    await registrarFiado(page, 7, 15000);
-    expect(dialogos).toHaveLength(1);
-    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(0);
-    const p = await page.evaluate(() => ST.pendientes.find(x => x.cliente_fiado_id === 7));
-    expect(p).toMatchObject({ estado: 'pendiente', es_fiar: true, monto_total: 15000 });
-    expect(p.pagado_via_abono).toBeFalsy();
-    expect(await saldo(page, 7)).toMatchObject({ pendiente: 15000, sobrante: 20000, saldo: -5000 });
-    await irA(page, 'fiados');
-    await expect(page.locator('#fiados-clientes-zone button', { hasText: 'Aplicar saldo a favor' })).toHaveCount(1);
-    expect((await toastsTexto(page)).join(' | ')).not.toContain('saldado(s)');
-    expect(reg.errores).toEqual([]);
-  });
-
   test('saldo que NO alcanza (Pedro: 5.000 a favor y un fiado viejo de 12.000): solo avisa, sin preguntar ni pagar nada', async ({ page }) => {
     const dialogos = armarDialogos(page);
     const reg = await abrir(page);
@@ -574,8 +584,8 @@ test.describe('1) Pedidos → «Fiar» con un cliente', () => {
     await registrarFiado(page, 7, 15000);         // 20.000 a favor: paga el viejo de 6.000 y los 14.000 que quedan no alcanzan para los 15.000
     expect(dialogos).toHaveLength(1);
     expect(dialogos[0].tipo).toBe('modal');
-    expect(dialogos[0].mensaje).toContain('ya quedó un fiado a su nombre');
-    expect(dialogos[0].mensaje).toContain('Se saldarían 1 pedido(s) completo(s) por $6.000');
+    expect(dialogos[0].mensaje).toContain('Se saldarían 1 fiado(s) más viejo(s) por $6.000');
+    expect(dialogos[0].mensaje).toContain('este pedido ($15.000) no alcanza a quedar pagado');
     const patch = escritura(reg, 'PATCH', 'pedidos');
     expect(patch).toHaveLength(1);
     expect(decodeURIComponent(patch[0].consulta)).toContain('id=eq.910');
@@ -604,14 +614,15 @@ test.describe('1) Pedidos → «Fiar» con un cliente', () => {
 });
 
 test.describe('2) Pendientes → «📒 Fiar» (se pregunta el nombre)', () => {
-  test('a un cliente con saldo que alcanza: pregunta el nombre y luego ofrece el saldo; al aceptar queda saldado y la mesa libre', async ({ page }) => {
+  test('a un cliente con saldo que alcanza: pregunta el nombre y luego (antes de mover) ofrece el saldo; al aceptar queda saldado y la mesa libre', async ({ page }) => {
     const dialogos = armarDialogos(page, { nombre: 'Luisca' });
     const reg = await abrir(page);
     await pasarPendienteAFiado(page, [903]);
     expect(dialogos.map(d => d.tipo)).toEqual(['prompt', 'modal']);
-    expect(dialogos[1].mensaje).toContain('Luisca tiene saldo a favor y ya quedó un fiado a su nombre');
+    expect(dialogos[1].mensaje).toContain('Luisca tiene $20.000 a favor y este pedido pasa a ser fiado suyo ($9.000)');
     expect(dialogos[1].mensaje).toContain('Se saldarían 1 pedido(s) completo(s) por $9.000');
-    expect(dialogos[1].mensaje).toContain('No usar por ahora');
+    expect(dialogos[1].mensaje).toContain('Volver');
+    expect(dialogos[1].mensaje).not.toContain('No usar por ahora');
     const patch = escritura(reg, 'PATCH', 'pedidos');
     expect(patch.map(e => e.cuerpo)).toEqual([
       expect.objectContaining({ es_fiar: true, cliente_fiado_id: 7 }),
@@ -672,7 +683,7 @@ test.describe('3) Fiados → fiado sin cliente → «Asignar»', () => {
     await asignarA(page, 7);
     await expect.poll(() => escritura(reg, 'PATCH', 'pedidos').length).toBe(2);
     expect(dialogos).toHaveLength(1);
-    expect(dialogos[0].mensaje).toContain('Luisca tiene saldo a favor y ya quedó un fiado a su nombre');
+    expect(dialogos[0].mensaje).toContain('Luisca tiene $20.000 a favor y este fiado pasa a ser suyo ($9.000)');
     expect(dialogos[0].mensaje).toContain('por $9.000');
     expect(escritura(reg, 'PATCH', 'pedidos')[1].cuerpo).toMatchObject({ estado: 'pagado', pagado_via_abono: true });
     expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 11000 });

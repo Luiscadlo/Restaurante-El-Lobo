@@ -4919,19 +4919,24 @@ function quitarClienteFiadoSeleccionado() {
 // sin saltarse ninguno. El pedido nuevo cuenta con su fecha y hora de verdad (por defecto es el más nuevo de todos).
 // Solo calcula, no escribe nada. Devuelve cuántos fiados viejos se saldarían antes (y cuánto suman), si el nuevo se
 // salda y cuánto saldo a favor quedaría.
-function proyectarSaldoAFavor(clienteId, totalNuevo, fecha, hora) {
+function proyectarSaldoConGrupos(clienteId, nuevos) {
   const sobrante = calcularSaldoFiado(clienteId).sobrante;
   const clave = o => `${o.fecha||''} ${o.hora||''}`;
   const filas = gruposFiadoDeCliente(clienteId).map(g => ({ clave: clave(g.orders[0]), total: g.orders.reduce((a, p) => a + (p.monto_total || 0), 0), nuevo: false }));
-  filas.push({ clave: `${fecha||''} ${hora||''}`, total: totalNuevo, nuevo: true });
+  nuevos.forEach(n => filas.push({ clave: n.clave, total: n.total, nuevo: true }));
   filas.sort((a, b) => a.clave.localeCompare(b.clave));          // estable: si empatan, el nuevo queda después
-  let disponible = sobrante, viejosPagados = 0, totalViejos = 0, esteSePaga = false;
+  let disponible = sobrante, viejosPagados = 0, totalViejos = 0, nuevosPagados = 0, totalNuevos = 0;
   for (const f of filas) {
     if (disponible + 0.01 < f.total) break;                      // no alcanza este pedido completo: se detiene
     disponible -= f.total;
-    if (f.nuevo) esteSePaga = true; else { viejosPagados += 1; totalViejos += f.total; }
+    if (f.nuevo) { nuevosPagados += 1; totalNuevos += f.total; } else { viejosPagados += 1; totalViejos += f.total; }
   }
-  return { sobrante, viejosPagados, totalViejos, esteSePaga, quedaria: disponible };
+  return { sobrante, viejosPagados, totalViejos, nuevosPagados, totalNuevos, quedaria: disponible };
+}
+// Caso de un solo pedido nuevo (el del formulario de Pedidos): con fecha y hora de verdad (por defecto es el más nuevo de todos).
+function proyectarSaldoAFavor(clienteId, totalNuevo, fecha, hora) {
+  const r = proyectarSaldoConGrupos(clienteId, [{ clave: `${fecha||''} ${hora||''}`, total: totalNuevo }]);
+  return { ...r, esteSePaga: r.nuevosPagados === 1 };
 }
 
 // Aviso EN el formulario de Pedidos: al elegir el cliente de un fiado, dice si tiene saldo a favor y si alcanzaría para
@@ -4949,12 +4954,12 @@ function actualizarAvisoSaldoFavorFormulario() {
   let texto;
   if (total > 0.5) {
     const pr = proyectarSaldoAFavor(cliente.id, total, document.getElementById('ing-fecha')?.value, document.getElementById('ing-hora')?.value);
-    if (pr.esteSePaga && pr.viejosPagados === 0) texto = `Con este pedido (${fmt(total)}) le alcanza: al registrarlo te preguntaré si lo paga con su saldo (no entra plata nueva a caja) o se cobra normal.`;
+    if (pr.esteSePaga && pr.viejosPagados === 0) texto = `Con este pedido (${fmt(total)}) le alcanza: al registrarlo te preguntaré si lo paga con su saldo o se cobra normal.`;
     else if (pr.esteSePaga) texto = `Le alcanza para ${pr.viejosPagados} fiado(s) más viejo(s) y para este pedido (${fmt(total)}): al registrarlo te preguntaré si lo paga con su saldo o se cobra normal.`;
     else if (pr.viejosPagados > 0) texto = `Se usaría primero en sus fiados más viejos (${pr.viejosPagados}); este pedido (${fmt(total)}) no alcanzaría a quedar saldado.`;
     else texto = `No alcanza para pagar este pedido completo (${fmt(total)}). Si lo dejas fiado, el saldo se le descuenta en Fiados; si lo pagan ya, se cobra normal y el saldo no se toca.`;
   } else {
-    texto = 'Al registrar el pedido te preguntaré si lo paga con su saldo.';
+    texto = 'Al registrar el pedido te preguntaré si lo paga con su saldo o se cobra normal.';
   }
   el.textContent = `💰 ${cliente.nombre} tiene ${fmt(sobrante)} a favor. ${texto}`;
   el.style.display = 'block';
@@ -5049,11 +5054,11 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   // preguntarSaldoAlRegistrar). Si usa el saldo, el pedido se guarda como fiado de ese cliente y enseguida se salda con su
   // saldo (sin sumar plata a ningún cierre: ya entró cuando abonó). Si no, se registra como siempre (pendiente, o pagado con
   // el método elegido) y el saldo no se toca. «Volver» cancela el registro sin dejar rastro.
-  let pagarConSaldoAFavor = false, dijoNoUsarSaldo = false, avisoSaldoAlPagar = null;
+  let pagarConSaldoAFavor = false, avisoSaldoAlPagar = null;
   if (selectedUbicacion === 'fiar' && clienteFiadoSeleccionadoId && !esGratis) {
     const r = await preguntarSaldoAlRegistrar(clienteFiadoSeleccionadoId, totalPedidoCompleto, fecha, hora, estadoFinal, metodo);
     if (r.volver) return;                                  // «Volver»: no pasa nada, el formulario queda como estaba
-    pagarConSaldoAFavor = r.usar; dijoNoUsarSaldo = r.noUsar; avisoSaldoAlPagar = r.aviso;
+    pagarConSaldoAFavor = r.usar; avisoSaldoAlPagar = r.aviso;
     if (pagarConSaldoAFavor) estadoFinal = 'pendiente';
   }
 
@@ -5253,7 +5258,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     aplicarReglaGratisPorTurno();
     onHoraChange();
     renderAll();
-    if (estadoFinal !== 'pagado' && !dijoNoUsarSaldo) await ofrecerSaldoAFavor(clienteParaAvisoSaldo, pagarConSaldoAFavor);   // fiado: si ya dijo que sí aplica directo; si ya dijo que no, no vuelve a preguntar
+    if (estadoFinal !== 'pagado') await ofrecerSaldoAFavor(clienteParaAvisoSaldo, pagarConSaldoAFavor);   // fiado: si dijo «Usar saldo» aplica directo; si no, solo avisa cuando hay saldo que no alcanza
     else if (avisoSaldoAlPagar) showToast(avisoSaldoAlPagar, 'info');                                                         // pagado normal: solo avisa si no alcanzaba
   } catch (err) {
     console.error(err);
@@ -6799,6 +6804,9 @@ async function asignarClienteAHuerfano(idsGrupo, key) {
   const sel = document.getElementById(`huerfano-cliente-${key}`);
   const clienteId = sel ? parseInt(sel.value, 10) : NaN;
   if (!clienteId) { showToast('⚠ Elige un cliente de la lista', 'warning'); return; }
+  // Cliente con saldo a favor que alcanza: «Usar saldo a favor» o «Volver» (no se asigna nada), ANTES de tocar el fiado.
+  const eleccion = await preguntarSaldoAntesDeFiar(clienteId, idsGrupo.map(id => ST.pendientes.find(x => x.id === id)).filter(Boolean), 'asignar');
+  if (eleccion === 'volver') return;
   try {
     await sbPatch('pedidos', `id=in.(${idsGrupo.join(',')})`, { cliente_fiado_id: clienteId });
     idsGrupo.forEach(id => {
@@ -6808,7 +6816,7 @@ async function asignarClienteAHuerfano(idsGrupo, key) {
     setSyncBadge('ok');
     showToast('✅ Cliente asignado a ese fiado', 'ok');
     renderAll();
-    await ofrecerSaldoAFavor(clienteId);
+    await ofrecerSaldoAFavor(clienteId, eleccion === 'usar');
   } catch (e) {
     console.error(e);
     showToast(`⚠ Error al asignar el cliente: ${(e.message||'').slice(0,160)}`, 'warning');
@@ -7151,17 +7159,20 @@ function preguntarSaldoFavor({ titulo, cuerpo, opciones, alEscape }) {
   });
 }
 
-// Aviso de saldo a favor al dejar un fiado a nombre de un cliente. Se llama desde los TRES lugares donde un pedido
-// pasa a ser fiado de alguien: registrarlo como «Fiar» en Pedidos, pasar un pendiente a fiado y asignarle cliente a
-// un fiado sin nombre. (En Pedidos, si el saldo alcanza para el pedido, la pregunta sale ANTES de guardar, con cualquiera
-// de los dos botones: preguntarSaldoAlRegistrar.) Un pendiente de mesa/domicilio o un pago al instante sin «Fiar» no
-// llevan cliente, así que nunca llegan aquí.
-//  · Sin saldo a favor: no hace nada.
-//  · Con saldo que alcanza a pagar algún pedido completo (del más viejo al más nuevo, como siempre): pregunta con dos
-//    botones, «Usar saldo a favor» (el mismo «✔ Aplicar saldo a favor» de la tarjeta; no entra plata nueva a ningún cierre)
-//    o «No usar por ahora» (el pedido sigue como fiado pendiente y el saldo queda guardado).
-//  · Con saldo que no alcanza: solo avisa; el saldo de su tarjeta de Fiados ya sale con ese descuento.
-//  · yaAcepto=true (ya dijo que sí en la pregunta de antes de guardar): aplica directo, sin volver a preguntar.
+// Principio (pedido del dueño, 30-oct): un cliente NO tiene a la vez «una cuenta de saldo» y «una cuenta de fiado»: cuando
+// hay saldo a favor que alcanza, un fiado nuevo se descuenta de inmediato. Por eso, para un fiado con saldo que alcanza solo
+// hay dos salidas —«✔ Usar saldo a favor» o «Volver» (no se registra nada)—; si no quiere usar su saldo, se le cobra en
+// el momento con «Pagado inmediatamente». Estas preguntas salen ANTES de guardar/mover/asignar, así «Volver» no deja rastro.
+//
+// Aviso de saldo a favor al quedar un pedido como fiado de un cliente. Hay TRES lugares donde un pedido pasa a ser fiado
+// de alguien: registrarlo como «Fiar» en Pedidos (preguntarSaldoAlRegistrar, con cualquiera de los dos botones), pasar un
+// pendiente a fiado y asignarle cliente a un fiado sin nombre (preguntarSaldoAntesDeFiar). Un pendiente de mesa/domicilio
+// o un pago al instante sin «Fiar» no llevan cliente, así que nunca llegan aquí.
+// ofrecerSaldoAFavor corre DESPUÉS de guardar:
+//  · yaAcepto=true (dijo «Usar saldo a favor» en la pregunta de antes): aplica directo, sin volver a preguntar —es el mismo
+//    «✔ Aplicar saldo a favor» de la tarjeta; no entra plata nueva a ningún cierre—;
+//  · sin saldo a favor: no hace nada;
+//  · con saldo que no alcanza a pagar ningún pedido completo: solo avisa; el saldo de su tarjeta de Fiados ya sale con ese descuento.
 // Nunca lanza error: un fallo aquí no debe estropear el registro del fiado que ya quedó guardado.
 async function ofrecerSaldoAFavor(clienteId, yaAcepto = false) {
   try {
@@ -7170,37 +7181,23 @@ async function ofrecerSaldoAFavor(clienteId, yaAcepto = false) {
     if (yaAcepto) { await aplicarSaldoAFavor(clienteId, true); return; }   // ya dijo que sí antes de guardar: se aplica sin volver a preguntar
     const { sobrante } = calcularSaldoFiado(clienteId);
     if (sobrante < 0.5) return;
-    const cubiertos = gruposQueCubreSaldoAFavor(clienteId);
-    if (!cubiertos.length) {
-      showToast(`ℹ ${cliente.nombre} tiene ${fmt(sobrante)} a favor: ya se descuenta de su saldo en Fiados (no alcanza para saldar por completo el siguiente pedido)`, 'info');
+    if (gruposQueCubreSaldoAFavor(clienteId).length) {                    // no debería pasar (la pregunta salió antes de guardar): por si acaso, no se deja sin aviso
+      showToast(`ℹ ${cliente.nombre} tiene ${fmt(sobrante)} a favor: puedes usarlo con «✔ Aplicar saldo a favor» en su tarjeta de Fiados`, 'info');
       return;
     }
-    const totalCubierto = cubiertos.reduce((a, c) => a + c.total, 0);
-    const eleccion = await preguntarSaldoFavor({
-      titulo: `💰 ${cliente.nombre} tiene saldo a favor`,
-      cuerpo: `${cliente.nombre} tiene saldo a favor y ya quedó un fiado a su nombre.\n\n` +
-              `Aplicar saldo a favor de ${cliente.nombre}: ${fmt(sobrante)}.\n` +
-              `Se saldarían ${cubiertos.length} pedido(s) completo(s) por ${fmt(totalCubierto)} ` +
-              `(${cubiertos.map(c => `${fechaCorta(c.grupo.orders[0].fecha)}: ${fmt(c.total)}`).join(', ')}).`,
-      opciones: [
-        { valor: 'usar', texto: '✔ Usar saldo a favor', clase: 'btn-primary', detalle: 'Se descuenta de su saldo. No entra plata nueva a caja: ya entró con los abonos.' },
-        { valor: 'no', texto: 'No usar por ahora', detalle: 'Sigue como fiado pendiente y su saldo a favor queda guardado. Puedes usarlo después con «✔ Aplicar saldo a favor» en Fiados.' },
-      ],
-      alEscape: 'no',
-    });
-    if (eleccion === 'usar') await aplicarSaldoAFavor(clienteId, true);
+    showToast(`ℹ ${cliente.nombre} tiene ${fmt(sobrante)} a favor: ya se descuenta de su saldo en Fiados (no alcanza para saldar por completo el siguiente pedido)`, 'info');
   } catch (e) {
     console.error(e);
   }
 }
 
-// Pedidos → «Fiar» con un cliente que tiene saldo a favor que ALCANZA para el pedido completo: se pregunta ANTES de guardar,
-// con cualquiera de los dos botones («Registrar pedido como pendiente» o «Pagado inmediatamente»):
-//   · usar saldo  → se registra como fiado del cliente y enseguida se salda con su saldo (sin plata a ningún cierre);
-//   · no usarlo   → pendiente: queda fiado pendiente y el saldo guardado; pagado: se cobra normal con el método elegido;
-//   · volver      → no se registra nada y el formulario queda como estaba.
+// Pedidos → «Fiar» con un cliente que tiene saldo a favor: se pregunta ANTES de guardar.
+//  · «Registrar pedido como pendiente» (fiado): si el saldo alcanza para algún pedido completo (este o fiados más viejos),
+//    dos botones: «✔ Usar saldo a favor» o «Volver» (no se registra nada y el formulario queda como estaba).
+//  · «Pagado inmediatamente» (solo si alcanza para ESTE pedido): tres botones: «✔ Pagar con saldo a favor», «💵 Cobrar normal»
+//    (entra a caja, el saldo no se toca) o «Volver».
 // Devuelve { volver, usar, noUsar, aviso }. Si el saldo no alcanza no pregunta: en «pagado» devuelve un aviso para mostrar
-// después de registrar; en «pendiente» lo resuelve ofrecerSaldoAFavor después de guardar (puede saldar fiados más viejos).
+// después de registrar; en «pendiente» el aviso lo da ofrecerSaldoAFavor después de guardar.
 // Nunca lanza error: ante cualquier fallo se registra normal, como siempre.
 async function preguntarSaldoAlRegistrar(clienteId, total, fecha, hora, estado, metodo) {
   const res = { volver: false, usar: false, noUsar: false, aviso: null };
@@ -7210,25 +7207,24 @@ async function preguntarSaldoAlRegistrar(clienteId, total, fecha, hora, estado, 
     const pr = proyectarSaldoAFavor(clienteId, total, fecha, hora);
     if (pr.sobrante < 0.5) return res;
     const pagado = estado === 'pagado';
-    if (!pr.esteSePaga) {
+    if (pagado ? !pr.esteSePaga : (!pr.esteSePaga && pr.viejosPagados === 0)) {
       if (pagado) res.aviso = `ℹ ${cliente.nombre} tiene ${fmt(pr.sobrante)} a favor: no alcanza para pagar este pedido completo (${fmt(total)}). Se cobró normal y su saldo sigue a su favor`;
       return res;
     }
     const metodoTxt = metodo === 'dividido' ? 'pago dividido' : metodo;
-    const eleccion = await preguntarSaldoFavor({
-      titulo: `💰 ${cliente.nombre} tiene saldo a favor`,
-      cuerpo: `${cliente.nombre} tiene ${fmt(pr.sobrante)} a favor y este pedido cuesta ${fmt(total)}.` +
-              (pr.viejosPagados ? `\nAntes se saldarían ${pr.viejosPagados} fiado(s) más viejo(s) por ${fmt(pr.totalViejos)}.` : ''),
-      opciones: [
-        { valor: 'usar', texto: pagado ? '✔ Pagar con saldo a favor' : '✔ Usar saldo a favor', clase: 'btn-primary',
-          detalle: `Se descuenta de su saldo (le quedarían ${fmt(pr.quedaria)} a favor). No entra plata nueva a caja: ya entró con sus abonos.` },
-        { valor: 'no', texto: pagado ? `💵 Cobrar normal (${metodoTxt})` : 'Dejarlo fiado, sin usar el saldo',
-          detalle: pagado ? 'Entra a caja como cualquier venta. Su saldo a favor queda igual.'
-                          : 'El pedido queda pendiente en Fiados y su saldo a favor sigue guardado: puedes usarlo después con «✔ Aplicar saldo a favor».' },
-        { valor: 'volver', texto: 'Volver', detalle: 'No se registra nada; el formulario queda como estaba.' },
-      ],
-      alEscape: 'volver',
-    });
+    const cuerpo = pr.esteSePaga
+      ? `${cliente.nombre} tiene ${fmt(pr.sobrante)} a favor y este pedido cuesta ${fmt(total)}.` +
+        (pr.viejosPagados ? `\nAntes se saldarían ${pr.viejosPagados} fiado(s) más viejo(s) por ${fmt(pr.totalViejos)}.` : '')
+      : `${cliente.nombre} tiene ${fmt(pr.sobrante)} a favor. Se saldarían ${pr.viejosPagados} fiado(s) más viejo(s) por ${fmt(pr.totalViejos)}; este pedido (${fmt(total)}) no alcanza a quedar pagado.`;
+    const opciones = [
+      { valor: 'usar', texto: pagado ? '✔ Pagar con saldo a favor' : '✔ Usar saldo a favor', clase: 'btn-primary',
+        detalle: `Se descuenta de su saldo (le quedarían ${fmt(pr.quedaria)} a favor). No entra plata nueva a caja: ya entró con sus abonos.` },
+    ];
+    if (pagado) opciones.push({ valor: 'no', texto: `💵 Cobrar normal (${metodoTxt})`, detalle: 'Entra a caja como cualquier venta. Su saldo a favor queda igual.' });
+    opciones.push({ valor: 'volver', texto: 'Volver',
+      detalle: pagado ? 'No se registra nada; el formulario queda como estaba.'
+                      : 'No se registra nada; el formulario queda como estaba. Si no quiere usar su saldo, cóbrale con «Pagado inmediatamente».' });
+    const eleccion = await preguntarSaldoFavor({ titulo: `💰 ${cliente.nombre} tiene saldo a favor`, cuerpo, opciones, alEscape: 'volver' });
     if (eleccion === 'usar') res.usar = true;
     else if (eleccion === 'volver') res.volver = true;
     else res.noUsar = true;
@@ -7236,6 +7232,41 @@ async function preguntarSaldoAlRegistrar(clienteId, total, fecha, hora, estado, 
     console.error(e);
   }
   return res;
+}
+
+// Pendientes → «📒 Fiar» y Fiados → «Asignar»: antes de pasar/asignar los pedidos `pedidos` al cliente, si su saldo a favor
+// alcanza para saldar algún pedido completo, pregunta: «✔ Usar saldo a favor» o «Volver» (no se pasa ni se asigna nada).
+// Devuelve 'usar' | 'volver' | 'nada' (sin saldo o no alcanza: sigue normal; ofrecerSaldoAFavor avisa después).
+async function preguntarSaldoAntesDeFiar(clienteId, pedidos, accion) {
+  try {
+    const cliente = ST.clientesFiado.find(c => c.id === clienteId);
+    if (!cliente || !pedidos.length) return 'nada';
+    const mapa = {};
+    pedidos.forEach(p => {
+      const k = p.grupo_pedido || `legacy-${p.id}`;
+      (mapa[k] = mapa[k] || []).push(p);
+    });
+    const nuevos = Object.values(mapa).map(os => {
+      os.sort((a, b) => `${a.fecha||''} ${a.hora||''}`.localeCompare(`${b.fecha||''} ${b.hora||''}`));
+      return { clave: `${os[0].fecha||''} ${os[0].hora||''}`, total: os.reduce((a, p) => a + (p.monto_total || 0), 0) };
+    });
+    const pr = proyectarSaldoConGrupos(clienteId, nuevos);
+    if (pr.sobrante < 0.5 || pr.viejosPagados + pr.nuevosPagados === 0) return 'nada';
+    const totalPedido = nuevos.reduce((a, n) => a + n.total, 0);
+    return await preguntarSaldoFavor({
+      titulo: `💰 ${cliente.nombre} tiene saldo a favor`,
+      cuerpo: `${cliente.nombre} tiene ${fmt(pr.sobrante)} a favor y ${accion === 'asignar' ? 'este fiado pasa a ser suyo' : 'este pedido pasa a ser fiado suyo'} (${fmt(totalPedido)}).\n` +
+              `Se saldarían ${pr.viejosPagados + pr.nuevosPagados} pedido(s) completo(s) por ${fmt(pr.totalViejos + pr.totalNuevos)}.`,
+      opciones: [
+        { valor: 'usar', texto: '✔ Usar saldo a favor', clase: 'btn-primary', detalle: `Se descuenta de su saldo (le quedarían ${fmt(pr.quedaria)} a favor). No entra plata nueva a caja: ya entró con sus abonos.` },
+        { valor: 'volver', texto: 'Volver', detalle: accion === 'asignar' ? 'No se asigna nada: el fiado queda como estaba.' : 'No se pasa nada a fiado: el pedido queda como estaba.' },
+      ],
+      alEscape: 'volver',
+    });
+  } catch (e) {
+    console.error(e);
+    return 'nada';
+  }
 }
 
 // ── Render INGRESOS (solo pagados) ─────────────────────────────────────
@@ -8200,6 +8231,14 @@ async function moverPedidoAFiado() {
     }
   }
 
+  // Cliente con saldo a favor que alcanza: «Usar saldo a favor» o «Volver» (no se mueve nada), ANTES de tocar el pedido.
+  let usarSaldoDespues = false;
+  if (clienteId) {
+    const eleccion = await preguntarSaldoAntesDeFiar(clienteId, pedidosMover, 'pasar');
+    if (eleccion === 'volver') return;
+    usarSaldoDespues = eleccion === 'usar';
+  }
+
   try {
     try {
       await sbPatch('pedidos', `id=in.(${ids.join(',')})`, { es_fiar: true, es_domicilio: false, es_sin_mesa: false, es_gratis: false, mesa: null, cliente_fiado_id: clienteId });
@@ -8227,7 +8266,7 @@ async function moverPedidoAFiado() {
     showToast(`✅ ${ids.length > 1 ? 'Pedido completo pasado' : 'Pedido pasado'} a Fiado`, 'ok');
     cerrarModalCambiarMesa();
     renderAll();
-    await ofrecerSaldoAFavor(clienteId);
+    await ofrecerSaldoAFavor(clienteId, usarSaldoDespues);
   } catch (e) {
     console.error(e);
     showToast('⚠ Error al pasar a fiado', 'warning');
