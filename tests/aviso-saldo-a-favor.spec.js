@@ -17,8 +17,13 @@ const copia = x => JSON.parse(JSON.stringify(x));
 const escritura = (reg, metodo, tabla) => reg.escrituras.filter(e => e.metodo === metodo && e.tabla === tabla);
 const irA = (page, id) => page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
 
-// Recoge todos los diálogos (confirmaciones y preguntas) y responde según `cfg`.
-//   cfg.confirmar → true acepta, false cancela;   cfg.nombre → lo que se escribe cuando el sistema pregunta un nombre.
+// Recoge todos los diálogos y responde según `cfg`:
+//   · los del navegador (preguntas de nombre y el confirm del botón «✔ Aplicar saldo a favor» de la tarjeta):
+//     cfg.confirmar → true acepta, false cancela;   cfg.nombre → lo que se escribe cuando el sistema pregunta un nombre;
+//   · la ventana propia de saldo a favor (#modal-saldo-favor): se pulsa el botón de cfg.eleccion ('usar' | 'no' | 'volver';
+//     por defecto 'usar', o 'no' si cfg.confirmar === false). cfg.elecciones (lista) da una respuesta distinta a cada
+//     ventana, en orden. Cada ventana queda en `vistos` como { tipo: 'modal', mensaje: <todo su texto, botones incluidos> }.
+// Hay que llamarla ANTES de abrir el sistema.
 function armarDialogos(page, cfg = {}) {
   const vistos = [];
   page.on('dialog', async d => {
@@ -27,6 +32,23 @@ function armarDialogos(page, cfg = {}) {
     else if (cfg.confirmar === false) await d.dismiss();
     else await d.accept();
   });
+  page.exposeFunction('__loboModalVisto', texto => { vistos.push({ tipo: 'modal', mensaje: texto }); });
+  page.addInitScript(c => {
+    let n = 0, atendiendo = false;
+    setInterval(async () => {
+      const m = document.getElementById('modal-saldo-favor');
+      if (atendiendo || !m || getComputedStyle(m).display === 'none') return;
+      atendiendo = true;
+      try {
+        const botones = [...m.querySelectorAll('#msf-opciones button')];
+        if (!botones.length) return;
+        await window.__loboModalVisto(m.innerText);
+        const quiere = (c.elecciones && c.elecciones[n]) || c.eleccion;
+        n += 1;
+        (botones.find(b => b.dataset.eleccion === quiere) || botones.find(b => b.dataset.eleccion === 'no') || botones[0]).click();
+      } finally { atendiendo = false; }
+    }, 15);
+  }, { eleccion: cfg.eleccion || (cfg.confirmar === false ? 'no' : 'usar'), elecciones: cfg.elecciones || null });
   return vistos;
 }
 
@@ -207,8 +229,8 @@ test.describe('0) El aviso dentro del formulario de Pedidos → «Fiar»', () =>
     expect(await textoAviso(page)).toContain('Con este pedido ($14.000) le alcanza');
     await page.locator('#btn-reg').click();
     await expect.poll(() => dialogos.length).toBe(1);
-    expect(dialogos[0].mensaje).toContain('Aplicar saldo a favor de Luisca: $20.000');
-    expect(dialogos[0].mensaje).toContain('Se saldarán 1 pedido(s) completo(s) por $14.000');
+    expect(dialogos[0].mensaje).toContain('Luisca tiene $20.000 a favor y este pedido cuesta $14.000');
+    expect(dialogos[0].mensaje).toContain('Usar saldo a favor');
     await expect.poll(() => escritura(reg, 'PATCH', 'pedidos').length).toBe(1);
     expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 6000 });
     await expect(page.locator(AVISO)).toBeHidden();                                     // formulario limpio: sin cliente ni aviso
@@ -240,12 +262,13 @@ test.describe('1b) Pedidos → «Fiar» → «Pagado inmediatamente»', () => {
     await registrarFiado(page, 7, 15000, 'pagado');
 
     expect(dialogos).toHaveLength(1);                                                    // no vuelve a preguntar al aplicar
-    expect(dialogos[0].tipo).toBe('confirm');
-    expect(dialogos[0].mensaje).toContain('Luisca tiene $20.000 a favor');
-    expect(dialogos[0].mensaje).toContain('¿Pagar este pedido ($15.000) con su saldo a favor?');
+    expect(dialogos[0].tipo).toBe('modal');
+    expect(dialogos[0].mensaje).toContain('Luisca tiene $20.000 a favor y este pedido cuesta $15.000');
+    expect(dialogos[0].mensaje).toContain('Pagar con saldo a favor');
     expect(dialogos[0].mensaje).toContain('le quedarían $5.000 a favor');
     expect(dialogos[0].mensaje).toContain('No entra plata nueva a caja');
-    expect(dialogos[0].mensaje).toContain('CANCELAR → NO se usa el saldo');
+    expect(dialogos[0].mensaje).toContain('Cobrar normal (efectivo)');
+    expect(dialogos[0].mensaje).toContain('Volver');
 
     // Se guardó una sola vez, como fiado de Luisca, y quedó saldado con su saldo (monto en 0, «vía abono»).
     const guardado = escritura(reg, 'POST', 'pedidos');
@@ -367,12 +390,98 @@ test.describe('1b) Pedidos → «Fiar» → «Pagado inmediatamente»', () => {
     await page.locator('#ing-pedido').selectOption('completo');
     await page.locator('#btn-reg-pagado').click();
     await expect.poll(() => dialogos.length).toBe(1);
-    expect(dialogos[0].mensaje).toContain('¿Pagar este pedido ($14.000) con su saldo a favor?');
+    expect(dialogos[0].mensaje).toContain('Pagar con saldo a favor');
     await expect.poll(() => escritura(reg, 'PATCH', 'pedidos').length).toBe(1);
     expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 6000 });
     await expect(page.locator(AVISO)).toBeHidden();
     expect(reg.denegadas).toEqual([]);
     expect(reg.errores).toEqual([]);
+  });
+});
+
+// ── La ventana de saldo a favor: botones con nombre propio, «Volver» y Esc no dejan rastro ──────────────────────────────
+// Pedido del dueño (30-oct): el «Cancelar» de una ventana del navegador confundía (parecía que se descontaba el saldo).
+const MODAL = '#modal-saldo-favor';
+const estadoFormulario = page => page.evaluate(() => ({ ubicacion: selectedUbicacion, cliente: clienteFiadoSeleccionadoId, cola: almuerzosEnCola.length }));
+test.describe('1c) Ventana de saldo a favor: Volver, Esc y botones', () => {
+  for (const [boton, estado] of [['«Registrar pedido como pendiente»', 'pendiente'], ['«Pagado inmediatamente»', 'pagado']]) {
+    test(`${boton} → «Volver»: no se registra nada y el formulario queda como estaba`, async ({ page }) => {
+      const dialogos = armarDialogos(page, { eleccion: 'volver' });
+      const reg = await abrir(page);
+      const antes = await page.evaluate(() => ST.ingresos.length + ST.pendientes.length);
+      await registrarFiado(page, 7, 15000, estado);
+      expect(dialogos).toHaveLength(1);
+      expect(reg.escrituras).toEqual([]);                                                // ni pedido, ni cambio, ni cierre
+      expect(await estadoFormulario(page)).toEqual({ ubicacion: 'fiar', cliente: 7, cola: 1 });
+      expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 20000 });
+      expect(await page.evaluate(() => ST.ingresos.length + ST.pendientes.length)).toBe(antes);
+      await expect(page.locator(MODAL)).toBeHidden();
+      expect((await toastsTexto(page)).join(' | ')).not.toContain('registrado');
+      expect(reg.errores).toEqual([]);
+    });
+  }
+
+  test('Esc equivale a «Volver»; un clic fuera de la ventana NO la cierra; luego se puede elegir normalmente', async ({ page }) => {
+    const reg = await abrir(page);                                                       // sin respondedor automático: lo manejo a mano
+    const antes = await page.evaluate(() => ST.ingresos.length + ST.pendientes.length);
+    let terminado = false;
+    const lanzado = registrarFiado(page, 7, 15000).then(() => { terminado = true; });
+    await expect(page.locator(MODAL)).toBeVisible();
+    // La ventana dice lo que hace cada botón y ninguno se llama «Aceptar» ni «Cancelar».
+    const botones = await page.locator(`${MODAL} #msf-opciones button`).allInnerTexts();
+    expect(botones).toHaveLength(3);
+    expect(botones[0]).toContain('✔ Usar saldo a favor');
+    expect(botones[1]).toContain('Dejarlo fiado, sin usar el saldo');
+    expect(botones[2]).toContain('Volver');
+    expect(botones.join(' ')).not.toMatch(/Aceptar|Cancelar/);
+
+    await page.locator(MODAL).click({ position: { x: 4, y: 4 } });                      // clic en el fondo oscuro
+    await expect(page.locator(MODAL)).toBeVisible();
+    expect(terminado).toBe(false);
+
+    await page.keyboard.press('Escape');                                                 // Esc = Volver
+    await lanzado;
+    await expect(page.locator(MODAL)).toBeHidden();
+    expect(reg.escrituras).toEqual([]);
+    expect(await page.evaluate(() => ST.ingresos.length + ST.pendientes.length)).toBe(antes);
+    expect(await estadoFormulario(page)).toEqual({ ubicacion: 'fiar', cliente: 7, cola: 1 });
+
+    // Y el mismo formulario se puede volver a registrar: ahora se elige «Dejarlo fiado».
+    const segundo = page.evaluate(() => agregarIngreso('pendiente'));
+    await page.locator(`${MODAL} button[data-eleccion="no"]`).click();
+    await segundo;
+    expect(escritura(reg, 'POST', 'pedidos')).toHaveLength(1);
+    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(0);
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 15000, sobrante: 20000, saldo: -5000 });
+  });
+
+  test('en Pendientes→Fiar y Fiados→Asignar (el pedido ya se movió) Esc o «No usar por ahora» lo dejan fiado, sin saldar', async ({ page }) => {
+    const reg = await abrir(page);
+    page.on('dialog', d => d.accept('Luisca'));
+    const mover = page.evaluate(async () => { cambioMesaIds = [903]; await moverPedidoAFiado(); });
+    await expect(page.locator(MODAL)).toBeVisible();
+    const botones = await page.locator(`${MODAL} #msf-opciones button`).allInnerTexts();
+    expect(botones).toHaveLength(2);                                                     // aquí no hay «Volver»: ya se movió
+    expect(botones[1]).toContain('No usar por ahora');
+    await page.keyboard.press('Escape');
+    await mover;
+    expect(escritura(reg, 'PATCH', 'pedidos').filter(e => e.cuerpo && e.cuerpo.pagado_via_abono)).toHaveLength(0);
+    expect(await saldo(page, 7)).toMatchObject({ pendiente: 9000, sobrante: 20000 });
+    await irA(page, 'fiados');
+    await expect(page.locator('#fiados-clientes-zone button', { hasText: 'Aplicar saldo a favor' })).toHaveCount(1);   // sigue disponible
+  });
+
+  test('tarjeta de Fiados: si hay pedidos pendientes y saldo a favor, bajo el neto se ve la cuenta; si no hay ambos, no', async ({ page }) => {
+    armarDialogos(page, { eleccion: 'no' });
+    await abrir(page);
+    await registrarFiado(page, 7, 14000);                                                // «Dejarlo fiado»: 14.000 en pedidos, 20.000 a favor
+    await irA(page, 'fiados');
+    const tarjetaLuisca = page.locator('#fiados-clientes-zone .pending-group', { hasText: 'Luisca' });
+    await expect(tarjetaLuisca.locator('.pending-group-total')).toContainText('a favor $6.000');             // el neto de siempre
+    await expect(tarjetaLuisca.locator('.cuenta-saldo-favor')).toHaveText('$14.000 en pedidos − $20.000 a favor');
+    // Marta debe 12.000 y no tiene saldo; Ana tiene saldo y ninguna deuda: ninguna lleva la línea.
+    await expect(page.locator('#fiados-clientes-zone .pending-group', { hasText: 'Marta' }).locator('.cuenta-saldo-favor')).toHaveCount(0);
+    await expect(page.locator('#fiados-clientes-zone .pending-group', { hasText: 'Ana' }).locator('.cuenta-saldo-favor')).toHaveCount(0);
   });
 });
 
@@ -384,10 +493,10 @@ test.describe('1) Pedidos → «Fiar» con un cliente', () => {
     await registrarFiado(page, 7, 15000);
 
     expect(dialogos).toHaveLength(1);
-    expect(dialogos[0].tipo).toBe('confirm');
-    expect(dialogos[0].mensaje).toContain('Luisca tiene saldo a favor y ya quedó un fiado a su nombre');
-    expect(dialogos[0].mensaje).toContain('Aplicar saldo a favor de Luisca: $20.000');
-    expect(dialogos[0].mensaje).toContain('Se saldarán 1 pedido(s) completo(s) por $15.000');
+    expect(dialogos[0].tipo).toBe('modal');
+    expect(dialogos[0].mensaje).toContain('Luisca tiene $20.000 a favor y este pedido cuesta $15.000');
+    expect(dialogos[0].mensaje).toContain('✔ Usar saldo a favor');
+    expect(dialogos[0].mensaje).toContain('Dejarlo fiado, sin usar el saldo');
     expect(dialogos[0].mensaje).toContain('No entra plata nueva a caja');
 
     // El pedido nuevo quedó pagado con el saldo: monto en 0 en efectivo y transferencia, marcado «vía abono».
@@ -464,7 +573,9 @@ test.describe('1) Pedidos → «Fiar» con un cliente', () => {
     const reg = await abrir(page, { extra });
     await registrarFiado(page, 7, 15000);         // 20.000 a favor: paga el viejo de 6.000 y los 14.000 que quedan no alcanzan para los 15.000
     expect(dialogos).toHaveLength(1);
-    expect(dialogos[0].mensaje).toContain('Se saldarán 1 pedido(s) completo(s) por $6.000');
+    expect(dialogos[0].tipo).toBe('modal');
+    expect(dialogos[0].mensaje).toContain('ya quedó un fiado a su nombre');
+    expect(dialogos[0].mensaje).toContain('Se saldarían 1 pedido(s) completo(s) por $6.000');
     const patch = escritura(reg, 'PATCH', 'pedidos');
     expect(patch).toHaveLength(1);
     expect(decodeURIComponent(patch[0].consulta)).toContain('id=eq.910');
@@ -497,9 +608,10 @@ test.describe('2) Pendientes → «📒 Fiar» (se pregunta el nombre)', () => {
     const dialogos = armarDialogos(page, { nombre: 'Luisca' });
     const reg = await abrir(page);
     await pasarPendienteAFiado(page, [903]);
-    expect(dialogos.map(d => d.tipo)).toEqual(['prompt', 'confirm']);
+    expect(dialogos.map(d => d.tipo)).toEqual(['prompt', 'modal']);
     expect(dialogos[1].mensaje).toContain('Luisca tiene saldo a favor y ya quedó un fiado a su nombre');
-    expect(dialogos[1].mensaje).toContain('Se saldarán 1 pedido(s) completo(s) por $9.000');
+    expect(dialogos[1].mensaje).toContain('Se saldarían 1 pedido(s) completo(s) por $9.000');
+    expect(dialogos[1].mensaje).toContain('No usar por ahora');
     const patch = escritura(reg, 'PATCH', 'pedidos');
     expect(patch.map(e => e.cuerpo)).toEqual([
       expect.objectContaining({ es_fiar: true, cliente_fiado_id: 7 }),
@@ -594,7 +706,7 @@ test.describe('lo que el aviso nunca debe hacer', () => {
     await registrarFiado(page, 7, 15000);       // 20.000 → paga 15.000, quedan 5.000
     await registrarFiado(page, 7, 4000);        // 5.000 alcanza para 4.000
     expect(dialogos).toHaveLength(2);
-    expect(dialogos[1].mensaje).toContain('Aplicar saldo a favor de Luisca: $5.000');
+    expect(dialogos[1].mensaje).toContain('Luisca tiene $5.000 a favor y este pedido cuesta $4.000');
     expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 1000 });
     await registrarFiado(page, 7, 4000);        // quedan 1.000: ya no alcanza → solo avisa
     expect(dialogos).toHaveLength(2);
