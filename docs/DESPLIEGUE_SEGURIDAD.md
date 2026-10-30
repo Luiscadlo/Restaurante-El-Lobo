@@ -189,7 +189,7 @@ Después **borra los datos de "PRUEBA"** que hayas creado.
 La tarea programada automática (entraba con la llave pública) **dejó de poder leer** al activar el Paso 6 y se **eliminó**: el respaldo es a mano.
 
 - **Cada domingo:** entra como **administrador**, ve a **Datos → Respaldo completo**, pulsa el botón y guarda el archivo **fuera del repositorio** (que es público).
-- El aviso «Toca el respaldo semanal» sale **desde cada domingo** y se queda, cada día, **hasta que un respaldo completo termine bien** (solo se registra si bajaron todas las filas de las 16 tablas). Se pone rojo si pasan 10 días. Solo lo ve el administrador: si esa semana no entras como administrador, no lo verás.
+- El aviso «Toca el respaldo semanal» sale **desde cada domingo** y se queda, cada día, **hasta que un respaldo completo termine bien** (solo se registra si bajaron todas las filas de las 17 tablas). Se pone rojo si pasan 10 días. Solo lo ve el administrador: si esa semana no entras como administrador, no lo verás.
 - (Si algún día se quiere automático: un usuario `respaldo` de solo lectura y una tarea nueva; la contraseña la pondría el dueño en Supabase, nunca por el chat.)
 
 ## Si algo sale mal (tarjeta de reversa)
