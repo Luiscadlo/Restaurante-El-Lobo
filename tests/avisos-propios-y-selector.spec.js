@@ -112,6 +112,26 @@ test.describe('1) Selector de cliente (Pendientes → «📒 Fiar»)', () => {
     expect(await page.evaluate(() => ST.clientesFiado.some(c => c.nombre === 'Cliente Nuevo'))).toBe(true);
   });
 
+  test('crearClienteFiado no duplica: un nombre que ya existe (aunque cambien tildes, mayúsculas o espacios) devuelve el existente y no escribe', async ({ page }) => {
+    const reg = await abrirSistema(page, { datos: datosConClientes() });
+    const r = await page.evaluate(async () => { const x = await crearClienteFiado('  ÁNGELA  '); return { id: x.cliente.id, yaExistia: x.yaExistia }; });
+    expect(r).toEqual({ id: 101, yaExistia: true });
+    expect(escritura(reg, 'POST', 'clientes_fiado')).toHaveLength(0);
+    expect(await page.evaluate(() => crearClienteFiado('   '))).toBeNull();                // un nombre vacío no crea nada
+  });
+
+  test('si otro equipo creó el mismo cliente mientras la ventana estaba abierta, se elige el que ya existe (no se duplica)', async ({ page }) => {
+    const reg = await abrirSistema(page, { datos: datosConClientes() });
+    await abrirSelector(page);
+    await page.fill('#ecl-buscar', 'Nuevo Raro');
+    await expect(filasSelector(page).filter({ hasText: '+ Crear cliente nuevo' })).toHaveCount(1);
+    await page.evaluate(() => ST.clientesFiado.push({ id: 777, nombre: 'nuevo raro', created_at: '2026-10-30T10:00:00-05:00' }));   // apareció en otro equipo
+    await filasSelector(page).filter({ hasText: '+ Crear cliente nuevo' }).click();
+    expect(await resultado(page)).toEqual({ id: 777, nombre: 'nuevo raro' });
+    expect(escritura(reg, 'POST', 'clientes_fiado')).toHaveLength(0);
+    await expect(page.locator('.toast').last()).toContainText('Ya existe el cliente "nuevo raro"');
+  });
+
   test('«Volver» y Esc devuelven null (no se registra nada); un clic fuera de la ventana no la cierra', async ({ page }) => {
     const reg = await abrirSistema(page, { datos: datosConClientes() });
     await abrirSelector(page);
