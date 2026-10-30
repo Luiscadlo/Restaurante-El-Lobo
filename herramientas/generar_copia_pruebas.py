@@ -21,8 +21,13 @@ Para qué sirve
 Qué escribe (en la carpeta que le des, p. ej. el clon del repositorio de pruebas)
     index.html · Contabilidad/ElLobo-Sistema Contable.html (la copia) · Menu/Menú diario-El Lobo.html · robots.txt · LEEME.md
 
+  Modo «archivo único» (--archivo-unico): en vez de una carpeta, escribe UN SOLO archivo HTML que lleva el Menú adentro
+    (el Menú es una app aparte que el sistema carga desde ../Menu/: un archivo suelto —p. ej. en Descargas— no la
+    encuentra y la pestaña Menú saldría con «No se ha podido acceder al archivo»). Es el que se le entrega al dueño.
+
 Uso
   python herramientas/generar_copia_pruebas.py --url https://xxxx.supabase.co --llave-publica eyJ... -o ../Restaurante-El-Lobo-Pruebas
+  python herramientas/generar_copia_pruebas.py --url https://xxxx.supabase.co --llave-publica eyJ... --archivo-unico ElLobo_PRUEBAS.html
   (la llave «anon» pública se puede pasar también en la variable LOBO_LLAVE_PUBLICA_PRUEBAS)
 """
 import argparse
@@ -168,6 +173,70 @@ def revertir(html, original):
     return inv
 
 
+# ── Modo «archivo único»: el Menú viaja DENTRO del archivo ─────────────────────────────────────────────────────────
+RUTA_MENU = "../Menu/Men%C3%BA%20diario-El%20Lobo.html"          # como lo escribe el sistema (carpeta hermana)
+MARCA_MENU_INI = "/*MENU-INICIO*/"
+MARCA_MENU_FIN = "/*MENU-FIN*/"
+ENLACE_MENU = f'<a href="{RUTA_MENU}" target="_blank" rel="noopener" class="btn btn-outline"'
+ENLACE_MENU_UNICO = '<a href="#" onclick="return abrirMenuPruebas()" class="btn btn-outline"'
+MARCO_MENU = f'<iframe id="menuFrame" src="{RUTA_MENU}" title='
+MARCO_MENU_UNICO = '<iframe id="menuFrame" title='
+CARGA_MENU = f"<script>document.getElementById('menuFrame').src='{RUTA_MENU}?v='+Date.now();</script>"
+PATRON_BLOQUE_MENU = re.compile(r'<script id="menu-incrustado">.*?</script>', re.S)
+
+
+def _una_vez(texto, viejo, nuevo, que):
+    if texto.count(viejo) != 1:
+        raise rr.Rechazo(f"No encuentro exactamente una vez {que} en el sistema (hay {texto.count(viejo)}). Hay que actualizar esta herramienta.")
+    return texto.replace(viejo, nuevo)
+
+
+def _literal_js(texto):
+    """El texto como cadena de JavaScript segura DENTRO de un <script> (y también JSON válido, para poder recuperarlo)."""
+    s = json.dumps(texto, ensure_ascii=False)
+    return (s.replace("</", "<\\/")            # que ningún «</script>» del Menú cierre el bloque
+             .replace("<!--", "<\\u0021--")     # ni abra un comentario HTML
+             .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
+
+
+def _bloque_menu(menu):
+    return ('<script id="menu-incrustado">\n'
+            "// PRUEBAS: el Menú viaja dentro de este archivo (suelto no existe la carpeta ../Menu/).\n"
+            "(function () {\n"
+            f"  var MENU = {MARCA_MENU_INI}{_literal_js(menu)}{MARCA_MENU_FIN};\n"
+            "  document.getElementById('menuFrame').srcdoc = MENU;\n"
+            "  window.abrirMenuPruebas = function () {\n"
+            "    // Una ventana en blanco hereda el origen de este archivo (un «blob:» no: ahí el navegador negaría el localStorage).\n"
+            "    var w = window.open('', '_blank');\n"
+            "    if (w) { w.document.open(); w.document.write(MENU); w.document.close(); }\n"
+            "    return false;\n"
+            "  };\n"
+            "})();\n"
+            "</script>")
+
+
+def incrustar_menu(copia, menu):
+    """La copia de pruebas + el Menú adentro: el marco lo muestra con `srcdoc` y el botón «Abrir en pestaña aparte» lo abre desde memoria."""
+    salida = _una_vez(copia, ENLACE_MENU, ENLACE_MENU_UNICO, "el enlace «Abrir en pestaña aparte» del Menú")
+    salida = _una_vez(salida, MARCO_MENU, MARCO_MENU_UNICO, "el marco (iframe) del Menú")
+    return _una_vez(salida, CARGA_MENU, _bloque_menu(menu), "la línea que carga el Menú")
+
+
+def desincrustar_menu(unica):
+    """Inversa de incrustar_menu (para comprobar que NADA más cambió): devuelve (la copia sin el Menú adentro, el Menú recuperado)."""
+    bloques = PATRON_BLOQUE_MENU.findall(unica)
+    if len(bloques) != 1:
+        raise rr.Rechazo(f"Esperaba un solo bloque del Menú incrustado y hay {len(bloques)}.")
+    bloque = bloques[0]
+    ini, fin = bloque.find(MARCA_MENU_INI), bloque.find(MARCA_MENU_FIN)
+    if ini < 0 or fin < ini:
+        raise rr.Rechazo("No encuentro dónde empieza y termina el Menú incrustado.")
+    menu = json.loads(bloque[ini + len(MARCA_MENU_INI):fin])
+    inv = unica.replace(bloque, CARGA_MENU)
+    inv = inv.replace(ENLACE_MENU_UNICO, ENLACE_MENU).replace(MARCO_MENU_UNICO, MARCO_MENU)
+    return inv, menu
+
+
 LEEME = """# El Lobo — copia de PRUEBAS (réplica)
 
 **No es el sistema real.** Es una copia de ensayo que apunta a un proyecto de Supabase aparte (con datos de ensayo).
@@ -214,14 +283,52 @@ def generar(carpeta, url, llave, origen=None):
     return escritos
 
 
+def generar_archivo_unico(archivo, url, llave, origen=None):
+    """Escribe la copia de pruebas como UN SOLO archivo HTML, con el Menú incrustado. Devuelve la ruta escrita."""
+    origen = Path(origen) if origen else RAIZ
+    archivo = Path(archivo).expanduser().resolve()
+    if archivo.suffix.lower() != ".html":
+        raise rr.Rechazo(f"El archivo de salida debe terminar en .html (me dieron «{archivo.name}»).")
+    if archivo == RAIZ or RAIZ in archivo.parents:
+        raise rr.Rechazo("El archivo de salida no puede quedar dentro del repositorio del sistema: la copia de pruebas no se publica desde ahí. "
+                         "Elige una carpeta afuera.")
+    html = (origen / REL_SISTEMA).read_text(encoding="utf-8")
+    ref_prod = ref_produccion(html)
+    url, _ = validar(url, llave, ref_prod)
+    copia = transformar(html, url, llave.strip(), ref_prod)
+    if revertir(copia, html) != html:
+        raise rr.Rechazo("La copia cambió algo más que lo previsto. No se escribe nada.")
+    fuente_menu = origen / REL_MENU
+    if not fuente_menu.exists():
+        raise rr.Rechazo(f"Falta {REL_MENU} en el sistema.")
+    menu = fuente_menu.read_bytes().decode("utf-8")      # tal cual (sin cambiar los saltos de línea)
+    for rastro, que in ((ref_prod, "el proyecto de producción"), (rr.REF_PRODUCCION, "el proyecto de producción"),
+                        (_constante(html, "SB_KEY"), "la llave de producción")):
+        if rastro in menu:
+            raise rr.Rechazo(f"El Menú menciona {que}: no debería. No se escribe nada.")
+    unica = incrustar_menu(copia, menu)
+    inv, menu_recuperado = desincrustar_menu(unica)
+    if inv != copia or menu_recuperado != menu:
+        raise rr.Rechazo("Al incrustar el Menú cambió algo más que lo previsto. No se escribe nada.")
+    archivo.parent.mkdir(parents=True, exist_ok=True)
+    archivo.write_text(unica, encoding="utf-8", newline="")
+    return archivo
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Fabrica la copia de pruebas (réplica) del sistema de El Lobo.")
     ap.add_argument("--url", required=True, help="Dirección del proyecto de pruebas: https://xxxx.supabase.co")
     ap.add_argument("--llave-publica", default=os.environ.get(VARIABLE_LLAVE_PUBLICA), help="Llave «anon» pública del proyecto de pruebas")
-    ap.add_argument("-o", "--carpeta", required=True, help="Carpeta donde escribir el sitio de pruebas (FUERA de este repositorio)")
+    salida = ap.add_mutually_exclusive_group(required=True)
+    salida.add_argument("-o", "--carpeta", help="Carpeta donde escribir el sitio de pruebas (FUERA de este repositorio)")
+    salida.add_argument("--archivo-unico", metavar="ARCHIVO.html",
+                        help="En vez de una carpeta, escribe UN solo archivo HTML con el Menú incrustado (FUERA de este repositorio)")
     args = ap.parse_args(argv)
     try:
-        escritos = generar(args.carpeta, args.url, args.llave_publica)
+        if args.archivo_unico:
+            escritos = [generar_archivo_unico(args.archivo_unico, args.url, args.llave_publica)]
+        else:
+            escritos = generar(args.carpeta, args.url, args.llave_publica)
     except rr.Rechazo as e:
         print(f"RECHAZADO: {e}", file=sys.stderr)
         return e.codigo

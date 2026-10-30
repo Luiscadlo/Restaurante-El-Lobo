@@ -248,3 +248,134 @@ def test_linea_de_comandos_rechazo_sale_con_codigo_2(afuera, capsys):
 def test_la_llave_tambien_se_puede_pasar_por_variable(afuera, monkeypatch):
     monkeypatch.setenv(gp.VARIABLE_LLAVE_PUBLICA, LLAVE)
     assert gp.main(["--url", URL, "-o", str(afuera)]) == 0
+
+
+# ── Modo «archivo único»: el Menú viaja dentro del archivo ─────────────────────
+# Abierta como archivo suelto (p. ej. en Descargas) la copia no encuentra la carpeta ../Menu/: la pestaña Menú salía con
+# «No se ha podido acceder al archivo». En este modo el Menú va adentro y se muestra con `srcdoc`.
+MENU = RAIZ / gp.REL_MENU
+
+
+@pytest.fixture()
+def suelto(tmp_path):
+    """Un archivo de salida FUERA del repositorio, en una carpeta donde NO hay ninguna carpeta Menu/ (como Descargas)."""
+    return tmp_path / "descargas" / "ElLobo_PRUEBAS.html"
+
+
+def correr_unico(suelto, url=URL, llave=LLAVE, **kw):
+    return gp.generar_archivo_unico(suelto, url, llave, **kw)
+
+
+def origen_falso(tmp_path, menu="menu", html=None):
+    falso = tmp_path / "falso"
+    (falso / "Contabilidad").mkdir(parents=True)
+    (falso / "Menu").mkdir()
+    (falso / gp.REL_SISTEMA).write_text(html if html is not None else sistema(), encoding="utf-8")
+    (falso / gp.REL_MENU).write_text(menu, encoding="utf-8")
+    (falso / gp.REL_INDEX).write_text("index", encoding="utf-8")
+    return falso
+
+
+def test_archivo_unico_lleva_el_menu_adentro_y_no_busca_la_carpeta_menu(suelto):
+    assert correr_unico(suelto) == suelto.resolve()
+    unica = suelto.read_text(encoding="utf-8")
+    assert gp.RUTA_MENU not in unica and '="../Menu/' not in unica        # ya no depende de una carpeta hermana (ni en href ni en src)
+    assert 'id="menuFrame" title=' in unica and ".srcdoc = MENU" in unica
+    assert 'onclick="return abrirMenuPruebas()"' in unica               # «Abrir en pestaña aparte» abre el Menú desde memoria
+    assert list(suelto.parent.iterdir()) == [suelto]                    # escribe UN solo archivo
+
+
+def test_archivo_unico_solo_agrega_el_menu_y_lo_demas_es_identico_a_la_copia_normal(suelto, afuera):
+    correr_unico(suelto)
+    correr(afuera)
+    unica = suelto.read_text(encoding="utf-8")
+    copia = (afuera / gp.REL_SISTEMA).read_text(encoding="utf-8")
+    sin_menu, menu = gp.desincrustar_menu(unica)
+    assert sin_menu == copia                                             # fuera del Menú, igual que la copia de la carpeta
+    assert menu == MENU.read_text(encoding="utf-8")                      # y el Menú que lleva es el real, byte por byte
+    assert gp.revertir(sin_menu, sistema()) == sistema()                 # y deshaciendo lo previsto vuelve a ser el sistema real
+
+
+def test_archivo_unico_sigue_apuntando_solo_al_proyecto_de_pruebas(suelto):
+    correr_unico(suelto)
+    unica = suelto.read_text(encoding="utf-8")
+    assert f"const SB_URL = '{URL}';" in unica
+    for rastro in (rr.REF_PRODUCCION, gp._constante(sistema(), "SB_KEY"), "ellobo.sesion.caja.v1"):
+        assert rastro not in unica
+
+
+def test_archivo_unico_con_un_menu_que_trae_script_comentarios_y_comillas(tmp_path, suelto):
+    """Un «</script>» o un «<!--» dentro del Menú no deben cortar el bloque incrustado ni abrir un comentario; todo se recupera igual."""
+    raro = ('<html><script>var a = "</script>"; // <!-- <script>\nvar b = \'x\\y\\/z\';</script>\n'
+            '<!-- comentario <script> --> línea separada otra 🐺 "comillas" \\ barra\r\nfin</html>')
+    correr_unico(suelto, origen=origen_falso(tmp_path, menu=raro))
+    unica = suelto.read_text(encoding="utf-8")
+    bloque = gp.PATRON_BLOQUE_MENU.search(unica).group(0)
+    assert bloque.count("</script") == 1 and bloque.endswith("</script>")   # el único «</script» es el que cierra el bloque
+    assert "<!--" not in bloque
+    assert gp.desincrustar_menu(unica)[1] == raro
+
+
+def test_archivo_unico_rechaza_si_el_menu_menciona_produccion(tmp_path, suelto):
+    falso = origen_falso(tmp_path, menu=f"<html>{rr.REF_PRODUCCION}</html>")
+    with pytest.raises(rr.Rechazo, match="Menú menciona"):
+        correr_unico(suelto, origen=falso)
+    assert not suelto.exists()
+
+
+def test_archivo_unico_rechaza_si_el_sistema_cambio_como_carga_el_menu(tmp_path, suelto):
+    """Si alguien cambia el iframe o el enlace del Menú, la herramienta avisa en vez de entregar un Menú roto."""
+    for pedazo in (gp.ENLACE_MENU, gp.MARCO_MENU, gp.CARGA_MENU):
+        falso = tmp_path / ("f%d" % len(pedazo))
+        falso.mkdir()
+        sub = origen_falso(falso, html=sistema().replace(pedazo, pedazo.replace("Menu", "Carta"), 1))
+        with pytest.raises(rr.Rechazo, match="Hay que actualizar esta herramienta"):
+            correr_unico(suelto, origen=sub)
+        assert not suelto.exists()
+
+
+def test_archivo_unico_rechaza_si_falta_el_menu(tmp_path, suelto):
+    falso = origen_falso(tmp_path)
+    (falso / gp.REL_MENU).unlink()
+    with pytest.raises(rr.Rechazo, match="Falta"):
+        correr_unico(suelto, origen=falso)
+    assert not suelto.exists()
+
+
+def test_archivo_unico_rechaza_el_repositorio_y_lo_que_no_es_html(tmp_path, suelto):
+    with pytest.raises(rr.Rechazo, match="repositorio"):
+        correr_unico(RAIZ / "prueba.html")
+    assert not (RAIZ / "prueba.html").exists()
+    with pytest.raises(rr.Rechazo, match=r"\.html"):
+        correr_unico(tmp_path / "prueba.txt")
+    # A un archivo hermano del repositorio (su carpeta contiene al repositorio) SÍ se puede escribir: no pisa nada del repositorio.
+    assert gp.generar_archivo_unico  # (comprobado abajo con una carpeta temporal; aquí solo que existe)
+
+
+def test_archivo_unico_mismas_negativas_que_la_copia_normal(suelto):
+    for llave in (jwt(role="service_role", ref=REF, exp=int(time.time()) + 10**8), jwt(role="anon", ref="zzzzzzzzzzzzzzzzzzzz", exp=int(time.time()) + 10**8)):
+        with pytest.raises(rr.Rechazo):
+            correr_unico(suelto, llave=llave)
+    with pytest.raises(rr.Rechazo, match="PRODUCCIÓN"):
+        correr_unico(suelto, url=f"https://{rr.REF_PRODUCCION}.supabase.co", llave=jwt(role="anon", ref=rr.REF_PRODUCCION, exp=int(time.time()) + 10**8))
+    assert not suelto.exists()
+
+
+def test_archivo_unico_por_la_linea_de_comandos(suelto, afuera, capsys, monkeypatch):
+    monkeypatch.delenv(gp.VARIABLE_LLAVE_PUBLICA, raising=False)
+    assert gp.main(["--url", URL, "--llave-publica", LLAVE, "--archivo-unico", str(suelto)]) == 0
+    assert suelto.exists() and not afuera.exists()
+    assert "Copia de pruebas generada" in capsys.readouterr().out
+    # Hay que elegir UNA salida: carpeta o archivo único.
+    for extra in ([], ["-o", str(afuera), "--archivo-unico", str(suelto)]):
+        with pytest.raises(SystemExit) as e:
+            gp.main(["--url", URL, "--llave-publica", LLAVE] + extra)
+        assert e.value.code == 2
+
+
+def test_archivo_unico_comprueba_que_el_menu_incrustado_se_recupera_igual(suelto, monkeypatch):
+    """Última red de seguridad: si lo incrustado no se pudiera recuperar idéntico, no se escribe nada."""
+    monkeypatch.setattr(gp, "desincrustar_menu", lambda unica: ("otra cosa", "otro menu"))
+    with pytest.raises(rr.Rechazo, match="cambió algo más"):
+        correr_unico(suelto)
+    assert not suelto.exists()

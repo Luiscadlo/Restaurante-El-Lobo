@@ -21,14 +21,21 @@ const CLAVE_PRUEBAS = 'ellobo.pruebas.sesion.caja.v1';
 const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
 const LLAVE = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ role: 'anon', ref: REF_PRUEBAS, exp: 4102444800 })}.firma-de-prueba`;
 
-let carpeta, URL_COPIA;
+let carpeta, URL_COPIA, descargas, URL_SUELTO;
 test.beforeAll(() => {
   carpeta = fs.mkdtempSync(path.join(os.tmpdir(), 'lobo-copia-pruebas-'));
   execFileSync('python3', [path.resolve(__dirname, '../herramientas/generar_copia_pruebas.py'),
     '--url', `https://${HOST_PRUEBAS}`, '--llave-publica', LLAVE, '-o', carpeta], { stdio: 'pipe' });
   URL_COPIA = pathToFileURL(path.join(carpeta, 'Contabilidad', 'ElLobo-Sistema Contable.html')).href;
+  // El archivo que se le entrega al dueño: UNO solo, en una carpeta donde no hay ninguna carpeta Menu/ (como Descargas).
+  descargas = fs.mkdtempSync(path.join(os.tmpdir(), 'lobo-descargas-'));
+  execFileSync('python3', [path.resolve(__dirname, '../herramientas/generar_copia_pruebas.py'),
+    '--url', `https://${HOST_PRUEBAS}`, '--llave-publica', LLAVE, '--archivo-unico', path.join(descargas, 'ElLobo_PRUEBAS.html')], { stdio: 'pipe' });
+  URL_SUELTO = pathToFileURL(path.join(descargas, 'ElLobo_PRUEBAS.html')).href;
 });
-test.afterAll(() => { try { fs.rmSync(carpeta, { recursive: true, force: true }); } catch (e) {} });
+test.afterAll(() => {
+  for (const d of [carpeta, descargas]) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) {} }
+});
 
 const entrar = (page, usuario, clave) => page.evaluate(([u, c]) => { document.getElementById('login-email').value = u; document.getElementById('login-password').value = c; }, [usuario, clave])
   .then(() => page.click('#login-btn'));
@@ -99,3 +106,76 @@ test.describe('la copia de pruebas', () => {
     expect(await page.evaluate(() => getComputedStyle(document.getElementById('franja-pruebas')).pointerEvents)).toBe('none');
   });
 });
+
+// ── La pestaña Menú ───────────────────────────────────────────────────────────────────────────────────────────────
+// El Menú es una app aparte que el sistema carga en un iframe desde ../Menu/. Abierta como archivo suelto (Descargas) esa
+// carpeta no existe y la pestaña salía con «No se ha podido acceder al archivo»: el archivo único lleva el Menú adentro.
+const irAlMenu = async page => {
+  await page.locator('.tab', { hasText: /^Menú$/ }).click();
+  await expect(page.locator('#tab-menu')).toBeVisible();
+};
+const fallosDeArchivos = page => {
+  const fallos = [];
+  page.on('requestfailed', r => { if (r.url().startsWith('file:') && !/ERR_ABORTED/.test(r.failure().errorText)) fallos.push(`${r.url()} ${r.failure().errorText}`); });
+  return fallos;
+};
+
+test.describe('la pestaña Menú de la copia de pruebas', () => {
+  test('como archivo suelto (sin carpeta Menu/ al lado) la pestaña Menú carga: el Menú va adentro', async ({ page }) => {
+    expect(fs.readdirSync(descargas)).toEqual(['ElLobo_PRUEBAS.html']);          // no hay nada más junto al archivo
+    const fallos = fallosDeArchivos(page);
+    const reg = await abrirSistema(page, { url: URL_SUELTO, usuario: 'admin' });
+    await irAlMenu(page);
+    const menu = page.frameLocator('#menuFrame');
+    await expect(menu.getByText('Generador de Menú del Día')).toBeVisible();
+    await expect(menu.getByText('Restaurante El Lobo')).toBeVisible();
+    expect(page.frames().map(f => f.url())).not.toContainEqual(expect.stringMatching(/^chrome-error:/));
+    expect(await page.evaluate(() => document.getElementById('menuFrame').hasAttribute('src'))).toBe(false);
+    expect(fallos).toEqual([]);                                                  // ningún archivo local que no se encuentre
+    expect([...reg.hosts]).toEqual([HOST_PRUEBAS]);                              // y el Menú no habla con nadie más
+    expect(reg.errores).toEqual([]);
+  });
+
+  test('el Menú de adentro funciona: guarda su catálogo en el navegador y ofrece las categorías', async ({ page }) => {
+    await abrirSistema(page, { url: URL_SUELTO, usuario: 'admin' });
+    await irAlMenu(page);
+    const marco = page.frames().find(f => f.url() === 'about:srcdoc');
+    expect(marco, 'no se encontró el marco del Menú').toBeTruthy();
+    await expect(marco.locator('#lista-sopas')).toBeAttached();
+    const guardado = await marco.evaluate(() => { guardarCatalogo(catalogo); return Object.keys(JSON.parse(localStorage.getItem('elLobo_catalogo'))); });
+    expect(guardado).toEqual(expect.arrayContaining(['sopas', 'arroces', 'proteinas', 'acomp']));
+  });
+
+  test('«Abrir en pestaña aparte» abre el Menú completo en otra pestaña (aunque no haya carpeta Menu/)', async ({ page, context }) => {
+    await abrirSistema(page, { url: URL_SUELTO, usuario: 'admin' });
+    await irAlMenu(page);
+    // (Solo de la prueba: mientras la página tiene interceptada la red, el navegador de pruebas no termina de cargar una ventana
+    // escrita desde ella; en un navegador normal no pasa. Ya no se necesita el servidor falso: el Menú no habla con nadie.)
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    const [aparte] = await Promise.all([context.waitForEvent('page'), page.getByText('Abrir en pestaña aparte').click()]);
+    await expect(aparte).toHaveTitle(/Menú del Día/);
+    await aparte.waitForFunction(() => document.readyState === 'complete' && typeof guardarCatalogo === 'function', null, { timeout: 20000 });
+    await expect(aparte.getByText('Generador de Menú del Día')).toBeVisible();
+    expect(await aparte.evaluate(() => { guardarCatalogo(catalogo); return localStorage.getItem('elLobo_catalogo') !== null; })).toBe(true);
+    expect(page.url()).toBe(URL_SUELTO);                                         // y la pestaña del sistema se quedó donde estaba (no navegó a «#»)
+  });
+
+  test('la copia en carpeta (con Menu/ al lado) sigue cargando el Menú por su ruta de siempre', async ({ page }) => {
+    const fallos = fallosDeArchivos(page);
+    await abrirSistema(page, { url: URL_COPIA, usuario: 'admin' });
+    await irAlMenu(page);
+    await expect(page.frameLocator('#menuFrame').getByText('Generador de Menú del Día')).toBeVisible();
+    expect(await page.evaluate(() => document.getElementById('menuFrame').getAttribute('src'))).toMatch(/Men%C3%BA%20diario-El%20Lobo\.html\?v=\d+$/);
+    expect(fallos).toEqual([]);
+  });
+
+  test('el archivo suelto es la misma copia: cartel rojo, título y solo habla con el proyecto de pruebas', async ({ page }) => {
+    const reg = await abrirSistema(page, { url: URL_SUELTO, claveSesion: CLAVE_PRUEBAS });
+    await expect(page.locator('#aviso-pruebas')).toContainText('ENTORNO DE PRUEBAS');
+    expect(await page.title()).toContain('PRUEBAS');
+    expect([...reg.hosts]).toEqual([HOST_PRUEBAS]);
+    expect(await page.evaluate(() => SB_URL)).toBe(`https://${HOST_PRUEBAS}`);
+    expect(reg.errores).toEqual([]);
+  });
+});
+
