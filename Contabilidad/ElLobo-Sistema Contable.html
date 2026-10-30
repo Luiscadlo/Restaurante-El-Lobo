@@ -2050,13 +2050,26 @@
 </div>
 
 <!-- Modal: Restaurar desde un respaldo / Empezar de cero (solo administrador; no se cierra tocando afuera) -->
-<!-- Modal: pregunta de saldo a favor (¿usar el saldo del cliente o no?). Botones con nombre propio en vez de Aceptar/Cancelar.
-     Lo arma preguntarSaldoFavor(); un clic fuera de la ventana NO la cierra (evita decidir sin querer). Esc = la opción segura. -->
-<div id="modal-saldo-favor" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="msf-titulo">
+<!-- Ventana del sistema: reemplaza los avisos del navegador (alert/confirm/prompt), que cambian de aspecto y de comportamiento según
+     el navegador. La arma ventanaSistema() (y confirmarSistema() para las preguntas de «¿Seguro?»). Cada botón dice lo que hace.
+     Un clic fuera de la ventana NO la cierra (evita decidir sin querer). Esc = la opción segura. -->
+<div id="modal-sistema" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="sis-titulo">
   <div class="modal-box" style="max-width:520px;">
-    <div id="msf-titulo" style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--green);margin-bottom:12px;"></div>
-    <div id="msf-cuerpo" style="font-size:13px;line-height:1.55;color:var(--text);white-space:pre-line;margin-bottom:16px;overflow-wrap:anywhere;"></div>
-    <div id="msf-opciones" style="display:flex;flex-direction:column;gap:10px;"></div>
+    <div id="sis-titulo" style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--green);margin-bottom:12px;overflow-wrap:anywhere;"></div>
+    <div id="sis-cuerpo" style="font-size:13px;line-height:1.55;color:var(--text);white-space:pre-line;margin-bottom:16px;overflow-wrap:anywhere;"></div>
+    <div id="sis-opciones" style="display:flex;flex-direction:column;gap:10px;"></div>
+  </div>
+</div>
+
+<!-- Selector de cliente (lo arma elegirClienteFiado()): lista de TODOS los clientes en orden alfabético, buscador y crear uno nuevo.
+     Reemplaza el cuadro de texto del navegador «¿A nombre de quién queda este fiado?». «Volver» no registra nada. -->
+<div id="modal-elegir-cliente" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="ecl-titulo">
+  <div class="modal-box" style="max-width:480px;">
+    <div id="ecl-titulo" style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--purple);margin-bottom:6px;overflow-wrap:anywhere;"></div>
+    <div id="ecl-detalle" style="font-size:12px;color:var(--text2);margin-bottom:12px;overflow-wrap:anywhere;"></div>
+    <input type="text" id="ecl-buscar" placeholder="Buscar cliente o escribir el nombre de uno nuevo…" autocomplete="off" style="width:100%;">
+    <div id="ecl-lista" role="listbox" style="max-height:min(42vh,320px);overflow-y:auto;border:1px solid var(--border2);border-radius:var(--radius-sm);margin:10px 0 14px;"></div>
+    <button type="button" id="ecl-volver" class="btn btn-outline" style="width:100%;text-transform:none;letter-spacing:normal;">Volver</button>
   </div>
 </div>
 
@@ -4853,18 +4866,24 @@ function doACCliente() {
   const list  = document.getElementById('ac-cliente-fiado');
   if (!input || !list) return;
   const q = normalizarNombre(input.value);
-  const filtered = q ? ST.clientesFiado.filter(c => normalizarNombre(c.nombre).includes(q)) : ST.clientesFiado;
+  // TODOS los clientes (sin límite; la lista se desplaza), en orden alfabético; al escribir se filtra.
+  const filtered = clientesFiadoOrdenados().filter(c => !q || normalizarNombre(c.nombre).includes(q));
   clientesFiadoAcIdx = -1;
-  let html = filtered.slice(0, 8).map(c =>
-    `<div class="autocomplete-item" data-id="${c.id}" onmousedown="pickACCliente(event,${c.id},'${c.nombre.replace(/'/g,"\\'")}')"><span>${c.nombre}</span>${c.telefono ? `<span class="item-code">${c.telefono}</span>` : ''}</div>`
+  let html = filtered.map(c =>
+    `<div class="autocomplete-item" data-id="${c.id}" onmousedown="pickACClientePorId(event,${c.id})"><span>${escaparHtml(c.nombre)}</span>${c.telefono ? `<span class="item-code">${escaparHtml(c.telefono)}</span>` : ''}</div>`
   ).join('');
-  const yaExiste = q && !!clienteFiadoPorNombre(q);
-  if (q && !yaExiste) {
-    html += `<div class="autocomplete-item" style="color:var(--accent);" onmousedown="crearYSeleccionarClienteFiado(event,'${input.value.trim().replace(/'/g,"\\'")}')">+ Crear cliente nuevo: "${input.value.trim()}"</div>`;
+  const nuevoNombre = input.value.trim().replace(/\s+/g, ' ');
+  if (q && !clienteFiadoPorNombre(q)) {
+    html += `<div class="autocomplete-item" style="color:var(--accent);" data-nuevo="${escaparHtml(nuevoNombre)}" onmousedown="crearYSeleccionarClienteFiado(event,this.dataset.nuevo)">+ Crear cliente nuevo: "${escaparHtml(nuevoNombre)}"</div>`;
   }
   if (!html) { list.style.display = 'none'; return; }
   list.innerHTML = html;
   list.style.display = 'block';
+}
+
+function pickACClientePorId(e, id) {
+  const c = ST.clientesFiado.find(x => x.id === id);
+  if (c) pickACCliente(e, c.id, c.nombre);
 }
 
 function pickACCliente(e, id, nombre) {
@@ -4879,21 +4898,11 @@ function pickACCliente(e, id, nombre) {
 
 async function crearYSeleccionarClienteFiado(e, nombre) {
   e.preventDefault();
-  nombre = (nombre||'').trim().replace(/\s+/g, ' ');
-  if (!nombre) return;
-  const existente = clienteFiadoPorNombre(nombre);
-  if (existente) {
-    pickACCliente(e, existente.id, existente.nombre);
-    showToast(`ℹ Ya existe el cliente "${existente.nombre}" — quedó seleccionado (no se creó otro)`, 'info');
-    return;
-  }
   try {
-    const [row] = await sbInsert('clientes_fiado', { nombre });
-    ST.clientesFiado.push(row);
-    ST.clientesFiado.sort((a,b) => a.nombre.localeCompare(b.nombre));
-    setSyncBadge('ok');
-    pickACCliente(e, row.id, row.nombre);
-    showToast(`✅ Cliente "${row.nombre}" creado`, 'ok');
+    const r = await crearClienteFiado(nombre);
+    if (!r) return;
+    pickACCliente(e, r.cliente.id, r.cliente.nombre);
+    showToast(r.yaExistia ? `ℹ Ya existe el cliente "${r.cliente.nombre}" — quedó seleccionado (no se creó otro)` : `✅ Cliente "${r.cliente.nombre}" creado`, r.yaExistia ? 'info' : 'ok');
   } catch (err) {
     console.error(err);
     showToast('⚠ No se pudo crear el cliente — ¿ya creaste la tabla clientes_fiado en Supabase?', 'warning');
@@ -5411,7 +5420,7 @@ async function eliminarGrupoIngreso(ids) {
   const idArr = Array.isArray(ids) ? ids : [ids];
   const saldadoConAbonos = idArr.map(id => ST.ingresos.find(i => i.id === id)).find(p => p && cobradoViaAbonos(p));
   if (saldadoConAbonos) { avisoBloqueoCobradoViaAbonos(saldadoConAbonos, 'eliminar este pedido'); return; }
-  if (!confirm(idArr.length > 1 ? '¿Eliminar este pedido completo (todos sus ítems)?' : '¿Eliminar este ingreso?')) return;
+  if (!(await confirmarSistema({ titulo: idArr.length > 1 ? '¿Eliminar este pedido completo (todos sus ítems)?' : '¿Eliminar este ingreso?', aceptar: 'Sí, eliminar', peligro: true }))) return;
   try {
     const objetos = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
     try {
@@ -5718,7 +5727,7 @@ async function marcarGrupoGratisPagado(ids) {
 
 // ── Cancelar pedido pendiente ─────────────────────────────────────────
 async function cancelarPendiente(pedidoId) {
-  if (!confirm('¿Cancelar este pedido pendiente?')) return;
+  if (!(await confirmarSistema({ titulo: '¿Cancelar este pedido pendiente?', aceptar: 'Sí, cancelar el pedido', peligro: true }))) return;
   try {
     const ped = ST.pendientes.find(p => p.id === pedidoId);
 
@@ -5760,7 +5769,7 @@ async function cancelarPendiente(pedidoId) {
 // Cancela TODO un pedido de una mesa de una vez (todos sus almuerzos + extras),
 // sin tocar los demás pedidos que pueda haber en esa misma mesa.
 async function cancelarGrupoPendiente(ids, mesaNum) {
-  if (!confirm(`¿Cancelar este pedido completo (${ids.length} ítem${ids.length > 1 ? 's' : ''})?`)) return;
+  if (!(await confirmarSistema({ titulo: `¿Cancelar este pedido completo (${ids.length} ítem${ids.length > 1 ? 's' : ''})?`, aceptar: 'Sí, cancelar el pedido', peligro: true }))) return;
   try {
     // Mismo rastro en Auditoría que cancelarPendiente(), pero para TODOS los
     // ids del grupo (nunca queda un pedido a medio registrar en Auditoría).
@@ -6952,11 +6961,12 @@ async function registrarAbonoDeCliente(cliente, monto, cuenta, nota) {
   // Turno ya cerrado: el cierre guardado es una foto y no se recalcula solo —
   // si se guardara en silencio, el abono nunca llegaría a Caja.
   const cierre = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
-  if (cierre && !confirm(
-    `El cierre de ${nombreTurno} del ${fechaCorta(fecha)} ya está guardado.\n\n` +
-    `El abono de ${fmt(monto)} pertenece a ese turno, pero el cierre guardado no lo incluye todavía. ` +
-    `Si continúas, se registra el abono y se abre "Corregir cierre" para volver a guardarlo con el abono incluido.\n\n¿Continuar?`
-  )) return false;
+  if (cierre && !(await confirmarSistema({
+    titulo: `El cierre de ${nombreTurno} del ${fechaCorta(fecha)} ya está guardado`,
+    cuerpo: `El abono de ${fmt(monto)} pertenece a ese turno, pero el cierre guardado no lo incluye todavía. ` +
+      `Si continúas, se registra el abono y se abre "Corregir cierre" para volver a guardarlo con el abono incluido.`,
+    aceptar: 'Continuar',
+  }))) return false;
 
   try {
     const [abonoRow] = await sbInsertConCuenta('abonos_fiado', {
@@ -7062,11 +7072,12 @@ async function eliminarAbonoFiado(abonoId) {
 
   const cierre = abono.turno ? ST.cierresDia.find(c => c.fecha === abono.fecha && c.turno === abono.turno) : null;
   const nombreTurno = abono.turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas';
-  if (!confirm(
-    `¿Eliminar el abono de ${nombre} por ${fmt(abono.monto)} (${abono.fecha}${abono.turno ? ', ' + nombreTurno : ''})?\n\n` +
-    `Deja de contarse como plata recibida en ese cierre y se resta de lo que ${nombre} tiene abonado.` +
-    (cierre ? `\n\nEl cierre de ${nombreTurno} del ${fechaCorta(abono.fecha)} ya está guardado y lo incluye: se abrirá "Corregir cierre" para volver a guardarlo sin este abono.` : '')
-  )) return;
+  if (!(await confirmarSistema({
+    titulo: `¿Eliminar el abono de ${nombre} por ${fmt(abono.monto)} (${abono.fecha}${abono.turno ? ', ' + nombreTurno : ''})?`,
+    cuerpo: `Deja de contarse como plata recibida en ese cierre y se resta de lo que ${nombre} tiene abonado.` +
+      (cierre ? `\n\nEl cierre de ${nombreTurno} del ${fechaCorta(abono.fecha)} ya está guardado y lo incluye: se abrirá "Corregir cierre" para volver a guardarlo sin este abono.` : ''),
+    aceptar: 'Sí, eliminar el abono', peligro: true,
+  }))) return;
 
   try {
     await sbDelete('abonos_fiado', `id=eq.${abonoId}`);
@@ -7098,12 +7109,13 @@ async function aplicarSaldoAFavor(clienteId, yaAcepto = false) {
     return;
   }
   const totalCubierto = cubiertos.reduce((a,c) => a + c.total, 0);
-  if (!yaAcepto && !confirm(
-    `Aplicar saldo a favor de ${cliente.nombre}: ${fmt(sobrante)}.\n\n` +
-    `Se saldarán ${cubiertos.length} pedido(s) completo(s) por ${fmt(totalCubierto)} ` +
-    `(${cubiertos.map(c => `${fechaCorta(c.grupo.orders[0].fecha)}: ${fmt(c.total)}`).join(', ')}).\n` +
-    `No entra plata nueva a caja: ya entró con los abonos.\n\n¿Continuar?`
-  )) return;
+  if (!yaAcepto && !(await confirmarSistema({
+    titulo: `Aplicar saldo a favor de ${cliente.nombre}: ${fmt(sobrante)}`,
+    cuerpo: `Se saldarán ${cubiertos.length} pedido(s) completo(s) por ${fmt(totalCubierto)} ` +
+      `(${cubiertos.map(c => `${fechaCorta(c.grupo.orders[0].fecha)}: ${fmt(c.total)}`).join(', ')}).\n` +
+      `No entra plata nueva a caja: ya entró con los abonos.`,
+    aceptar: '✔ Aplicar saldo a favor',
+  }))) return;
 
   // Método: la cuenta del abono más reciente (solo informativo — no suma plata).
   const ultimoAbono = ST.abonosFiado.filter(a => a.cliente_fiado_id === clienteId)
@@ -7120,24 +7132,33 @@ async function aplicarSaldoAFavor(clienteId, yaAcepto = false) {
   }
 }
 
-// ── Preguntas de saldo a favor ───────────────────────────────────────────────────────────────────────────────────────
-// Ventana propia (no el confirm del navegador, cuyo «Cancelar» se presta a confusión): cada opción dice lo que hace.
-// opciones: [{ valor, texto, detalle, clase }]. Devuelve el `valor` elegido; Esc devuelve `alEscape` (siempre la opción
-// segura: la que no gasta saldo ni toca nada). Un clic fuera de la ventana no hace nada.
-let _msfCerrarPrevio = null;
-function preguntarSaldoFavor({ titulo, cuerpo, opciones, alEscape }) {
+// ── Ventanas del sistema (en vez de los avisos del navegador) ───────────────────────────────────────────────────────────
+// El navegador cambia de aspecto (y de comportamiento) según cuál se use; por eso el sistema NO usa alert/confirm/prompt:
+// todo aviso o pregunta sale en una ventana propia, con botones que dicen lo que hacen.
+// ventanaSistema: opciones [{ valor, texto, detalle, clase }]; devuelve el `valor` elegido. Esc devuelve `alEscape` (siempre
+// la opción segura: la que no gasta ni borra nada). Un clic fuera de la ventana no hace nada.
+//   tono: 'ok' (verde, por defecto) | 'aviso' (dorado) | 'peligro' (rojo) → color del título;
+//   fila: true → los botones van en una fila (para sí/no cortos);   foco: el `valor` del botón que queda con el foco.
+let _sisCerrarPrevio = null;
+function ventanaSistema({ titulo, cuerpo, opciones, alEscape, tono, fila, foco }) {
   return new Promise(resolve => {
-    if (_msfCerrarPrevio) _msfCerrarPrevio(alEscape);          // nunca quedan dos preguntas abiertas a la vez
-    const modal = document.getElementById('modal-saldo-favor');
-    document.getElementById('msf-titulo').textContent = titulo;
-    document.getElementById('msf-cuerpo').textContent = cuerpo;
-    const zona = document.getElementById('msf-opciones');
+    if (_sisCerrarPrevio) _sisCerrarPrevio(alEscape);          // nunca quedan dos preguntas abiertas a la vez
+    const modal = document.getElementById('modal-sistema');
+    const tit = document.getElementById('sis-titulo');
+    tit.textContent = titulo;
+    tit.style.color = tono === 'peligro' ? 'var(--red)' : tono === 'aviso' ? 'var(--accent)' : 'var(--green)';
+    const cuer = document.getElementById('sis-cuerpo');
+    cuer.textContent = cuerpo || '';
+    cuer.style.display = cuerpo ? 'block' : 'none';
+    const zona = document.getElementById('sis-opciones');
     zona.innerHTML = '';
+    zona.style.flexDirection = fila ? 'row' : 'column';
+    zona.style.flexWrap = fila ? 'wrap' : 'nowrap';
     const cerrar = valor => {
       document.removeEventListener('keydown', alTeclear, true);
       modal.style.display = 'none';
       zona.innerHTML = '';
-      _msfCerrarPrevio = null;
+      _sisCerrarPrevio = null;
       resolve(valor);
     };
     const alTeclear = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrar(alEscape); } };
@@ -7145,17 +7166,151 @@ function preguntarSaldoFavor({ titulo, cuerpo, opciones, alEscape }) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'btn ' + (op.clase || 'btn-outline');
-      b.style.cssText = 'width:100%;text-align:left;white-space:normal;line-height:1.35;padding:10px 14px;text-transform:none;letter-spacing:normal;';   // la app pone los botones en MAYÚSCULAS; aquí se lee mejor normal
+      b.style.cssText = (fila ? 'flex:1 1 140px;text-align:center;' : 'width:100%;text-align:left;') +
+        'white-space:normal;line-height:1.35;padding:10px 14px;text-transform:none;letter-spacing:normal;';   // la app pone los botones en MAYÚSCULAS; aquí se lee mejor normal
       b.dataset.eleccion = op.valor;
       const t1 = document.createElement('div'); t1.style.fontWeight = '700'; t1.textContent = op.texto; b.appendChild(t1);
       if (op.detalle) { const t2 = document.createElement('div'); t2.style.cssText = 'font-weight:400;font-size:11px;opacity:0.85;margin-top:3px;'; t2.textContent = op.detalle; b.appendChild(t2); }
       b.onclick = () => cerrar(op.valor);
       zona.appendChild(b);
     });
-    _msfCerrarPrevio = cerrar;
+    _sisCerrarPrevio = cerrar;
     document.addEventListener('keydown', alTeclear, true);
     modal.style.display = 'flex';
-    const primero = zona.querySelector('button'); if (primero) primero.focus();
+    const aFoco = [...zona.querySelectorAll('button')].find(b => b.dataset.eleccion === foco) || zona.querySelector('button');
+    if (aFoco) aFoco.focus();
+  });
+}
+
+// Reemplazo de confirm(): devuelve true si se pulsa el botón de aceptar y false con «Volver» o Esc. En las acciones que
+// borran o no tienen vuelta atrás (peligro) el foco queda en «Volver», así un Enter distraído no borra nada.
+//   const ok = await confirmarSistema({ titulo: '¿Eliminar este egreso?', aceptar: 'Sí, eliminar', peligro: true });
+async function confirmarSistema({ titulo, cuerpo = '', aceptar = 'Aceptar', cancelar = 'Volver', peligro = false }) {
+  const r = await ventanaSistema({
+    titulo, cuerpo, tono: peligro ? 'peligro' : 'aviso', fila: true, alEscape: 'no', foco: peligro ? 'no' : 'si',
+    opciones: [{ valor: 'no', texto: cancelar }, { valor: 'si', texto: aceptar, clase: peligro ? 'btn-danger' : 'btn-primary' }],
+  });
+  return r === 'si';
+}
+
+// Texto de usuario → HTML seguro (para nombres y notas que se pintan con innerHTML).
+function escaparHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+// Clientes en orden alfabético (sin distinguir tildes ni mayúsculas): así sale en todas las listas.
+function clientesFiadoOrdenados() {
+  return [...ST.clientesFiado].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+}
+
+// Crea un cliente de fiado (o devuelve el que ya existe con ese nombre, sin duplicar). Lanza error si falla la base.
+async function crearClienteFiado(nombreCrudo) {
+  const nombre = (nombreCrudo || '').trim().replace(/\s+/g, ' ');
+  if (!nombre) return null;
+  const existente = clienteFiadoPorNombre(nombre);
+  if (existente) return { cliente: existente, yaExistia: true };
+  const [row] = await sbInsert('clientes_fiado', { nombre });
+  ST.clientesFiado.push(row);
+  ST.clientesFiado.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  setSyncBadge('ok');
+  return { cliente: row, yaExistia: false };
+}
+
+// Selector de cliente: ventana con TODOS los clientes en orden alfabético, un buscador y «+ Crear cliente nuevo» con lo que
+// se haya escrito. Devuelve { id, nombre } (existente o recién creado) o null si se pulsa «Volver» / Esc — en ese caso no
+// se registra nada (nunca queda un fiado sin nombre). Un clic fuera de la ventana no hace nada. Si falla la creación del
+// cliente nuevo, avisa y la ventana sigue abierta.
+let _eclCerrarPrevio = null;
+function elegirClienteFiado({ titulo, detalle }) {
+  return new Promise(resolve => {
+    if (_eclCerrarPrevio) _eclCerrarPrevio(null);
+    const modal = document.getElementById('modal-elegir-cliente');
+    const buscar = document.getElementById('ecl-buscar');
+    const lista = document.getElementById('ecl-lista');
+    document.getElementById('ecl-titulo').textContent = titulo;
+    const det = document.getElementById('ecl-detalle');
+    det.textContent = detalle || ''; det.style.display = detalle ? 'block' : 'none';
+    buscar.value = '';
+    let filas = [], idx = -1, creando = false;
+    const cerrar = valor => {
+      document.removeEventListener('keydown', alTeclear, true);
+      modal.style.display = 'none';
+      lista.innerHTML = '';
+      _eclCerrarPrevio = null;
+      resolve(valor);
+    };
+    const elegir = async fila => {
+      if (!fila || creando) return;
+      if (fila.tipo === 'cliente') { cerrar({ id: fila.cliente.id, nombre: fila.cliente.nombre }); return; }
+      creando = true;
+      try {
+        const r = await crearClienteFiado(fila.nombre);
+        if (!r) return;
+        showToast(r.yaExistia ? `ℹ Ya existe el cliente "${r.cliente.nombre}" — quedó seleccionado (no se creó otro)` : `✅ Cliente "${r.cliente.nombre}" creado`, r.yaExistia ? 'info' : 'ok');
+        cerrar({ id: r.cliente.id, nombre: r.cliente.nombre });
+      } catch (err) {
+        console.error(err);
+        showToast('⚠ No se pudo crear el cliente — ¿ya creaste la tabla clientes_fiado en Supabase?', 'warning');
+      } finally { creando = false; }
+    };
+    const dibujar = () => {
+      const q = normalizarNombre(buscar.value);
+      filas = clientesFiadoOrdenados().filter(c => !q || normalizarNombre(c.nombre).includes(q)).map(c => ({ tipo: 'cliente', cliente: c }));
+      const nuevoNombre = buscar.value.trim().replace(/\s+/g, ' ');
+      if (nuevoNombre && !clienteFiadoPorNombre(nuevoNombre)) filas.push({ tipo: 'nuevo', nombre: nuevoNombre });
+      idx = -1;
+      lista.innerHTML = '';
+      if (!ST.clientesFiado.length && !nuevoNombre) {
+        const vacio = document.createElement('div');
+        vacio.style.cssText = 'padding:12px;font-size:12px;color:var(--text3);';
+        vacio.textContent = 'Todavía no hay clientes: escribe arriba el nombre del primero.';
+        lista.appendChild(vacio);
+        return;
+      }
+      filas.forEach((f, i) => {
+        const d = document.createElement('div');
+        d.className = 'autocomplete-item';
+        d.setAttribute('role', 'option');
+        if (f.tipo === 'cliente') {
+          d.dataset.id = f.cliente.id;
+          const n = document.createElement('span'); n.textContent = f.cliente.nombre; d.appendChild(n);
+          if (f.cliente.telefono) { const tel = document.createElement('span'); tel.className = 'item-code'; tel.textContent = f.cliente.telefono; d.appendChild(tel); }
+        } else {
+          d.dataset.nuevo = f.nombre;
+          d.style.color = 'var(--accent)';
+          d.textContent = `+ Crear cliente nuevo: "${f.nombre}"`;
+        }
+        d.onclick = () => elegir(f);
+        d.onmouseenter = () => { idx = i; resaltar(); };
+        lista.appendChild(d);
+      });
+      if (!filas.length) {
+        const nada = document.createElement('div');
+        nada.style.cssText = 'padding:12px;font-size:12px;color:var(--text3);';
+        nada.textContent = 'Ningún cliente coincide.';
+        lista.appendChild(nada);
+      }
+    };
+    const resaltar = () => {
+      [...lista.querySelectorAll('.autocomplete-item')].forEach((el, i) => el.classList.toggle('ac-sel', i === idx));
+      const sel = lista.querySelectorAll('.autocomplete-item')[idx]; if (sel) sel.scrollIntoView({ block: 'nearest' });
+    };
+    const alTeclear = e => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrar(null); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(idx + 1, filas.length - 1); resaltar(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(idx - 1, 0); resaltar(); }
+      else if (e.key === 'Enter' && modal.contains(e.target) && e.target.id === 'ecl-buscar') {
+        e.preventDefault();
+        elegir(idx >= 0 ? filas[idx] : (filas.length === 1 ? filas[0] : null));
+      }
+    };
+    buscar.oninput = dibujar;
+    document.getElementById('ecl-volver').onclick = () => cerrar(null);
+    _eclCerrarPrevio = cerrar;
+    document.addEventListener('keydown', alTeclear, true);
+    dibujar();
+    modal.style.display = 'flex';
+    buscar.focus();
   });
 }
 
@@ -7224,7 +7379,7 @@ async function preguntarSaldoAlRegistrar(clienteId, total, fecha, hora, estado, 
     opciones.push({ valor: 'volver', texto: 'Volver',
       detalle: pagado ? 'No se registra nada; el formulario queda como estaba.'
                       : 'No se registra nada; el formulario queda como estaba. Si no quiere usar su saldo, cóbrale con «Pagado inmediatamente».' });
-    const eleccion = await preguntarSaldoFavor({ titulo: `💰 ${cliente.nombre} tiene saldo a favor`, cuerpo, opciones, alEscape: 'volver' });
+    const eleccion = await ventanaSistema({ titulo: `💰 ${cliente.nombre} tiene saldo a favor`, cuerpo, opciones, alEscape: 'volver' });
     if (eleccion === 'usar') res.usar = true;
     else if (eleccion === 'volver') res.volver = true;
     else res.noUsar = true;
@@ -7253,7 +7408,7 @@ async function preguntarSaldoAntesDeFiar(clienteId, pedidos, accion) {
     const pr = proyectarSaldoConGrupos(clienteId, nuevos);
     if (pr.sobrante < 0.5 || pr.viejosPagados + pr.nuevosPagados === 0) return 'nada';
     const totalPedido = nuevos.reduce((a, n) => a + n.total, 0);
-    return await preguntarSaldoFavor({
+    return await ventanaSistema({
       titulo: `💰 ${cliente.nombre} tiene saldo a favor`,
       cuerpo: `${cliente.nombre} tiene ${fmt(pr.sobrante)} a favor y ${accion === 'asignar' ? 'este fiado pasa a ser suyo' : 'este pedido pasa a ser fiado suyo'} (${fmt(totalPedido)}).\n` +
               `Se saldarían ${pr.viejosPagados + pr.nuevosPagados} pedido(s) completo(s) por ${fmt(pr.totalViejos + pr.totalNuevos)}.`,
@@ -7598,7 +7753,7 @@ async function guardarCierreManual() {
   // antes de insertar los de la cola actual, para no duplicarlos.
   const editando = !!(cierreManualEditando && cierreManualEditando.fecha === fecha && cierreManualEditando.turno === turno);
   const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
-  if (existing && !editando && !confirm('Ya existe un cierre guardado para esa fecha/turno. ¿Sobrescribirlo con estos datos manuales?')) return;
+  if (existing && !editando && !(await confirmarSistema({ titulo: 'Ya existe un cierre guardado para esa fecha/turno', cuerpo: '¿Sobrescribirlo con estos datos manuales?', aceptar: 'Sí, sobrescribir', peligro: true }))) return;
 
   // Almuerzos de la familia (solo turno almuerzo, OPCIONAL en el cierre manual):
   // vacío = NULL = "no registrado" — distinto de 0, que significa "no comieron".
@@ -7830,7 +7985,7 @@ async function agregarNotaDia() {
 }
 
 async function eliminarNotaDia(id) {
-  if (!confirm('¿Eliminar esta nota?')) return;
+  if (!(await confirmarSistema({ titulo: '¿Eliminar esta nota?', aceptar: 'Sí, eliminar', peligro: true }))) return;
   try {
     await sbDelete('notas_dia', `id=eq.${id}`);
     ST.notasDia = ST.notasDia.filter(n => n.id !== id);
@@ -8209,31 +8364,19 @@ async function moverPedidoAFiado() {
   if (pedidosMover.every(p => p.es_fiar)) { cerrarModalCambiarMesa(); return; }
   const mesaAnterior = pedidosMover[0].mesa;
 
-  // Pide el cliente por nombre (búsqueda simple) — el autocomplete completo
-  // vive en Pedidos, al registrar; aquí no vale la pena duplicarlo. No deja
-  // pasar un fiado sin intentar asociarlo a alguien.
-  const nombreIngresado = (prompt('¿A nombre de quién queda este fiado? (nombre del cliente)') || '').trim();
-  let clienteId = null;
-  if (nombreIngresado) {
-    const existente = clienteFiadoPorNombre(nombreIngresado);
-    if (existente) {
-      clienteId = existente.id;
-    } else {
-      try {
-        const [row] = await sbInsert('clientes_fiado', { nombre: nombreIngresado });
-        ST.clientesFiado.push(row);
-        ST.clientesFiado.sort((a,b) => a.nombre.localeCompare(b.nombre));
-        clienteId = row.id;
-      } catch (e) {
-        console.error(e);
-        showToast('⚠ No se pudo crear el cliente — el fiado quedará sin cliente asociado', 'warning');
-      }
-    }
-  }
+  // Pide el cliente en una ventana del sistema (lista de todos en orden alfabético, buscador y «crear cliente nuevo»).
+  // «Volver» no mueve nada: un fiado nunca queda sin nombre.
+  const totalMover = pedidosMover.reduce((a, p) => a + (p.monto_total || 0), 0);
+  const elegido = await elegirClienteFiado({
+    titulo: '¿A nombre de quién queda este fiado?',
+    detalle: `${etiquetaUbicacionPedido(pedidosMover[0])} · ${fmt(totalMover)}`,
+  });
+  if (!elegido) return;
+  const clienteId = elegido.id;
 
   // Cliente con saldo a favor que alcanza: «Usar saldo a favor» o «Volver» (no se mueve nada), ANTES de tocar el pedido.
   let usarSaldoDespues = false;
-  if (clienteId) {
+  {
     const eleccion = await preguntarSaldoAntesDeFiar(clienteId, pedidosMover, 'pasar');
     if (eleccion === 'volver') return;
     usarSaldoDespues = eleccion === 'usar';
@@ -8808,7 +8951,7 @@ async function agregarEgreso() {
   const monto  = valMiles('egr-monto');
   const desc   = document.getElementById('egr-desc').value.trim();
   if (!fecha || !monto || monto <= 0) { showToast('⚠ Completa fecha y monto', 'warning'); return; }
-  if (!advertirSiQuedaNegativo({ cuentaNueva: cuenta, efectoNuevo: -monto })) return;
+  if (!(await advertirSiQuedaNegativo({ cuentaNueva: cuenta, efectoNuevo: -monto }))) return;
 
   try {
     // OJO: la columna en Supabase se llama "description" (en inglés), no
@@ -8828,7 +8971,7 @@ async function agregarEgreso() {
 }
 
 async function eliminarEgreso(id) {
-  if (!confirm('¿Eliminar este egreso?')) return;
+  if (!(await confirmarSistema({ titulo: '¿Eliminar este egreso?', aceptar: 'Sí, eliminar', peligro: true }))) return;
   try {
     await sbDelete('egresos', `id=eq.${id}`);
     ST.egresos = ST.egresos.filter(e => e.id !== id);
@@ -8853,11 +8996,11 @@ async function guardarEdicionEgreso(id) {
 
   const original = ST.egresos.find(x => x.id === id);
   const cuentaNueva = cuentaEl.value;
-  if (!advertirSiQuedaNegativo({
+  if (!(await advertirSiQuedaNegativo({
     cuentaNueva, efectoNuevo: -monto,
     cuentaVieja: original ? (original.cuenta||'efectivo') : null,
     efectoViejo: original ? -(original.monto||0) : 0
-  })) return;
+  }))) return;
 
   try {
     // "description" (en inglés) es el nombre real de esa columna — ver la
@@ -9059,7 +9202,7 @@ async function agregarProducto() {
 }
 
 async function eliminarProducto(id) {
-  if (!confirm('¿Eliminar este producto?')) return;
+  if (!(await confirmarSistema({ titulo: '¿Eliminar este producto?', aceptar: 'Sí, eliminar', peligro: true }))) return;
   try {
     await sbDelete('inventario', `id=eq.${id}`);
     ST.inventario = ST.inventario.filter(p => p.id !== id);
@@ -9542,7 +9685,7 @@ async function agregarIngresoExtra() {
 }
 
 async function eliminarIngresoExtra(id) {
-  if (!confirm('¿Eliminar este ingreso?')) return;
+  if (!(await confirmarSistema({ titulo: '¿Eliminar este ingreso?', aceptar: 'Sí, eliminar', peligro: true }))) return;
   try {
     await sbDelete('ingresos_extra', `id=eq.${id}`);
     ST.ingresosExtra = ST.ingresosExtra.filter(i => i.id !== id);
@@ -10207,7 +10350,7 @@ async function guardarEdicionGastoDia(id) {
 }
 
 async function eliminarCierre(fecha, turno) {
-  if (!confirm(`¿Eliminar el cierre del ${fecha} (${turno})?`)) return;
+  if (!(await confirmarSistema({ titulo: `¿Eliminar el cierre del ${fecha} (${turno})?`, aceptar: 'Sí, eliminar el cierre', peligro: true }))) return;
   try {
     const cierre = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
     await sbDelete('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`);
@@ -10509,7 +10652,7 @@ function calcularAcumuladosCaja(periodo = 'todo') {
 //   cuentaVieja/efectoViejo: si es una edición, la cuenta/delta que ese mismo
 //     registro tenía ANTES de editarlo (para no contarlo dos veces) — se
 //     omiten al crear un registro nuevo.
-function advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja, efectoViejo }) {
+async function advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja, efectoViejo }) {
   if (efectoNuevo >= 0) return true;
   const bal = calcularAcumuladosCaja('todo');
   const saldoDe = c => c === 'transf_almuerzos' ? bal.transfAlmuerzos : c === 'transf_rapidas' ? bal.transfRapidas : bal.efectivo;
@@ -10517,7 +10660,7 @@ function advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja, efecto
   if (cuentaVieja && cuentaVieja === cuentaNueva) saldoBase -= (efectoViejo || 0);
   const resultante = saldoBase + efectoNuevo;
   if (resultante < 0) {
-    return confirm(`⚠ La cuenta "${CUENTA_LABELS[cuentaNueva] || cuentaNueva}" quedará en ${fmtSigned(resultante)} con este movimiento.\n\n¿Continuar de todas formas?`);
+    return await confirmarSistema({ titulo: '⚠ Esta cuenta quedaría en negativo', cuerpo: `La cuenta "${CUENTA_LABELS[cuentaNueva] || cuentaNueva}" quedará en ${fmtSigned(resultante)} con este movimiento.`, aceptar: 'Continuar de todas formas' });
   }
   return true;
 }
@@ -10533,7 +10676,7 @@ async function agregarMovimientoCaja() {
   if (tipoMovimientoCaja === 'traspaso' && cuenta === cuentaDestino) { showToast('⚠ Elige dos cuentas distintas para el traspaso', 'warning'); return; }
   // El aporte solo suma (nunca deja nada en negativo); tanto el gasto como
   // la cuenta de ORIGEN de un traspaso restan, así que ambos se avisan.
-  if (tipoMovimientoCaja !== 'aporte' && !advertirSiQuedaNegativo({ cuentaNueva: cuenta, efectoNuevo: -monto })) return;
+  if (tipoMovimientoCaja !== 'aporte' && !(await advertirSiQuedaNegativo({ cuentaNueva: cuenta, efectoNuevo: -monto }))) return;
 
   try {
     const datos = { fecha, tipo: tipoMovimientoCaja, descripcion, monto, cuenta };
@@ -10553,7 +10696,7 @@ async function agregarMovimientoCaja() {
 }
 
 async function eliminarMovimientoCaja(id) {
-  if (!confirm('¿Eliminar este movimiento de caja?')) return;
+  if (!(await confirmarSistema({ titulo: '¿Eliminar este movimiento de caja?', aceptar: 'Sí, eliminar', peligro: true }))) return;
   try {
     await sbDelete('movimientos_caja', `id=eq.${id}`);
     ST.movimientosCaja = ST.movimientosCaja.filter(m => m.id !== id);
@@ -10589,7 +10732,7 @@ async function guardarEdicionMovimientoCaja(id) {
   // suma. La cuenta destino de un traspaso solo suma, nunca queda negativa.
   const efectoViejo = original ? (original.tipo === 'aporte' ? (original.monto||0) : -(original.monto||0)) : 0;
   const efectoNuevo = tipoNuevo === 'aporte' ? monto : -monto;
-  if (!advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja: original ? (original.cuenta||'efectivo') : null, efectoViejo })) return;
+  if (!(await advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja: original ? (original.cuenta||'efectivo') : null, efectoViejo }))) return;
 
   try {
     const patch = { fecha, tipo: tipoNuevo, cuenta: cuentaNueva, cuenta_destino: tipoNuevo === 'traspaso' ? cuentaDestinoNueva : null, descripcion, monto };

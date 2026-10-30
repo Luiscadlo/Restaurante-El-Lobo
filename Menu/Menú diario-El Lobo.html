@@ -82,6 +82,16 @@
     .panel-preview { max-height: none; }
     .admin-grid { grid-template-columns: 1fr; }
   }
+
+  /* Ventana propia en lugar de los avisos del navegador (confirm/alert): se ve igual en todos los navegadores. */
+  .aviso-fondo { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 9000; display: none; align-items: center; justify-content: center; padding: 20px; }
+  .aviso-fondo.visible { display: flex; }
+  .aviso-caja { background: #2a2a2a; border: 2px solid var(--amarillo); border-radius: 10px; padding: 22px; max-width: 420px; width: 100%; color: #fff; }
+  .aviso-titulo { font-family: "Playfair Display", serif; color: var(--amarillo); font-size: 1.05rem; margin-bottom: 8px; overflow-wrap: anywhere; }
+  .aviso-cuerpo { font-size: 0.85rem; color: #ccc; margin-bottom: 16px; overflow-wrap: anywhere; }
+  .aviso-botones { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .aviso-botones button { flex: 1 1 120px; padding: 10px; border-radius: 6px; font-family: "Nunito", sans-serif; font-weight: 700; font-size: 0.85rem; cursor: pointer; border: 2px solid #555; background: #333; color: #ddd; }
+  .aviso-botones button.aceptar { background: linear-gradient(135deg, var(--rojo-oscuro), var(--rojo)); color: var(--amarillo); border-color: var(--rojo); }
 </style>
 </head>
 <body>
@@ -227,9 +237,39 @@ function agregarPlato(key) {
   buildMenuLists();
 }
 
-function eliminarPlato(key, idx) {
+// Aviso o pregunta en una ventana propia (reemplaza alert/confirm del navegador). Devuelve true con «aceptar» y false con
+// «cancelar» o Esc; si no hay botón «cancelar» es solo un aviso. Un clic fuera de la ventana no decide nada.
+function avisoMenu({ titulo, cuerpo = "", aceptar = "Aceptar", cancelar = null }) {
+  return new Promise(resolve => {
+    const fondo = document.getElementById("aviso-menu");
+    document.getElementById("aviso-menu-titulo").textContent = titulo;
+    const cuer = document.getElementById("aviso-menu-cuerpo");
+    cuer.textContent = cuerpo; cuer.style.display = cuerpo ? "block" : "none";
+    const zona = document.getElementById("aviso-menu-botones");
+    zona.innerHTML = "";
+    const cerrar = valor => {
+      document.removeEventListener("keydown", alTeclear, true);
+      fondo.classList.remove("visible");
+      zona.innerHTML = "";
+      resolve(valor);
+    };
+    const alTeclear = e => { if (e.key === "Escape") { e.preventDefault(); cerrar(false); } };
+    if (cancelar) {
+      const b = document.createElement("button"); b.type = "button"; b.textContent = cancelar; b.dataset.eleccion = "no";
+      b.onclick = () => cerrar(false); zona.appendChild(b);
+    }
+    const ok = document.createElement("button"); ok.type = "button"; ok.textContent = aceptar; ok.className = "aceptar"; ok.dataset.eleccion = "si";
+    ok.onclick = () => cerrar(true); zona.appendChild(ok);
+    document.addEventListener("keydown", alTeclear, true);
+    fondo.classList.add("visible");
+    (cancelar ? zona.firstChild : ok).focus();        // al borrar, el foco queda en «Volver»
+  });
+}
+
+async function eliminarPlato(key, idx) {
   const nombre = catalogo[key][idx];
-  if (!confirm("¿Eliminar \"" + nombre + "\"?")) return;
+  if (!(await avisoMenu({ titulo: "¿Eliminar \"" + nombre + "\"?", aceptar: "Sí, eliminar", cancelar: "Volver" }))) return;
+  if (catalogo[key][idx] !== nombre) return;            // la lista cambió mientras se preguntaba: no se borra otro plato
   catalogo[key].splice(idx, 1);
   guardarCatalogo(catalogo);
   renderAdminLista(key);
@@ -275,7 +315,7 @@ async function generarMenu() {
   const arroces   = getSel("arroces");
   const proteinas = getSel("proteinas");
   const acomp     = getSel("acomp");
-  if (!sopas.length && !proteinas.length) { alert("Selecciona al menos una sopa o proteína."); return; }
+  if (!sopas.length && !proteinas.length) { await avisoMenu({ titulo: "Falta elegir algo", cuerpo: "Selecciona al menos una sopa o proteína." }); return; }
 
   document.getElementById("placeholder").style.display = "none";
   document.getElementById("loading").classList.add("visible");
@@ -329,5 +369,12 @@ function descargarMenu() {
 
 buildMenuLists();
 </script>
+<div class="aviso-fondo" id="aviso-menu" role="dialog" aria-modal="true" aria-labelledby="aviso-menu-titulo">
+  <div class="aviso-caja">
+    <div class="aviso-titulo" id="aviso-menu-titulo"></div>
+    <div class="aviso-cuerpo" id="aviso-menu-cuerpo"></div>
+    <div class="aviso-botones" id="aviso-menu-botones"></div>
+  </div>
+</div>
 </body>
 </html>

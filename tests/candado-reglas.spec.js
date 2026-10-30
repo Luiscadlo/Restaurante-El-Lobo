@@ -13,6 +13,7 @@ const CASOS = require('./fixtures/candado_casos.json');
 const { evaluarCandado, diaNegocio } = require('./helpers/candado');
 const { abrirSistema, FECHA_HOY } = require('./helpers/backend-falso');
 const { datos: DATOS_BASE } = require('./fixtures/datos');
+const { aceptarAvisos } = require('./helpers/ventanas');
 
 // ── 1. Los casos compartidos ───────────────────────────────────────────────
 function filaCompleta(tabla, fila) { return { ...(CASOS.base[tabla] || {}), ...fila }; }
@@ -173,7 +174,7 @@ const unaVenta = { pedido: 'Completo', sopa: '', arroz: '', proteina: '', acomp:
 const toastsDeCandado = page => page.locator('.toast', { hasText: 'Caja solo puede cambiar lo de hoy' });
 
 test.describe('lo viejo que SÍ puede hacer caja (con el candado puesto)', () => {
-  test.beforeEach(async ({ page }) => { page.on('dialog', d => d.accept()); });
+  test.beforeEach(async ({ page }) => { aceptarAvisos(page); });
 
   test('cobrar un fiado de hace días: pasa a hoy, y «↩ Deshacer» le devuelve su fecha', async ({ page }) => {
     const reg = await abrirSistema(page);
@@ -248,7 +249,7 @@ function datosConCenaAbierta() {
 }
 
 test.describe('la cena que pasa de medianoche', () => {
-  test.beforeEach(async ({ page }) => { page.on('dialog', d => d.accept()); });
+  test.beforeEach(async ({ page }) => { aceptarAvisos(page); });
 
   test('a las 12:30 a. m. caja registra un pedido, cobra un abono y cierra la cena del día anterior', async ({ page }) => {
     const reg = await abrirSistema(page, { datos: datosConCenaAbierta(), fecha: new Date('2026-10-21T00:30:00-05:00') });

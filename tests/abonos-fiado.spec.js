@@ -9,11 +9,12 @@ const { test, expect } = require('@playwright/test');
 const { abrirSistema } = require('./helpers/backend-falso');
 const { entrarComoAdmin } = require('./helpers/sesion');
 const { datos: BASE } = require('./fixtures/datos');
+const { aceptarAvisos } = require('./helpers/ventanas');
 
 const copia = x => JSON.parse(JSON.stringify(x));
 const escritura = (reg, metodo, tabla) => reg.escrituras.filter(e => e.metodo === metodo && e.tabla === tabla);
 
-test.beforeEach(async ({ page }) => { page.on('dialog', d => d.accept()); });
+test.beforeEach(async ({ page }) => { aceptarAvisos(page); });
 
 const irA = (page, id) => page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
 
