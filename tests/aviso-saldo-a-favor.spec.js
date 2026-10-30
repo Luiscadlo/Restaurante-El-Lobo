@@ -215,6 +215,15 @@ test.describe('0) El aviso dentro del formulario de Pedidos → «Fiar»', () =>
     await expect(page.locator(AVISO)).toBeHidden();                                     // el cliente no vuelve solo
   });
 
+  test('seguro extra: aunque por error quedara un cliente elegido, fuera de «Fiar» el aviso no aparece', async ({ page }) => {
+    await abrir(page);
+    await elegirFiarConCliente(page, 'Luis', 'Luisca');
+    await expect(page.locator(AVISO)).toBeVisible();
+    await page.evaluate(() => { selectedUbicacion = 'sinmesa'; actualizarAvisoSaldoFavorFormulario(); });   // estado que la pantalla no produce sola
+    await expect(page.locator(AVISO)).toBeHidden();
+    expect(await page.locator(AVISO).textContent()).toBe('');
+  });
+
   test('con la sesión de administrador se ve igual', async ({ page }) => {
     await abrir(page, { usuario: 'admin' });
     await elegirFiarConCliente(page, 'Luis', 'Luisca');
@@ -489,7 +498,7 @@ test.describe('1c) Ventana de saldo a favor: Volver, Esc y botones', () => {
 
     await irA(page, 'fiados');
     await page.selectOption('#huerfano-cliente-g-huerfano', '7');
-    const asignar = page.locator('button', { hasText: /^Asignar$/ }).click();
+    const asignar = page.evaluate(() => asignarClienteAHuerfano([902], 'g-huerfano'));   // lo mismo que hace el botón «Asignar»; así se espera hasta el final
     await expect(page.locator(MODAL)).toBeVisible();
     await page.keyboard.press('Escape');
     await asignar;
@@ -737,5 +746,53 @@ test.describe('lo que el aviso nunca debe hacer', () => {
     expect(await page.evaluate(() => ST.pendientes.some(p => p.cliente_fiado_id === 7 && p.monto_total === 15000))).toBe(true);
     expect((await toastsTexto(page)).join(' | ')).toContain('Error al aplicar el saldo a favor');
     expect((await toastsTexto(page)).join(' | ')).not.toContain('Error al registrar pedido');   // el registro en sí no se marca como fallido
+  });
+});
+
+// ── Cómo se reparte el saldo: orden, cortes y centavos ─────────────────────────────────────────────────────────────────
+// Lo que el aviso y la pregunta calculan por adelantado tiene que ser EXACTAMENTE lo que luego hará «✔ Aplicar saldo a
+// favor»: del más viejo al más nuevo, pedidos completos, y se corta en el primero que no alcanza.
+test.describe('4) El reparto del saldo que se calcula por adelantado', () => {
+  test('va por fecha, no por orden de llegada: un pedido con fecha anterior a un fiado ya registrado se paga primero', async ({ page }) => {
+    armarDialogos(page);
+    const extra = { pedidos: [fiadoDe(950, 10, 5000, 'g-ana-fiado', { fecha: '2026-10-20', hora: '12:00' })] };   // Ana: 5.000 a favor y 5.000 de fiado
+    await abrir(page, { extra });
+    const r = await page.evaluate(() => ({
+      anterior: proyectarSaldoAFavor(10, 5000, '2026-10-19', '10:00'),     // el nuevo es MÁS VIEJO que el fiado registrado
+      posterior: proyectarSaldoAFavor(10, 5000, '2026-10-21', '10:00'),    // el nuevo es más nuevo
+    }));
+    expect(r.anterior).toMatchObject({ esteSePaga: true, nuevosPagados: 1, viejosPagados: 0, quedaria: 0 });
+    expect(r.posterior).toMatchObject({ esteSePaga: false, nuevosPagados: 0, viejosPagados: 1, quedaria: 0 });
+  });
+
+  test('se corta en el primero que no alcanza: no se salta un fiado viejo grande para pagar uno nuevo pequeño', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    const reg = await abrir(page);
+    // Pedro: 5.000 a favor y un fiado viejo de 12.000. El saldo NO cubre el viejo, así que tampoco puede ir al nuevo de 4.000.
+    expect(await page.evaluate(() => proyectarSaldoAFavor(9, 4000, '2026-10-20', '15:00'))).toMatchObject({ esteSePaga: false, nuevosPagados: 0, viejosPagados: 0 });
+    await registrarFiado(page, 9, 4000);
+    expect(dialogos).toEqual([]);                                                        // no hay nada que preguntar
+    expect(escritura(reg, 'PATCH', 'pedidos')).toHaveLength(0);                          // y no se salda ningún pedido
+    expect((await saldo(page, 9)).sobrante).toBe(5000);
+  });
+
+  test('la comparación aguanta los centavos de las sumas con decimales (10.000,3 + 0,3 alcanza para 10.000,6)', async ({ page }) => {
+    armarDialogos(page);
+    const d = datosAviso();
+    d.abonos_fiado = d.abonos_fiado.filter(a => a.cliente_fiado_id !== 10).concat([abonoDe(20, 10, 10000.3), abonoDe(21, 10, 0.3)]);
+    await abrir(page, { datos: d });
+    const sobrante = (await saldo(page, 10)).sobrante;
+    expect(sobrante).toBeLessThan(10000.6);                                              // la suma en decimales binarios se queda unas billonésimas corta…
+    expect(await page.evaluate(() => proyectarSaldoAFavor(10, 10000.6, '2026-10-20', '15:00'))).toMatchObject({ esteSePaga: true, nuevosPagados: 1 });   // …y aun así alcanza
+  });
+
+  test('un cliente SIN saldo no recibe nunca la pregunta, ni siquiera con un pedido de $0', async ({ page }) => {
+    const dialogos = armarDialogos(page);
+    await abrir(page);
+    // Marta (8) no tiene saldo a favor. Un pedido de $0 (p. ej. un obsequio) con fecha anterior a su fiado "cabría" en $0.
+    const respuesta = await page.evaluate(() => preguntarSaldoAntesDeFiar(8,
+      [{ id: 905, fecha: '2026-10-01', hora: '10:00', monto_total: 0, grupo_pedido: 'g-obsequio' }], 'pasar'));
+    expect(respuesta).toBe('nada');
+    expect(dialogos).toEqual([]);
   });
 });
