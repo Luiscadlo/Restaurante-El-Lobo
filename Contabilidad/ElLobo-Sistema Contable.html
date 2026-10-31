@@ -433,6 +433,9 @@
   .cfgcat-barra { display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: space-between; align-items: center; margin-top: 12px; }
   .cfgcat-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .cfgcat-contador { font-size: 12px; color: var(--accent); }
+  .cfgpla-lista { margin-top: 14px; }
+  .cfgpla-titulo { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+  .cfgpla-aviso { margin-top: 6px; padding: 7px 10px; font-size: 12px; line-height: 1.45; color: var(--text2); background: var(--surface2, rgba(255,255,255,.04)); border-left: 3px solid var(--accent); border-radius: 4px; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -1739,6 +1742,8 @@
     <div id="config-catalogos"></div>
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin:22px 0 8px;">🧾 Egresos y cuentas</div>
     <div id="config-egresos"></div>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin:22px 0 8px;">🍲 Menú</div>
+    <div id="config-platos"></div>
     <div class="panel">
       <div class="panel-header"><div class="panel-title">🕘 Historial de cambios</div></div>
       <div class="panel-body" id="config-historial"></div>
@@ -2179,28 +2184,65 @@
 // BLOQUE 1 — Variables globales, Supabase REST y utilidades
 // ══════════════════════════════════════════════════════════════════════
 
-// ── Catálogos de platos ────────────────────────────────────────────────
-const PL = {
-  sopa:[{c:'SP01',n:'Sopa de Hueso'},{c:'SP02',n:'Sopa de Queso'},{c:'SP03',n:'Sopa de Frijol'},
-        {c:'SP04',n:'Sopa de Lenteja'},{c:'SP05',n:'Sopa de Pescado'},{c:'SP06',n:'Sopa de Verduras'},
-        {c:'SP07',n:'Sopa de Garbanzos'},{c:'SP08',n:'Sopa de Arvejas'},{c:'SP09',n:'Sopa de Pollo'}],
-  arroz:[{c:'AR01',n:'Arroz Blanco'},{c:'AR02',n:'Arroz de Coco'},{c:'AR03',n:'Arroz de Frijol'},
-         {c:'AR04',n:'Arroz de Zanahoria'},{c:'AR05',n:'Arroz de Pimenton'}],
-  asado:[{c:'AS01',n:'Asado de cerdo'},{c:'AS02',n:'Asado de pechuga'},{c:'AS03',n:'Asado de Res'}],
-  acomp:[{c:'AC01',n:'Patacones'},{c:'AC02',n:'Tajada madura'},{c:'AC03',n:'Yuca Cocida'}],
-  proteina:[
-    {c:'PT01',n:'Pollo en salsa BBQ'},{c:'PT02',n:'Pollo Guisado en zumo de coco'},
-    {c:'PT03',n:'Pollo en salsa de tomate'},{c:'PT04',n:'Pollo Frito'},{c:'PT05',n:'Pollo Guisado'},
-    {c:'PT06',n:'Pollo Apanado'},{c:'PT07',n:'Cerdo Encebollado'},{c:'PT08',n:'Cerdo Guisado'},
-    {c:'PT09',n:'Cerdo en Bistec'},{c:'PT10',n:'Chuleta en Coca Cola'},{c:'PT11',n:'Chuleta Frita/BBQ'},
-    {c:'PT12',n:'Carne Guisada'},{c:'PT13',n:'Carne Desmechada'},{c:'PT14',n:'Carne Molida'},
-    {c:'PT15',n:'Carne Goulash'},{c:'PT16',n:'Carne en Bistec'},{c:'PT17',n:'Pechuga Desmechada'},
-    {c:'PT18',n:'Pechuga Apanada'},{c:'PT19',n:'Higado en Bistec'},{c:'PT20',n:'Costillas BBQ'},
-    {c:'PT21',n:'Mondongo Guisado'},{c:'PT22',n:'Trifasico de carne y cerdo'},
-    {c:'PT23',n:'Sobrebarriga guisada'},{c:'PT24',n:'Lengua en salsa'},{c:'PT25',n:'Fricache de Pescado'}
-  ],
-  comidaRapida: [],   // se llena con reconstruirCatalogo() desde el catálogo de Configuración (por defecto, CATALOGO_RAPIDAS_BASE)
-};
+// ── Platos del menú: los valores de El Lobo (lo que rige mientras el administrador no cambie nada) ──
+// Sopas, arroces, proteínas, acompañamientos y asados. Se editan desde ⚙️ Configuración → Platos del menú (etapa 3) y los
+// comparten el autocompletado de Pedidos y el generador de la imagen del Menú. Escritos como JSON a propósito: una prueba
+// automática compara esta lista con lo que exige sql/configuracion_etapa_3.sql. Los códigos NUNCA cambian ni se borran (un
+// plato se «retira» con activo: false), porque los pedidos viejos guardan el nombre del plato.
+const PLATOS_BASE = Object.freeze([
+  {"codigo": "SP01", "lista": "sopa", "nombre": "Sopa de Hueso", "activo": true},
+  {"codigo": "SP02", "lista": "sopa", "nombre": "Sopa de Queso", "activo": true},
+  {"codigo": "SP03", "lista": "sopa", "nombre": "Sopa de Frijol", "activo": true},
+  {"codigo": "SP04", "lista": "sopa", "nombre": "Sopa de Lenteja", "activo": true},
+  {"codigo": "SP05", "lista": "sopa", "nombre": "Sopa de Pescado", "activo": true},
+  {"codigo": "SP06", "lista": "sopa", "nombre": "Sopa de Verduras", "activo": true},
+  {"codigo": "SP07", "lista": "sopa", "nombre": "Sopa de Garbanzos", "activo": true},
+  {"codigo": "SP08", "lista": "sopa", "nombre": "Sopa de Arvejas", "activo": true},
+  {"codigo": "SP09", "lista": "sopa", "nombre": "Sopa de Pollo", "activo": true},
+  {"codigo": "AR01", "lista": "arroz", "nombre": "Arroz Blanco", "activo": true},
+  {"codigo": "AR02", "lista": "arroz", "nombre": "Arroz de Coco", "activo": true},
+  {"codigo": "AR03", "lista": "arroz", "nombre": "Arroz de Frijol", "activo": true},
+  {"codigo": "AR04", "lista": "arroz", "nombre": "Arroz de Zanahoria", "activo": true},
+  {"codigo": "AR05", "lista": "arroz", "nombre": "Arroz de Pimenton", "activo": true},
+  {"codigo": "AS01", "lista": "asado", "nombre": "Asado de cerdo", "activo": true},
+  {"codigo": "AS02", "lista": "asado", "nombre": "Asado de pechuga", "activo": true},
+  {"codigo": "AS03", "lista": "asado", "nombre": "Asado de Res", "activo": true},
+  {"codigo": "AC01", "lista": "acomp", "nombre": "Patacones", "activo": true},
+  {"codigo": "AC02", "lista": "acomp", "nombre": "Tajada madura", "activo": true},
+  {"codigo": "AC03", "lista": "acomp", "nombre": "Yuca Cocida", "activo": true},
+  {"codigo": "PT01", "lista": "proteina", "nombre": "Pollo en salsa BBQ", "activo": true},
+  {"codigo": "PT02", "lista": "proteina", "nombre": "Pollo Guisado en zumo de coco", "activo": true},
+  {"codigo": "PT03", "lista": "proteina", "nombre": "Pollo en salsa de tomate", "activo": true},
+  {"codigo": "PT04", "lista": "proteina", "nombre": "Pollo Frito", "activo": true},
+  {"codigo": "PT05", "lista": "proteina", "nombre": "Pollo Guisado", "activo": true},
+  {"codigo": "PT06", "lista": "proteina", "nombre": "Pollo Apanado", "activo": true},
+  {"codigo": "PT07", "lista": "proteina", "nombre": "Cerdo Encebollado", "activo": true},
+  {"codigo": "PT08", "lista": "proteina", "nombre": "Cerdo Guisado", "activo": true},
+  {"codigo": "PT09", "lista": "proteina", "nombre": "Cerdo en Bistec", "activo": true},
+  {"codigo": "PT10", "lista": "proteina", "nombre": "Chuleta en Coca Cola", "activo": true},
+  {"codigo": "PT11", "lista": "proteina", "nombre": "Chuleta Frita/BBQ", "activo": true},
+  {"codigo": "PT12", "lista": "proteina", "nombre": "Carne Guisada", "activo": true},
+  {"codigo": "PT13", "lista": "proteina", "nombre": "Carne Desmechada", "activo": true},
+  {"codigo": "PT14", "lista": "proteina", "nombre": "Carne Molida", "activo": true},
+  {"codigo": "PT15", "lista": "proteina", "nombre": "Carne Goulash", "activo": true},
+  {"codigo": "PT16", "lista": "proteina", "nombre": "Carne en Bistec", "activo": true},
+  {"codigo": "PT17", "lista": "proteina", "nombre": "Pechuga Desmechada", "activo": true},
+  {"codigo": "PT18", "lista": "proteina", "nombre": "Pechuga Apanada", "activo": true},
+  {"codigo": "PT19", "lista": "proteina", "nombre": "Higado en Bistec", "activo": true},
+  {"codigo": "PT20", "lista": "proteina", "nombre": "Costillas BBQ", "activo": true},
+  {"codigo": "PT21", "lista": "proteina", "nombre": "Mondongo Guisado", "activo": true},
+  {"codigo": "PT22", "lista": "proteina", "nombre": "Trifasico de carne y cerdo", "activo": true},
+  {"codigo": "PT23", "lista": "proteina", "nombre": "Sobrebarriga guisada", "activo": true},
+  {"codigo": "PT24", "lista": "proteina", "nombre": "Lengua en salsa", "activo": true},
+  {"codigo": "PT25", "lista": "proteina", "nombre": "Fricache de Pescado", "activo": true},
+  {"codigo": "PT26", "lista": "proteina", "nombre": "Pollo Frito/BBQ", "activo": true},
+  {"codigo": "PT27", "lista": "proteina", "nombre": "Pechuga en salsa", "activo": true}
+].map(Object.freeze));
+const PLATOS_LISTAS = ['sopa', 'arroz', 'proteina', 'acomp', 'asado'];
+// Vista «de hoy» que lee el autocompletado de Pedidos: solo los platos activos ({c: código, n: nombre}). Se rehace sola
+// cuando cambia la configuración (reconstruirPlatos).
+const PL = { comidaRapida: [] };   // comidaRapida se llena con reconstruirCatalogo() desde el catálogo de Configuración
+PLATOS_LISTAS.forEach(l => { PL[l] = PLATOS_BASE.filter(p => p.lista === l).map(p => ({ c: p.codigo, n: p.nombre })); });
 
 // ── Catálogos de productos: los valores de El Lobo (lo que rige mientras el administrador no cambie nada) ──
 // Se editan desde ⚙️ Configuración → Productos y precios (etapa 2). Escritos como JSON a propósito: una prueba automática
@@ -2446,7 +2488,8 @@ const CFG_DEFECTOS = Object.freeze({
   respaldo_dia_semana: 0, respaldo_rojo_dias: 10,
   negocio_nombre: 'El Lobo', negocio_emoji: '🐺',
   catalogo_almuerzos: CATALOGO_ALMUERZOS_BASE, catalogo_rapidas: CATALOGO_RAPIDAS_BASE, catalogo_extras: CATALOGO_EXTRAS_BASE,
-  categorias_egresos: CATEGORIAS_EGRESOS_BASE, nombres_cuentas: NOMBRES_CUENTAS_BASE
+  categorias_egresos: CATEGORIAS_EGRESOS_BASE, nombres_cuentas: NOMBRES_CUENTAS_BASE,
+  menu_platos: PLATOS_BASE
 });
 // Reglas de cada valor. ESPEJO de seguridad.validar_configuracion (sql/configuracion.sql): si cambia una, cambia la otra
 // (una prueba automática compara los rangos de los dos lados).
@@ -2462,7 +2505,8 @@ const CFG_REGLAS = Object.freeze({
   catalogo_rapidas:    { tipo: 'catalogo' },
   catalogo_extras:     { tipo: 'catalogo' },
   categorias_egresos:  { tipo: 'categorias' },
-  nombres_cuentas:     { tipo: 'cuentas' }
+  nombres_cuentas:     { tipo: 'cuentas' },
+  menu_platos:         { tipo: 'platos' }
 });
 // null = el valor sirve; si no, el texto que se le muestra a la persona.
 function cfgValidar(clave, valor) {
@@ -2471,6 +2515,7 @@ function cfgValidar(clave, valor) {
   if (r.tipo === 'catalogo') return cfgValidarCatalogo(clave, valor);
   if (r.tipo === 'categorias') return cfgValidarCategorias(valor);
   if (r.tipo === 'cuentas') return cfgValidarCuentas(valor);
+  if (r.tipo === 'platos') return cfgValidarPlatos(valor);
   if (r.tipo === 'entero') {
     if (typeof valor !== 'number' || !Number.isFinite(valor)) return `${r.nombre} debe ser un número.`;
     if (!Number.isInteger(valor) || valor < r.min || valor > r.max) return `${r.nombre} debe ser un número entero entre ${r.min.toLocaleString('es-CO')} y ${r.max.toLocaleString('es-CO')}.`;
@@ -2808,6 +2853,121 @@ function categoriasYCuentasAlDia() {
   poblarCategoriasEnDOM();
   aplicarCuentasEnDOM();
   return true;
+}
+
+// ── Platos del menú (etapa 3) ──────────────────────────────────────────────────────────────────────────────────
+// Sopas, arroces, proteínas, acompañamientos y asados salen de la configuración (clave menu_platos: cada guardado es una
+// versión completa, con «vigente desde»). Es UNA sola lista que comparten el autocompletado de Pedidos y el generador de la
+// imagen del Menú. Cada plato tiene un CÓDIGO que no cambia nunca (SP sopa · AR arroz · PT proteína · AC acompañamiento ·
+// AS asado, más 2 o 3 números) y un NOMBRE que sí se puede cambiar. Un plato no se borra: se retira (activo: false).
+// Los pedidos guardan el plato como TEXTO (su nombre de ese día), y no se modifican nunca. Para que renombrar un plato no
+// parta la estadística en dos, los reportes leen cada texto con crearResolvedorPlatos(): lo llevan al plato que nombraba
+// cuando se tomó el pedido y lo cuentan con el nombre de HOY.
+const PLATO_PREFIJO = { sopa: 'SP', arroz: 'AR', proteina: 'PT', acomp: 'AC', asado: 'AS' };
+const PLATO_LISTA_NOMBRE = { sopa: 'Sopas', arroz: 'Arroces', proteina: 'Proteínas', acomp: 'Acompañamientos', asado: 'Asados' };
+const PLATO_LISTA_ICONO = { sopa: '🍲', arroz: '🍚', proteina: '🥩', acomp: '🍟', asado: '🔥' };
+const PLATOS_MAX = 300;
+// En qué campo del pedido se guarda el plato de cada lista (los asados van en el mismo campo que las proteínas).
+const platoCampo = lista => (lista === 'asado' ? 'proteina' : lista);
+
+// ESPEJO de seguridad.validar_menu_platos (sql/configuracion_etapa_3.sql): null = sirve; si no, el texto para la persona.
+function cfgValidarPlatos(valor) {
+  const que = 'La lista de platos del menú';
+  if (!Array.isArray(valor)) return `${que} debe ser una lista.`;
+  const n = valor.length;
+  if (n < PLATOS_BASE.length || n > PLATOS_MAX) return `${que} trae ${n} platos y esa cantidad no es válida.`;
+  const codigos = new Set(), nombres = new Set();
+  const largo = s => [...s].length;
+  const sinEspaciosBorde = s => s.replace(/^ +| +$/g, '');         // como btrim() de la base: solo espacios
+  for (const it of valor) {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return `${que} trae un plato mal formado.`;
+    if (Object.keys(it).sort().join(',') !== 'activo,codigo,lista,nombre') return `${que} trae un plato con campos que no corresponden.`;
+    if (typeof it.nombre !== 'string') return 'El nombre de cada plato debe ser un texto.';
+    const nom = it.nombre;
+    if (largo(nom) < 1 || largo(nom) > 50 || nom !== sinEspaciosBorde(nom)) return 'El nombre de cada plato debe tener entre 1 y 50 caracteres, sin espacios al principio ni al final.';
+    if (CAT_PROHIBIDOS.test(nom)) return 'Los nombres no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    if (typeof it.lista !== 'string' || !PLATOS_LISTAS.includes(it.lista)) return `La lista de "${nom}" no es válida (sopa, arroz, proteina, acomp o asado).`;
+    const pref = PLATO_PREFIJO[it.lista];
+    if (typeof it.codigo !== 'string') return `El código de "${nom}" debe ser un texto.`;
+    if (!new RegExp('^' + pref + '[0-9]{2,3}$').test(it.codigo)) return `El código "${it.codigo}" no sirve para la lista ${it.lista}: debe ser ${pref} seguido de 2 o 3 números.`;
+    if (codigos.has(it.codigo)) return `El código "${it.codigo}" está repetido.`;
+    codigos.add(it.codigo);
+    const clave = platoCampo(it.lista) + ':' + nom.toLowerCase();
+    if (nombres.has(clave)) return `El plato "${nom}" está repetido en su lista.`;
+    nombres.add(clave);
+    if (typeof it.activo !== 'boolean') return `"${nom}" debe estar activo o retirado (verdadero o falso).`;
+  }
+  if (PLATOS_BASE.some(b => !codigos.has(b.codigo))) return `${que} no puede quitar platos de El Lobo: se retiran, no se borran.`;
+  return null;
+}
+
+// Todos los platos (también los retirados) tal como regían en `instante`: {codigo, lista, nombre, activo}. Sin instante, los de hoy.
+const platosEn = instante => CFG.en('menu_platos', instante);
+
+// Rehace PL (lo que ofrece el autocompletado de Pedidos: solo los platos activos, con el nombre de hoy) en el mismo lugar.
+function reconstruirPlatos() {
+  const hoy = platosEn();
+  PLATOS_LISTAS.forEach(l => {
+    PL[l].length = 0;
+    hoy.filter(p => p.lista === l && p.activo).forEach(p => PL[l].push({ c: p.codigo, n: p.nombre }));
+  });
+}
+
+// Le deja la lista de hoy al generador del Menú (otra página del mismo sitio). Va por el almacenamiento del navegador: así
+// funciona igual dentro de la pestaña «Menú» y en la pestaña aparte, y el generador no necesita entrar a la base de datos.
+const MENU_PLATOS_LS = 'elLobo_menu_platos';
+function publicarPlatosParaMenu() {
+  try {
+    const hoy = platosEn().filter(p => p.activo);
+    const nombres = l => hoy.filter(p => p.lista === l).map(p => p.nombre);
+    localStorage.setItem(MENU_PLATOS_LS, JSON.stringify({ v: 1, sopas: nombres('sopa'), arroces: nombres('arroz'), proteinas: nombres('proteina'), acomp: nombres('acomp') }));
+  } catch (e) { /* sin almacenamiento en el navegador (p. ej. modo privado): el generador usa la lista de siempre */ }
+}
+
+// Si la configuración trae platos distintos a los que están en uso, rehace PL y se los deja al generador. Barato: compara una
+// firma de las versiones guardadas. Devuelve true si cambió algo.
+let firmaPlatos = null;
+function platosAlDia() {
+  // La firma distingue «aún sin datos» (null) de «datos sin platos guardados» ([]): al llegar los datos hay que publicar aunque
+  // la lista siga siendo la de siempre.
+  const firma = Array.isArray(ST.configuracion)
+    ? 'datos:' + ST.configuracion.filter(f => f && f.clave === 'menu_platos').map(f => `${f.id}@${f.vigente_desde}`).join('|') : 'sin-datos';
+  if (firma === firmaPlatos) return false;
+  firmaPlatos = firma;
+  reconstruirPlatos();
+  if (Array.isArray(ST.configuracion)) publicarPlatosParaMenu();       // antes de entrar (sin datos) no se pisa lo que ya había
+  return true;
+}
+
+// Cuándo se tomó un pedido (para saber qué nombres regían ese día). Sin hora guardada, el final de su fecha (Bogotá).
+function instanteDePedido(p) {
+  if (p && p.created_at && !Number.isNaN(Date.parse(p.created_at))) return p.created_at;
+  return p && p.fecha ? `${p.fecha}T23:59:59-05:00` : undefined;
+}
+// Para los reportes: devuelve una función (campo, texto, instante) → el nombre de HOY del plato que ese texto nombraba cuando se
+// tomó el pedido. `campo` es el del pedido (sopa, arroz, proteina, acomp). Un texto que no está en la lista (escrito a mano) se
+// deja igual. No modifica ningún pedido: solo cambia cómo se cuentan.
+function crearResolvedorPlatos() {
+  const ms = f => { const x = Date.parse(f.vigente_desde); return Number.isNaN(x) ? 0 : x; };
+  const llave = (p) => platoCampo(p.lista) + ':' + p.nombre;
+  const indexar = lista => { const m = new Map(); lista.forEach(p => { if (!m.has(llave(p))) m.set(llave(p), p.codigo); }); return m; };
+  // Una entrada por versión (la de El Lobo primero): desde cuándo rige y qué código tenía cada nombre.
+  const versiones = [{ desde: -Infinity, mapa: indexar(CFG_DEFECTOS.menu_platos) }]
+    .concat(CFG.historial('menu_platos').filter(f => cfgValidar('menu_platos', f.valor) === null).map(f => ({ desde: ms(f), mapa: indexar(f.valor) })));
+  // Respaldo: si el texto no estaba en la lista de esa fecha, pero en toda la historia solo nombra a UN plato, es ese.
+  const historia = new Map();
+  versiones.forEach(v => v.mapa.forEach((cod, k) => { if (!historia.has(k)) historia.set(k, new Set()); historia.get(k).add(cod); }));
+  const hoy = new Map(platosEn().map(p => [p.codigo, p.nombre]));
+  return (campo, texto, instante) => {
+    if (texto == null || texto === '') return texto;
+    const t = instante == null || instante === '' ? NaN : (typeof instante === 'number' ? instante : new Date(instante).getTime());
+    let v = versiones.length - 1;
+    if (!Number.isNaN(t)) { v = 0; for (let i = versiones.length - 1; i >= 0; i--) if (versiones[i].desde <= t) { v = i; break; } }
+    const k = campo + ':' + texto;
+    let codigo = versiones[v].mapa.get(k);
+    if (!codigo) { const posibles = historia.get(k); if (posibles && posibles.size === 1) codigo = [...posibles][0]; }
+    return (codigo && hoy.get(codigo)) || texto;
+  };
 }
 
 // "Para llevar" aplica a mesas y a "sin mesa" (cliente esperando de pie), no a domicilio/fiado
@@ -4424,6 +4584,7 @@ function exportarExcelCompleto() {
   // Categorías de egresos de hoy (código → grupo): el modelo financiero las lee para saber en qué rubro va cada una, también las que se creen.
   addSheet('Categorias_Egresos', CFG.v('categorias_egresos'));
   addSheet('Nombres_Cuentas', CFG.v('nombres_cuentas'));
+  addSheet('Menu_Platos', CFG.v('menu_platos'));
   // platos_familia (almuerzos de la familia) se fuerza como columna aunque
   // ningún cierre la traiga todavía (migración sin correr), para que el
   // esquema del Excel sea estable. Vacío = NULL = "no registrado".
@@ -5029,6 +5190,7 @@ function onHoraChange() {
 pintarTurnoManual();
 catalogoAlDia();          // arma PRECIOS / LABELS / catálogo desde la configuración (por ahora, los valores de El Lobo)
 categoriasYCuentasAlDia(); // categorías de egresos y nombres de cuentas (listas del formulario)
+platosAlDia();                // platos del menú (autocompletado de Pedidos y generador del Menú)
 rebuildPedidoSelect();
 // Reloj del header en tiempo real (solo visual, no toca el formulario)
 setInterval(actualizarReloj, 1000);
@@ -5213,7 +5375,7 @@ function doAC(tipo) {
   if (!filtered.length) { list.style.display = 'none'; return; }
   acIdx[tipo] = -1;
   list.innerHTML = filtered.map(p =>
-    `<div class="autocomplete-item" data-v="${p.n}" onmousedown="pickAC(event,'${tipo}','${p.n.replace(/'/g,"\\'")}')"><span>${p.n}</span><span class="item-code">${p.c}</span></div>`
+    `<div class="autocomplete-item" data-v="${escaparHtml(p.n)}" onmousedown="pickAC(event,'${tipo}','${p.n.replace(/'/g,"\\'")}')"><span>${escaparHtml(p.n)}</span><span class="item-code">${escaparHtml(p.c)}</span></div>`
   ).join('');
   list.style.display = 'block';
 }
@@ -9840,21 +10002,24 @@ function renderTablero() {
   document.getElementById('rp-otros').textContent = fmt(sumaGrupo(egrs, 'otro'));
   document.getElementById('rp-tegr').textContent  = fmt(tE);
 
-  // Top por campo
+  // Top por campo. Cada plato se cuenta con su nombre de HOY: si se le cambió el nombre, los pedidos con el nombre anterior
+  // suman junto con el nuevo (crearResolvedorPlatos). Ningún pedido se modifica.
+  const nombreDePlato = crearResolvedorPlatos();
+  const asadosHoy = new Set(platosEn().filter(p => p.lista === 'asado').map(p => p.nombre));       // también los retirados
   function topCat(campo, max) {
     const acc = {};
-    alm.forEach(i => { if (i[campo]) acc[i[campo]] = (acc[i[campo]]||0) + (i.cantidad||1); });
+    alm.forEach(i => { if (i[campo]) { const n = nombreDePlato(campo, i[campo], instanteDePedido(i)); acc[n] = (acc[n]||0) + (i.cantidad||1); } });
     return Object.entries(acc).sort((a,b)=>b[1]-a[1]).slice(0, max);
   }
   function renderTop(elId, entries) {
     document.getElementById(elId).innerHTML = entries.length
-      ? entries.map(([n,c],i)=>`<div class="report-line"><span>${i+1}. ${n}</span><strong>${c} pedidos</strong></div>`).join('')
+      ? entries.map(([n,c],i)=>`<div class="report-line"><span>${i+1}. ${escaparHtml(n)}</span><strong>${c} pedidos</strong></div>`).join('')
       : '<div style="color:var(--text3);font-size:12px;">Sin datos aún</div>';
   }
-  renderTop('rp-proteinas', topCat('proteina', 5).filter(([n]) => !PL.asado.some(a=>a.n===n)));
+  renderTop('rp-proteinas', topCat('proteina', 5).filter(([n]) => !asadosHoy.has(n)));
   renderTop('rp-sopas',     topCat('sopa',     5));
   renderTop('rp-arroces',   topCat('arroz',    5));
-  renderTop('rp-asados',    topCat('proteina', 3).filter(([n]) => PL.asado.some(a=>a.n===n)));
+  renderTop('rp-asados',    topCat('proteina', 3).filter(([n]) => asadosHoy.has(n)));
 
   // Desglose comidas rápidas por categoría
   const crIng = ings.filter(i => i.turno === 'cena');
@@ -11707,6 +11872,7 @@ function renderConfiguracion() {
   }
   cfgCatRender();
   cfgEgrRender();
+  cfgPlaRender();
   cfgRenderHistorial();
 }
 
@@ -11718,17 +11884,18 @@ function cfgRenderHistorial() {
     cont.innerHTML = '<div style="font-size:12px;color:var(--text3);">Todavía no se ha cambiado nada: el sistema usa los valores de siempre de El Lobo. Cada cambio que guardes aparecerá aquí, con la fecha, la hora y quién lo hizo.</div>';
     return;
   }
-  const vigentes = new Set([...CFG_CAMPOS.map(c => c.clave), ...CFGCAT_CLAVES.map(k => CFGCAT[k].clave), CFGEGR_CLAVE, CFGCTA_CLAVE].map(clave => CFG.fila(clave)).filter(Boolean));
+  const vigentes = new Set([...CFG_CAMPOS.map(c => c.clave), ...CFGCAT_CLAVES.map(k => CFGCAT[k].clave), CFGEGR_CLAVE, CFGCTA_CLAVE, CFGPLA_CLAVE].map(clave => CFG.fila(clave)).filter(Boolean));
   const t = f => { const x = Date.parse(f.vigente_desde); return Number.isNaN(x) ? 0 : x; };
   const ordenadas = [...filas].sort((a, b) => (t(b) - t(a)) || ((b.id || 0) - (a.id || 0)));
   cont.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Desde</th><th>Qué</th><th>Valor</th><th>Quién</th><th></th></tr></thead>
     <tbody>${ordenadas.map((f, j) => {
-      const c = cfgCampo(f.clave), cat = cfgCatDe(f.clave), egr = f.clave === CFGEGR_CLAVE || f.clave === CFGCTA_CLAVE;
-      const previo = (cat || egr) ? ordenadas.slice(j + 1).find(x => x.clave === f.clave) : null;      // la versión anterior de la lista
+      const c = cfgCampo(f.clave), cat = cfgCatDe(f.clave), egr = f.clave === CFGEGR_CLAVE || f.clave === CFGCTA_CLAVE, pla = f.clave === CFGPLA_CLAVE;
+      const previo = (cat || egr || pla) ? ordenadas.slice(j + 1).find(x => x.clave === f.clave) : null;      // la versión anterior de la lista
       const valor = cat ? cfgResumenCatalogo(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave])
-        : egr ? cfgResumenEgresos(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave]) : cfgTexto(f.clave, f.valor);
-      return `<tr><td>${escaparHtml(fechaHoraLegible(f.vigente_desde))}</td><td>${escaparHtml(c ? c.titulo : cat ? 'Productos: ' + cat.titulo : f.clave === CFGEGR_CLAVE ? 'Categorías de egresos' : f.clave === CFGCTA_CLAVE ? 'Nombres de las cuentas' : f.clave)}</td><td>${escaparHtml(valor)}</td><td>${escaparHtml(f.creado_por || '—')}</td><td>${vigentes.has(f) ? '<span class="badge badge-green">rige hoy</span>' : ''}</td></tr>`;
+        : egr ? cfgResumenEgresos(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave])
+        : pla ? cfgResumenPlatos(f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave]) : cfgTexto(f.clave, f.valor);
+      return `<tr><td>${escaparHtml(fechaHoraLegible(f.vigente_desde))}</td><td>${escaparHtml(c ? c.titulo : cat ? 'Productos: ' + cat.titulo : f.clave === CFGEGR_CLAVE ? 'Categorías de egresos' : f.clave === CFGCTA_CLAVE ? 'Nombres de las cuentas' : pla ? 'Platos del menú' : f.clave)}</td><td>${escaparHtml(valor)}</td><td>${escaparHtml(f.creado_por || '—')}</td><td>${vigentes.has(f) ? '<span class="badge badge-green">rige hoy</span>' : ''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 
@@ -12310,7 +12477,7 @@ function cfgCtaEditar(i, campo, valor) {
 function cfgCtaDescartar() { cfgCta = null; cfgCtaFirma = null; cfgCtaRenderCuerpo(); cfgCtaActualizarBarra(); }
 
 // Guardado común: revisa, avisa si otro administrador cambió lo mismo, pide confirmación y guarda una versión nueva.
-async function cfgEgrGuardarVersion({ clave, titulo, payload, lineas, descartar }) {
+async function cfgEgrGuardarVersion({ clave, titulo, payload, lineas, descartar, pie }) {
   const mal = cfgValidar(clave, payload);
   if (mal) { showToast('⚠ ' + mal, 'warning'); return; }
   if (!lineas.length) { showToast('ℹ️ Ya está así: no hay nada que guardar', 'info'); return; }
@@ -12327,7 +12494,7 @@ async function cfgEgrGuardarVersion({ clave, titulo, payload, lineas, descartar 
   } catch (e) { /* sin conexión: el guardado de abajo fallará con su propio aviso */ }
   const ok = await confirmarSistema({
     titulo: `¿Guardar los cambios en «${titulo}»?`,
-    cuerpo: `${lineas.slice(0, 12).join('\n')}${lineas.length > 12 ? `\n…y ${lineas.length - 12} cambios más` : ''}\n\nRigen desde ahora. Lo que ya registraste no cambia: los gastos y los movimientos conservan sus montos y sus códigos; solo cambia cómo se llaman.`,
+    cuerpo: `${lineas.slice(0, 12).join('\n')}${lineas.length > 12 ? `\n…y ${lineas.length - 12} cambios más` : ''}\n\n${pie || 'Rigen desde ahora. Lo que ya registraste no cambia: los gastos y los movimientos conservan sus montos y sus códigos; solo cambia cómo se llaman.'}`,
     aceptar: 'Sí, guardar'
   });
   if (!ok) return;
@@ -12366,6 +12533,195 @@ async function cfgCtaGuardar() {
   await cfgEgrGuardarVersion({ clave: CFGCTA_CLAVE, titulo: 'Nombres de las cuentas', payload, lineas: cfgCtaDiff(cfgCtaVigente(), payload), descartar: () => { cfgCta = null; cfgCtaFirma = null; } });
 }
 
+// ── Pantalla: Platos del menú (etapa 3) ──────────────────────────────────────────────────────────────────────
+// Un panel con las cinco listas. Lo que la persona va cambiando vive en una copia de trabajo (cfgPla); «Guardar cambios» manda la
+// lista COMPLETA como una versión nueva. Nada se borra: «Retirar» solo deja de ofrecer el plato. Cambiar el NOMBRE es lo único
+// que cambia lo que se ve: el aviso lo dice y los reportes cuentan juntos el nombre viejo y el nuevo. El código de un plato
+// nuevo (SP10, AR06, PT28…) no cambia nunca.
+const CFGPLA_CLAVE = 'menu_platos';
+let cfgPla = null;                                      // copia de trabajo (null = nada cambiado)
+let cfgPlaFirma = null, cfgPlaConstruido = false;
+
+const cfgPlaVigente = () => CFG.v(CFGPLA_CLAVE);
+const cfgPlaFilas = () => cfgPla || cfgPlaVigente();
+function cfgPlaBorrador() { if (!cfgPla) cfgPla = JSON.parse(JSON.stringify(cfgPlaVigente())); return cfgPla; }
+// Lo que se manda a la base (sin marcas internas, con el nombre limpio).
+function cfgPlaPayload(filas) { return filas.map(f => ({ codigo: f.codigo, lista: f.lista, nombre: cfgLimpiar(f.nombre), activo: !!f.activo })); }
+function cfgPlaCambios() {
+  if (!cfgPla) return 0;
+  const antes = new Map(cfgPlaPayload(cfgPlaVigente()).map(f => [f.codigo, JSON.stringify(f)]));
+  return cfgPlaPayload(cfgPla).reduce((n, f) => n + (antes.get(f.codigo) !== JSON.stringify(f) ? 1 : 0), 0);
+}
+// Qué cambió entre dos versiones (en palabras): sirve para la confirmación (largo) y para el historial (corto).
+function cfgPlaDiff(antes, despues, corto) {
+  const lineas = [];
+  if (!Array.isArray(antes) || !Array.isArray(despues)) return lineas;
+  const previos = new Map(antes.map(f => [f.codigo, f]));
+  despues.forEach(f => {
+    const a = previos.get(f.codigo);
+    if (!a) { lineas.push(`➕ Plato nuevo (${(PLATO_LISTA_NOMBRE[f.lista] || f.lista).toLowerCase()}): ${f.nombre}`); return; }
+    if (a.nombre !== f.nombre) {
+      lineas.push(corto ? `Nombre: «${a.nombre}» → «${f.nombre}»`
+        : `✏️ Cambia el nombre «${a.nombre}» por «${f.nombre}»: los pedidos anteriores con «${a.nombre}» se contarán junto con «${f.nombre}».`);
+    }
+    if (!!a.activo !== !!f.activo) lineas.push(f.activo ? `✅ Se reactiva: ${f.nombre}` : `🚫 Se retira: ${f.nombre}`);
+  });
+  return lineas;
+}
+function cfgResumenPlatos(valor, previo) {
+  const l = cfgPlaDiff(previo, valor, true);
+  if (!l.length) return 'sin diferencias';
+  return `${l.length} cambio${l.length === 1 ? '' : 's'}: ${l.slice(0, 3).join(' · ')}${l.length > 3 ? ` · …y ${l.length - 3} más` : ''}`;
+}
+
+function cfgPlaConstruir() {
+  const zona = document.getElementById('config-platos');
+  if (!zona) return;
+  zona.innerHTML = `<div class="panel cfg-panel" id="cfgpla-panel">
+      <div class="panel-header"><div class="panel-title">🍲 Platos del menú</div></div>
+      <div class="panel-body">
+        <div class="cfg-ayuda">La lista de platos que comparten <b>Pedidos</b> (el autocompletado) y el generador del <b>Menú del día</b>. Puedes crear un plato, cambiarle el nombre o retirarlo (deja de ofrecerse, pero los pedidos viejos lo siguen contando). Si cambias un nombre, los pedidos anteriores con el nombre viejo se cuentan <b>juntos con el nuevo</b> en los reportes, para que la estadística no se parta en dos. No se modifica ningún pedido guardado.</div>
+        <div class="cfg-hoy" id="cfgpla-hoy"></div>
+        <div id="cfgpla-listas"></div>
+        <div class="cfgcat-barra">
+          <div></div>
+          <div class="cfgcat-acciones">
+            <span class="cfgcat-contador" id="cfgpla-contador"></span>
+            <button type="button" class="btn btn-outline" id="cfgpla-descartar" onclick="cfgPlaDescartar()" disabled>Descartar</button>
+            <button type="button" class="btn btn-primary" id="cfgpla-guardar" onclick="cfgPlaGuardar()" disabled>Guardar cambios</button>
+          </div>
+        </div>
+      </div></div>`;
+  cfgPlaConstruido = true;
+}
+
+function cfgPlaBaseDe(f) { return f._nuevo ? null : cfgPlaVigente().find(x => x.codigo === f.codigo) || null; }
+// Aviso que sale debajo del nombre cuando se está cambiando el de un plato que ya existía.
+function cfgPlaAvisoTexto(f) {
+  const base = cfgPlaBaseDe(f);
+  const nuevo = cfgLimpiar(f.nombre);
+  if (!base || !nuevo || nuevo === base.nombre) return '';
+  return `✏️ Vas a cambiar el nombre <b>«${escaparHtml(base.nombre)}»</b> por <b>«${escaparHtml(nuevo)}»</b>. Ten en cuenta que los pedidos anteriores con «${escaparHtml(base.nombre)}» se contarán junto con «${escaparHtml(nuevo)}» en los reportes, para que no se parta la estadística en dos.`;
+}
+function cfgPlaClasesFila(f) {
+  const base = cfgPlaBaseDe(f);
+  const cambio = !f._nuevo && base && JSON.stringify(cfgPlaPayload([f])[0]) !== JSON.stringify(cfgPlaPayload([base])[0]);
+  return [f.activo ? '' : 'cfgcat-retirado', f._nuevo ? 'cfgcat-nuevo' : cambio ? 'cfgcat-cambio' : ''].filter(Boolean).join(' ');
+}
+function cfgPlaHtmlFila(f, i, habilitado) {
+  const dis = habilitado ? '' : ' disabled';
+  const aviso = cfgPlaAvisoTexto(f);
+  const estado = f._nuevo
+    ? `<span class="badge badge-gray">nuevo</span> <button type="button" class="btn btn-outline" onclick="cfgPlaQuitar(${i})"${dis}>Quitar</button>`
+    : f.activo
+      ? `<span class="badge badge-green">activo</span> <button type="button" class="btn btn-outline" onclick="cfgPlaAlternar(${i})"${dis}>Retirar</button>`
+      : `<span class="badge badge-gray">retirado</span> <button type="button" class="btn btn-outline" onclick="cfgPlaAlternar(${i})"${dis}>Reactivar</button>`;
+  return `<tr id="cfgpla-fila-${i}" class="${cfgPlaClasesFila(f)}"><td class="cfgcat-cod">${escaparHtml(f.codigo)}</td>
+    <td><input type="text" maxlength="50" autocomplete="off" spellcheck="false" aria-label="Nombre del plato ${escaparHtml(f.codigo)}" value="${escaparHtml(f.nombre || '')}" oninput="cfgPlaEditar(${i},this.value)"${dis}>
+      <div class="cfgpla-aviso" id="cfgpla-aviso-${i}" style="display:${aviso ? 'block' : 'none'};">${aviso}</div></td>
+    <td class="cfgcat-estado">${estado}</td></tr>`;
+}
+function cfgPlaRenderCuerpo() {
+  const zona = document.getElementById('cfgpla-listas');
+  if (!zona) return;
+  const ok = CFG.disponible();
+  const filas = cfgPlaFilas();
+  zona.innerHTML = PLATOS_LISTAS.map(l => {
+    const propias = filas.map((f, i) => ({ f, i })).filter(x => x.f.lista === l);
+    const activos = propias.filter(x => x.f.activo).length;
+    return `<div class="cfgpla-lista" id="cfgpla-lista-${l}">
+      <div class="cfgpla-titulo">${PLATO_LISTA_ICONO[l]} ${PLATO_LISTA_NOMBRE[l]} <span class="badge badge-gray">${activos} activo${activos === 1 ? '' : 's'} de ${propias.length}</span></div>
+      <div class="table-wrap"><table class="cfgcat-tabla"><thead><tr><th>Código</th><th>Nombre</th><th>Estado</th></tr></thead><tbody>${propias.map(x => cfgPlaHtmlFila(x.f, x.i, ok)).join('')}</tbody></table></div>
+      <div style="margin:6px 0 14px;"><button type="button" class="btn btn-outline" id="cfgpla-agregar-${l}" onclick="cfgPlaAgregar('${l}')"${ok ? '' : ' disabled'}>＋ Agregar a ${PLATO_LISTA_NOMBRE[l].toLowerCase()}</button></div>
+    </div>`;
+  }).join('');
+}
+function cfgPlaActualizarHoy() {
+  const el = document.getElementById('cfgpla-hoy');
+  if (!el) return;
+  const filas = cfgPlaVigente(), fila = CFG.fila(CFGPLA_CLAVE), activos = filas.filter(f => f.activo).length;
+  el.innerHTML = `Hoy: <b>${activos} plato${activos === 1 ? '' : 's'} activo${activos === 1 ? '' : 's'}</b> de ${filas.length} · ` + (fila
+    ? `desde ${escaparHtml(fechaHoraLegible(fila.vigente_desde))} · por ${escaparHtml(fila.creado_por || '—')}`
+    : 'los platos de siempre (nunca se han cambiado)');
+}
+function cfgPlaActualizarBarra() {
+  const n = cfgPlaCambios(), ok = CFG.disponible();
+  const cont = document.getElementById('cfgpla-contador'), g = document.getElementById('cfgpla-guardar'), d = document.getElementById('cfgpla-descartar');
+  if (cont) cont.textContent = n ? `${n} cambio${n === 1 ? '' : 's'} sin guardar` : '';
+  if (g) g.disabled = !ok || n === 0;
+  if (d) d.disabled = !cfgPla;
+}
+function cfgPlaRender() {
+  if (!document.getElementById('config-platos')) return;
+  if (!cfgPlaConstruido) cfgPlaConstruir();
+  cfgPlaActualizarHoy();
+  if (!cfgPla) {                                        // mientras se edita no se pisa lo escrito
+    const firma = JSON.stringify(cfgPlaVigente()) + '|' + CFG.disponible();
+    if (firma !== cfgPlaFirma) { cfgPlaFirma = firma; cfgPlaRenderCuerpo(); }
+  }
+  cfgPlaActualizarBarra();
+}
+
+function cfgPlaEditar(i, valor) {
+  const filas = cfgPlaBorrador();
+  if (!filas[i]) return;
+  filas[i].nombre = valor;
+  const tr = document.getElementById('cfgpla-fila-' + i);
+  if (tr) tr.className = cfgPlaClasesFila(filas[i]);
+  const av = document.getElementById('cfgpla-aviso-' + i);
+  if (av) { const t = cfgPlaAvisoTexto(filas[i]); av.innerHTML = t; av.style.display = t ? 'block' : 'none'; }
+  cfgPlaActualizarBarra();
+}
+function cfgPlaAlternar(i) {
+  const filas = cfgPlaBorrador();
+  if (!filas[i]) return;
+  filas[i].activo = !filas[i].activo;
+  cfgPlaRenderCuerpo();
+  cfgPlaActualizarBarra();
+}
+function cfgPlaSiguienteCodigo(filas, lista) {
+  const usados = new Set(filas.map(f => f.codigo));
+  for (let n = 1; n <= 999; n++) { const c = PLATO_PREFIJO[lista] + String(n).padStart(2, '0'); if (!usados.has(c)) return c; }
+  return null;
+}
+function cfgPlaAgregar(lista) {
+  const filas = cfgPlaBorrador();
+  if (filas.length >= PLATOS_MAX) { showToast(`⚠ Ya hay ${PLATOS_MAX} platos: es el máximo. Retira alguno que no uses.`, 'warning'); return; }
+  const codigo = cfgPlaSiguienteCodigo(filas, lista);
+  if (!codigo) { showToast('⚠ Ya no hay códigos libres en esa lista', 'warning'); return; }
+  filas.push({ codigo, lista, nombre: '', activo: true, _nuevo: true });
+  cfgPlaRenderCuerpo();
+  cfgPlaActualizarBarra();
+  const el = document.querySelector(`#cfgpla-fila-${filas.length - 1} input`);
+  if (el) { el.focus(); if (el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }
+}
+function cfgPlaQuitar(i) {
+  const filas = cfgPlaBorrador();
+  if (!filas[i] || !filas[i]._nuevo) return;            // solo se quita lo que todavía no se ha guardado
+  filas.splice(i, 1);
+  cfgPlaRenderCuerpo();
+  cfgPlaActualizarBarra();
+}
+function cfgPlaDescartar() { cfgPla = null; cfgPlaFirma = null; cfgPlaRenderCuerpo(); cfgPlaActualizarBarra(); }
+async function cfgPlaGuardar() {
+  if (cfgGuardando) return;
+  if (!adminAutenticado) { showToast('⚠ Solo el administrador puede cambiar la configuración', 'warning'); return; }
+  if (!CFG.disponible()) { showToast('⚠ Falta instalar la configuración en Supabase (sql/configuracion.sql, sql/configuracion_etapa_2.sql, sql/configuracion_etapa_4.sql y sql/configuracion_etapa_3.sql)', 'warning'); return; }
+  const filas = cfgPla;
+  if (!filas) return;
+  for (const f of filas) if (!cfgLimpiar(f.nombre)) { showToast('⚠ Falta el nombre de un plato' + (f._nuevo ? ' nuevo' : ''), 'warning'); return; }
+  const payload = cfgPlaPayload(filas);
+  const vigente = cfgPlaVigente();
+  const hayRenombres = payload.some(f => { const a = vigente.find(x => x.codigo === f.codigo); return a && a.nombre !== f.nombre; });
+  await cfgEgrGuardarVersion({
+    clave: CFGPLA_CLAVE, titulo: 'Platos del menú', payload, lineas: cfgPlaDiff(vigente, payload),
+    pie: 'Rigen desde ahora. No se modifica ningún pedido guardado.' + (hayRenombres
+      ? ' En los reportes (los platos más pedidos) los pedidos con el nombre anterior se suman al nombre nuevo, también los de meses pasados.'
+      : ' Los pedidos ya tomados conservan el nombre que tenían.'),
+    descartar: () => { cfgPla = null; cfgPlaFirma = null; }
+  });
+}
+
 // ── TABS ──────────────────────────────────────────────────────────────
 function showTab(id, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -12380,6 +12736,7 @@ function showTab(id, el) {
 function renderAll() {
   catalogoAlDia();
   categoriasYCuentasAlDia();
+  platosAlDia();
   // Operativas — sin contraseña
   renderIngresos();
   renderPendientes();

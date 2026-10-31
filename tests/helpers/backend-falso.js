@@ -77,6 +77,7 @@ function validarConfiguracion(clave, valor) {
   if (CLAVES_CATALOGO.includes(clave)) { const m = validarCatalogo(clave, valor); return m ? mal(m) : null; }
   if (clave === 'categorias_egresos') { const m = validarCategorias(valor); return m ? mal(m) : null; }
   if (clave === 'nombres_cuentas') { const m = validarCuentas(valor); return m ? mal(m) : null; }
+  if (clave === 'menu_platos') { const m = validarPlatos(valor); return m ? mal(m) : null; }
   return { code: '22023', message: `La configuración "${clave}" no existe.`, details: 'configuracion_clave_desconocida', hint: null };
 }
 
@@ -131,14 +132,16 @@ function validarCatalogo(clave, valor) {
 }
 // La versión nueva debe traer todos los códigos de la anterior (por «vigente desde», luego por id).
 function validarCatalogoHistoria(clave, valor, filas) {
-  if (clave !== 'catalogo_almuerzos' && clave !== 'catalogo_rapidas' && clave !== 'categorias_egresos') return null;
+  if (clave !== 'catalogo_almuerzos' && clave !== 'catalogo_rapidas' && clave !== 'categorias_egresos' && clave !== 'menu_platos') return null;
   const previas = (filas || []).filter(f => f.clave === clave).sort((a, b) => (String(a.vigente_desde) < String(b.vigente_desde) ? -1 : String(a.vigente_desde) > String(b.vigente_desde) ? 1 : (a.id || 0) - (b.id || 0)));
   const ultima = previas[previas.length - 1];
   if (!ultima || !Array.isArray(ultima.valor)) return null;
   const faltan = ultima.valor.filter(x => x && 'codigo' in x && !valor.some(y => y.codigo === x.codigo)).map(x => x.codigo);
   if (faltan.length) return clave === 'categorias_egresos'
     ? `No se pueden borrar categorías (${faltan.join(', ')}): se retiran, para que los gastos viejos se sigan mostrando.`
-    : `No se pueden borrar productos (${faltan.join(', ')}): se retiran, para que los pedidos viejos se sigan mostrando.`;
+    : clave === 'menu_platos'
+      ? `No se pueden borrar platos (${faltan.join(', ')}): se retiran, para que los pedidos viejos se sigan contando.`
+      : `No se pueden borrar productos (${faltan.join(', ')}): se retiran, para que los pedidos viejos se sigan mostrando.`;
   if (clave === 'categorias_egresos') {
     const cambian = ultima.valor.filter(x => x && 'codigo' in x && valor.some(y => y.codigo === x.codigo && y.grupo !== x.grupo)).map(x => x.codigo);
     if (cambian.length) return `No se puede cambiar el grupo de una categoría ya creada (${cambian.join(', ')}): lo que ya se registró seguiría contándose distinto.`;
@@ -204,6 +207,86 @@ function validarCuentas(valor) {
     if (cuenta(it.emoji) > 8 || it.emoji !== sinBorde(it.emoji)) return 'El símbolo de cada cuenta puede tener hasta 8 caracteres, sin espacios al principio ni al final.';
     if (prohibido(it.emoji)) return 'Los símbolos no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
   }
+  return null;
+}
+// Réplica de seguridad.validar_menu_platos (sql/configuracion_etapa_3.sql), escrita aparte del código de la página a propósito.
+// Devuelve null o el texto del error.
+const PLATOS_BASE_FALSO = [
+  ['SP01', 'sopa'],
+  ['SP02', 'sopa'],
+  ['SP03', 'sopa'],
+  ['SP04', 'sopa'],
+  ['SP05', 'sopa'],
+  ['SP06', 'sopa'],
+  ['SP07', 'sopa'],
+  ['SP08', 'sopa'],
+  ['SP09', 'sopa'],
+  ['AR01', 'arroz'],
+  ['AR02', 'arroz'],
+  ['AR03', 'arroz'],
+  ['AR04', 'arroz'],
+  ['AR05', 'arroz'],
+  ['AS01', 'asado'],
+  ['AS02', 'asado'],
+  ['AS03', 'asado'],
+  ['AC01', 'acomp'],
+  ['AC02', 'acomp'],
+  ['AC03', 'acomp'],
+  ['PT01', 'proteina'],
+  ['PT02', 'proteina'],
+  ['PT03', 'proteina'],
+  ['PT04', 'proteina'],
+  ['PT05', 'proteina'],
+  ['PT06', 'proteina'],
+  ['PT07', 'proteina'],
+  ['PT08', 'proteina'],
+  ['PT09', 'proteina'],
+  ['PT10', 'proteina'],
+  ['PT11', 'proteina'],
+  ['PT12', 'proteina'],
+  ['PT13', 'proteina'],
+  ['PT14', 'proteina'],
+  ['PT15', 'proteina'],
+  ['PT16', 'proteina'],
+  ['PT17', 'proteina'],
+  ['PT18', 'proteina'],
+  ['PT19', 'proteina'],
+  ['PT20', 'proteina'],
+  ['PT21', 'proteina'],
+  ['PT22', 'proteina'],
+  ['PT23', 'proteina'],
+  ['PT24', 'proteina'],
+  ['PT25', 'proteina'],
+  ['PT26', 'proteina'],
+  ['PT27', 'proteina']
+];
+const PREFIJO_PLATO = { sopa: 'SP', arroz: 'AR', proteina: 'PT', acomp: 'AC', asado: 'AS' };
+function validarPlatos(valor) {
+  const que = 'La lista de platos del menú';
+  if (!Array.isArray(valor)) return `${que} debe ser una lista.`;
+  if (valor.length < 47 || valor.length > 300) return `${que} trae ${valor.length} platos y esa cantidad no es válida.`;
+  const cuenta = s => [...s].length;
+  const sinBorde = s => s.replace(/^ +| +$/g, '');
+  const prohibido = s => /[<>&"'`\\\u0000-\u001f\u007f]/.test(s);
+  const codigos = [], nombres = [];
+  for (const it of valor) {
+    if (it === null || typeof it !== 'object' || Array.isArray(it)) return `${que} trae un plato mal formado.`;
+    if (Object.keys(it).sort().join(',') !== 'activo,codigo,lista,nombre') return `${que} trae un plato con campos que no corresponden.`;
+    if (typeof it.nombre !== 'string') return 'El nombre de cada plato debe ser un texto.';
+    if (cuenta(it.nombre) < 1 || cuenta(it.nombre) > 50 || it.nombre !== sinBorde(it.nombre)) return 'El nombre de cada plato debe tener entre 1 y 50 caracteres, sin espacios al principio ni al final.';
+    if (prohibido(it.nombre)) return 'Los nombres no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    if (typeof it.lista !== 'string' || !PREFIJO_PLATO[it.lista]) return `La lista de "${it.nombre}" no es válida (sopa, arroz, proteina, acomp o asado).`;
+    const pref = PREFIJO_PLATO[it.lista];
+    if (typeof it.codigo !== 'string') return `El código de "${it.nombre}" debe ser un texto.`;
+    if (!new RegExp(`^${pref}[0-9]{2,3}$`).test(it.codigo)) return `El código "${it.codigo}" no sirve para la lista ${it.lista}: debe ser ${pref} seguido de 2 o 3 números.`;
+    if (codigos.includes(it.codigo)) return `El código "${it.codigo}" está repetido.`;
+    codigos.push(it.codigo);
+    const llave = (it.lista === 'asado' ? 'proteina' : it.lista) + ':' + it.nombre.toLowerCase();
+    if (nombres.includes(llave)) return `El plato "${it.nombre}" está repetido en su lista.`;
+    nombres.push(llave);
+    if (typeof it.activo !== 'boolean') return `"${it.nombre}" debe estar activo o retirado (verdadero o falso).`;
+  }
+  if (PLATOS_BASE_FALSO.some(b => !codigos.includes(b[0]))) return `${que} no puede quitar platos de El Lobo: se retiran, no se borran.`;
   return null;
 }
 const b64url = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
@@ -533,4 +616,4 @@ async function abrirSistema(page, opciones = {}) {
   return reg;
 }
 
-module.exports = { abrirSistema, CODIGOS_BASE, CATEGORIAS_BASE, TABLAS_LOADSTATE, TABLAS_CAJA, TABLAS_SOLO_ADMIN, USUARIOS, USUARIO_POR_ROL, URL_HTML, FECHA_HOY };
+module.exports = { abrirSistema, validarConfiguracion, CODIGOS_BASE, CATEGORIAS_BASE, PLATOS_BASE_FALSO, TABLAS_LOADSTATE, TABLAS_CAJA, TABLAS_SOLO_ADMIN, USUARIOS, USUARIO_POR_ROL, URL_HTML, FECHA_HOY };

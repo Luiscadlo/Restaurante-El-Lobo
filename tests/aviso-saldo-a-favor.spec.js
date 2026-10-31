@@ -718,7 +718,7 @@ test.describe('3) Fiados → fiado sin cliente → «Asignar»', () => {
     expect(dialogos[0].mensaje).toContain('Luisca tiene $20.000 a favor y este fiado pasa a ser suyo ($9.000)');
     expect(dialogos[0].mensaje).toContain('por $9.000');
     expect(escritura(reg, 'PATCH', 'pedidos')[1].cuerpo).toMatchObject({ estado: 'pagado', pagado_via_abono: true });
-    expect(await saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 11000 });
+    await expect.poll(() => saldo(page, 7)).toMatchObject({ pendiente: 0, sobrante: 11000 });      // (con el equipo cargado, la pantalla tarda un instante en rehacer el saldo)
     expect(reg.denegadas).toEqual([]);
   });
 
