@@ -170,6 +170,30 @@
   .filter-btn:hover:not(.active) { border-color: var(--text2); color: var(--text); }
 
   .chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+  /* Tablero → «Resumen por día»: recuadro de altura fija (5 días a la vista) con barra de desplazamiento propia.
+     Solo lectura; no depende del rango de fechas de arriba. */
+  .resumen-dias { padding: 16px 16px 12px; }
+  .resumen-dias-scroll { --rd-fila: 34px; --rd-cabecera: 40px; overflow: auto; max-height: calc(var(--rd-cabecera) + var(--rd-fila) * 5 + 2px);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .resumen-dias-tabla { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .resumen-dias-tabla th { position: sticky; top: 0; z-index: 1; background: var(--surface2); height: calc(var(--rd-cabecera) / 2); padding: 0 4px; line-height: 1.1;
+    font-size: 9px; letter-spacing: 0; text-transform: none; font-family: inherit; font-weight: 600; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  .resumen-dias-tabla th[rowspan] { height: var(--rd-cabecera); }
+  .resumen-dias-tabla tr:nth-child(2) th { top: calc(var(--rd-cabecera) / 2); }
+  .resumen-dias-tabla th.rd-grupo { text-align: center; letter-spacing: 0.6px; font-size: 8.5px; }
+  .resumen-dias-tabla th.rd-g-ing { color: var(--green); }
+  .resumen-dias-tabla th.rd-g-egr { color: var(--red); }
+  .resumen-dias-tabla th:first-child, .resumen-dias-tabla td:first-child { text-align: left; }
+  .resumen-dias-tabla td { height: var(--rd-fila); padding: 0 4px; text-align: right; white-space: nowrap; box-sizing: border-box; }
+  .resumen-dias-tabla td.rd-dia { color: var(--text); font-weight: 500; }
+  .resumen-dias-tabla td.rd-cero { color: var(--text3); }
+  .resumen-dias-tabla td.rd-ing { color: var(--green); }
+  .resumen-dias-tabla td.rd-egr { color: var(--red); }
+  .resumen-dias-nota { font-size: 10.5px; color: var(--text3); margin-top: 8px; line-height: 1.4; }
+  .resumen-dias-tabla tr.rd-sin-cerrar td:first-child { color: var(--orange); box-shadow: inset 3px 0 0 var(--orange); padding-left: 8px; }
+  @media(max-width:600px) { .resumen-dias { padding: 12px 8px 10px; } .resumen-dias-tabla { font-size: 10px; }
+    .resumen-dias-tabla th { font-size: 8.5px; } .resumen-dias-tabla th, .resumen-dias-tabla td { padding-left: 2px; padding-right: 2px; }
+    .resumen-dias-tabla tr.rd-sin-cerrar td:first-child { padding-left: 6px; } }
   .chart-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
   .chart-scale-row { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: start; }
   .chart-yaxis { position: relative; height: 100px; }
@@ -555,6 +579,30 @@
       <div class="kpi-card blue"><div class="kpi-label">Ticket promedio</div><div class="kpi-value" id="kpi-ticket">$0</div><div class="kpi-sub">Solo almuerzos — ingresos ÷ pedidos</div></div>
       <div class="kpi-card purple"><div class="kpi-label">Promedio por día</div><div class="kpi-value" id="kpi-promedio">$0</div><div class="kpi-sub">Ingresos ÷ días con ventas</div></div>
       <div class="kpi-card orange"><div class="kpi-label">Bajo stock</div><div class="kpi-value" id="kpi-stock">0</div><div class="kpi-sub">Productos por reabastecer</div></div>
+    </div>
+
+    <div class="chart-container resumen-dias" id="resumen-dias-caja">
+      <div class="chart-title" style="margin-bottom:10px;">📅 Resumen por día</div>
+      <div class="resumen-dias-scroll" id="resumen-dias-scroll" tabindex="0" role="region" aria-label="Resumen de ingresos y egresos de cada día, de más reciente a más antiguo">
+        <table class="resumen-dias-tabla">
+          <thead>
+            <tr>
+              <th rowspan="2">Día</th>
+              <th class="rd-grupo rd-g-ing" colspan="2">INGRESOS</th>
+              <th class="rd-grupo rd-g-egr" colspan="2">EGRESOS</th>
+              <th rowspan="2" title="Ingresos − Egresos del día">Resultado</th>
+            </tr>
+            <tr>
+              <th title="Ventas de pedidos (efectivo + transferencia + ajuste del cierre), sin contar los abonos">Pedidos</th>
+              <th title="Fiados cobrados (abonos) dentro del cierre de ese día">Abonos</th>
+              <th title="Gastos registrados en el cierre del turno (no cuenta préstamos)">Turno</th>
+              <th title="Egresos registrados a mano en la pestaña Egresos">Manual</th>
+            </tr>
+          </thead>
+          <tbody id="resumen-dias-body"></tbody>
+        </table>
+      </div>
+      <div class="resumen-dias-nota" id="resumen-dias-nota"></div>
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
@@ -1922,13 +1970,28 @@
 
       <div class="form-group mb">
         <label>Efectivo ($) <span style="color:var(--text3);font-weight:400;">— total real del turno (incluye lo que ya tiene el sistema)</span></label>
-        <input type="text" inputmode="numeric" id="cm-efectivo" placeholder="0" oninput="formatMilesInput(this); marcarTocadoCierreManual('ef'); actualizarComparativoCierreManual()">
+        <input type="text" inputmode="numeric" id="cm-efectivo" placeholder="0" oninput="formatMilesInput(this); marcarTocadoCierreManual('ef'); actualizarComparativoCierreManual(); actualizarResumenCierreManual()">
       </div>
       <div class="form-group mb">
         <label>Transferencia ($) <span style="color:var(--text3);font-weight:400;">— total real del turno (incluye lo que ya tiene el sistema)</span></label>
-        <input type="text" inputmode="numeric" id="cm-transferencia" placeholder="0" oninput="formatMilesInput(this); marcarTocadoCierreManual('tr'); actualizarComparativoCierreManual()">
+        <input type="text" inputmode="numeric" id="cm-transferencia" placeholder="0" oninput="formatMilesInput(this); marcarTocadoCierreManual('tr'); actualizarComparativoCierreManual(); actualizarResumenCierreManual()">
       </div>
       <div id="cm-comparativo" style="font-size:11px;margin:-6px 0 14px;"></div>
+
+      <!-- Mismas tres cifras que muestra el cierre normal; se recalculan al escribir (ver actualizarResumenCierreManual). -->
+      <div class="monto-display" style="background:rgba(76,175,125,0.07);border-color:rgba(76,175,125,0.25);">
+        <div class="monto-val" id="cm-total-turno" style="color:var(--green);">$0</div>
+        <div class="monto-label">Total del turno (efectivo + transferencia)</div>
+      </div>
+      <div class="monto-display" style="margin-top:10px;">
+        <div class="monto-val" id="cm-resultado">$0</div>
+        <div class="monto-label">Utilidad del turno (ingresos − gastos)</div>
+      </div>
+      <div class="monto-display" style="margin:10px 0 14px;background:rgba(91,155,213,0.07);border-color:rgba(91,155,213,0.25);">
+        <div class="monto-val" id="cm-caja-esperada" style="color:var(--blue);">$0</div>
+        <div class="monto-label">Caja esperada en efectivo al cierre <span style="color:var(--text3);">(Después de préstamos)</span></div>
+        <div id="cm-caja-detalle" style="font-size:11px;color:var(--text3);margin-top:4px;text-transform:none;letter-spacing:0;"></div>
+      </div>
       <!-- Solo turno ALMUERZO (ver seleccionarTurnoCierreManual). Opcional: vacío = "no registrado" (NULL). -->
       <div class="form-group mb" id="cm-platos-familia-wrap">
         <label>🍽 Comidas de la familia (una por persona, aunque haya sido en porciones) <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
@@ -8309,6 +8372,7 @@ function precargarTotalesCierreManual(forzar = false) {
 function usarSistemaCierreManual() {
   precargarTotalesCierreManual(true);
   actualizarComparativoCierreManual();
+  actualizarResumenCierreManual();
 }
 
 function pintarTurnoCierreManual() {
@@ -8430,6 +8494,32 @@ function actualizarComparativoCierreManual() {
   el.innerHTML = dif('Efectivo', valMiles('cm-efectivo'), v.efectivo) + dif('Transferencia', valMiles('cm-transferencia'), v.transferencia);
 }
 
+// Las tres cifras del cierre normal, en vivo, para el cierre manual: total del turno, utilidad y caja esperada en
+// efectivo. Mismas reglas que recalcularResultadoCierre(): la utilidad descuenta los gastos reales (sin préstamos); la
+// caja esperada parte de la caja inicial del turno y descuenta TODOS los gastos, préstamos incluidos (es plata que
+// sale físicamente de la caja). Cuenta los gastos ya registrados que no se van a quitar más los nuevos en cola.
+function actualizarResumenCierreManual() {
+  const tot = document.getElementById('cm-total-turno');
+  if (!tot) return;
+  const fecha = document.getElementById('cm-fecha').value;
+  const efectivo = valMiles('cm-efectivo');
+  const transferencia = valMiles('cm-transferencia');
+  const vigentes = [...gastosRegistradosCierreManual().filter(g => !cierreManualGastosQuitar.has(g.id)), ...cierreManualGastos];
+  const gastos = vigentes.filter(g => !esCatExcluida(g.categoria)).reduce((a, g) => a + g.monto, 0);
+  const gastosConPrestamos = vigentes.reduce((a, g) => a + g.monto, 0);
+  const apertura = fecha ? ST.aperturasTurno.find(a => a.fecha === fecha && a.turno === cierreManualTurno) : null;
+  const cajaInicial = apertura ? (apertura.caja_inicial || 0) : 0;
+  const resultado = efectivo + transferencia - gastos;
+  const cajaEsperada = cajaInicial + efectivo - gastosConPrestamos;
+  tot.textContent = fmt(efectivo + transferencia);
+  const res = document.getElementById('cm-resultado');
+  res.textContent = fmt(resultado);
+  res.style.color = resultado >= 0 ? 'var(--accent)' : 'var(--red)';
+  document.getElementById('cm-caja-esperada').textContent = fmt(cajaEsperada);
+  document.getElementById('cm-caja-detalle').textContent =
+    `Caja inicial ${fmt(cajaInicial)}${apertura ? '' : ' (sin abrir turno)'} + efectivo ${fmt(efectivo)} − gastos ${fmt(gastosConPrestamos)}`;
+}
+
 // Igual que agregarGastoDia(), pero se queda en cola local (cierreManualGastos)
 // hasta guardar el cierre completo — ahí sí se insertan como filas reales.
 function agregarGastoCierreManual() {
@@ -8484,6 +8574,7 @@ function renderGastosCierreManual() {
   const total = [...registrados.filter(g => !cierreManualGastosQuitar.has(g.id)), ...cierreManualGastos]
     .filter(g => !esCatExcluida(g.categoria)).reduce((a, b) => a + b.monto, 0);
   document.getElementById('cm-gastos-total').textContent = fmt(total);
+  actualizarResumenCierreManual();       // los gastos cambian la utilidad y la caja esperada
 }
 
 // Mismo shape que guardarCierre() (efectivo/transferencia/gastos/resultado),
@@ -10058,6 +10149,69 @@ function turnosCerrados() {
   return new Set(ST.cierresDia.map(c => `${c.fecha}::${c.turno}`));
 }
 
+// «Resumen por día» del Tablero: una línea por día, de más reciente a más antiguo, con lo que entró (pedidos y abonos
+// de fiado) y lo que salió (gastos del turno y egresos manuales). Es solo lectura y NO usa el rango de fechas del
+// Tablero. Mismas reglas que el resto del Tablero: los ingresos salen de los cierres guardados (efectivo +
+// transferencia + ajuste; los abonos que el cierre trae adentro se muestran aparte) y los egresos son los mismos de
+// egresosCombinados() (los préstamos no cuentan). Un día sin cierre pero con ventas se marca en naranja («sin cerrar»).
+const RESUMEN_DIAS_MAX = 60;
+function resumenPorDia(max = RESUMEN_DIAS_MAX) {
+  const dias = new Map();
+  const dia = f => {
+    if (!dias.has(f)) dias.set(f, { fecha: f, pedidos: 0, abonos: 0, egrTurno: 0, egrManual: 0, sinCerrar: false });
+    return dias.get(f);
+  };
+  ST.cierresDia.forEach(c => {
+    const d = dia(c.fecha);
+    const abonos = abonosDeCierre(c);
+    const total  = (c.efectivo || 0) + (c.transferencia || 0) + ajustesDeCierre(c).total;
+    d.abonos  += abonos;
+    d.pedidos += total - abonos;
+  });
+  egresosCombinados().forEach(e => {
+    const d = dia(e.fecha);
+    if (e.origen === 'cierre') d.egrTurno += (e.monto || 0); else d.egrManual += (e.monto || 0);
+  });
+  const cerrados = turnosCerrados();
+  ST.ingresos.forEach(i => {
+    if (!cerrados.has(`${i.fecha}::${i.turno}`)) dia(i.fecha).sinCerrar = true;
+  });
+  return [...dias.values()]
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))
+    .slice(0, max)
+    .map(d => {
+      const ingresos = d.pedidos + d.abonos, egresos = d.egrTurno + d.egrManual;
+      return { ...d, ingresos, egresos, resultado: ingresos - egresos };
+    });
+}
+
+function etiquetaDiaResumen(f) {
+  const [y, m, dd] = f.split('-').map(Number);
+  const sem = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][new Date(y, m - 1, dd).getDay()];
+  return `${sem} ${String(dd).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+}
+
+function renderResumenDias() {
+  const body = document.getElementById('resumen-dias-body');
+  if (!body) return;
+  const filas = resumenPorDia();
+  // Sin «$» para que quepan las 5 cifras en una línea en el celular; el cero se ve apagado.
+  const num = (n, clase) => {
+    const v = Math.round(n || 0);
+    if (!v) return '<td class="rd-cero">–</td>';
+    return `<td class="${clase || ''}">${(v < 0 ? '−' : '') + Math.abs(v).toLocaleString('es-CO')}</td>`;
+  };
+  body.innerHTML = filas.length ? filas.map(d =>
+    `<tr data-fecha="${d.fecha}"${d.sinCerrar ? ' class="rd-sin-cerrar"' : ''}>
+      <td class="rd-dia" ${d.sinCerrar ? 'title="Tiene ventas de un turno que aún no se ha cerrado"' : ''}>${etiquetaDiaResumen(d.fecha)}</td>
+      ${num(d.pedidos, 'rd-ing')}${num(d.abonos, 'rd-ing')}${num(d.egrTurno, 'rd-egr')}${num(d.egrManual, 'rd-egr')}
+      <td class="${d.resultado < 0 ? 'rd-egr' : d.resultado > 0 ? 'rd-ing' : 'rd-cero'}" style="font-weight:600;">${d.resultado ? (d.resultado < 0 ? '−' : '') + Math.abs(d.resultado).toLocaleString('es-CO') : '–'}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="6" class="rd-cero" style="text-align:center;">Todavía no hay días con movimiento.</td></tr>';
+  const nota = document.getElementById('resumen-dias-nota');
+  if (nota) nota.textContent = `En pesos · desliza para ver más días (hasta ${RESUMEN_DIAS_MAX}) · naranja = tiene ventas sin cerrar · no depende del rango de arriba.`;
+}
+
 function renderTablero() {
   const cerrados = turnosCerrados();
 
@@ -10180,6 +10334,7 @@ function renderTablero() {
   document.getElementById('alertZone').innerHTML = al.map(a=>`<div class="alert ${a.t}">${a.m}</div>`).join('');
 
   renderGraficosTablero();
+  renderResumenDias();
 
   const cnt  = t  => alm.filter(i=>i.pedido===t).reduce((a,b)=>a+(b.cantidad||1),0);
   document.getElementById('rp-comp').textContent  = cnt('completo');
@@ -11033,28 +11188,42 @@ async function agregarGastoDia() {
   } catch(e) { showToast('⚠ Error al registrar gasto', 'warning'); }
 }
 
+// Quitar un gasto del turno (desde Cierre o desde Egresos): pide confirmación, lo borra, actualiza el cierre de ese
+// turno si ya existe y redibuja TODAS las pestañas, así la fila desaparece al instante donde se esté mirando.
 async function eliminarGastoDia(id) {
+  const quitado = ST.gastosDia.find(g => g.id === id);
+  if (!quitado) return;
+  const turnoTxt = quitado.turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas';
+  if (!(await confirmarSistema({
+    titulo: '¿Quitar este gasto?',
+    cuerpo: `${quitado.nombre || catNombre(quitado.categoria) || 'Gasto'} · ${fmt(quitado.monto)}\n${quitado.fecha} (${turnoTxt})\nSe quita de Egresos y de las cuentas de ese turno.`,
+    aceptar: 'Sí, quitar el gasto', peligro: true,
+  }))) return;
   try {
-    const quitado = ST.gastosDia.find(g => g.id === id);
     await sbDelete('gastos_dia', `id=eq.${id}`);
     ST.gastosDia = ST.gastosDia.filter(g => g.id !== id);
     if (ddEditId === id) ddEditId = null;
-    // Si ese turno ya tiene un cierre MANUAL, su «gastos» y su resultado se vuelven a calcular con los gastos que
-    // quedan: así el cierre nunca queda descuadrado de la lista real (el ✕ de Egresos llega hasta aquí).
-    if (quitado) await sincronizarGastosCierreManual(quitado.fecha, quitado.turno);
-    renderDiaADia();
-  } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
+  } catch(e) { console.error(e); showToast('⚠ Error al eliminar', 'warning'); return; }
+  // El cierre de ese turno (si ya existe) baja sus «gastos» en lo mismo: así Caja, que lee el cierre, y Egresos, que
+  // lee los gastos, nunca quedan descuadrados.
+  try { await ajustarCierrePorGastoQuitado(quitado); }
+  catch(e) { console.error(e); showToast('⚠ El gasto se quitó, pero no se pudo actualizar el cierre de ese turno: ábrelo con «Corregir cierre» y guárdalo', 'warning'); }
+  renderAll();
+  showToast('🗑 Gasto quitado', 'ok');
 }
 
-// Deja `gastos` y `resultado` de un cierre MANUAL iguales a la suma real de los gastos_dia de su turno (sin préstamos).
-// Si el turno no tiene cierre, o es un cierre normal (que se re-guarda al corregirlo), no hace nada.
-async function sincronizarGastosCierreManual(fecha, turno) {
-  const c = ST.cierresDia.find(x => x.fecha === fecha && x.turno === turno);
-  if (!c || !c.manual) return;
-  const gastos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno && !esCatExcluida(g.categoria)).reduce((a, g) => a + g.monto, 0);
-  const resultado = (c.efectivo || 0) + (c.transferencia || 0) - gastos;
+// Si el turno del gasto quitado ya tiene cierre (normal o manual), sus «gastos» bajan en el monto del gasto y su
+// resultado sube en lo mismo (el cierre guarda sus totales; no los recalcula solo). Los préstamos no cuentan como
+// gasto del cierre, así que no lo tocan. Se usa la diferencia —no se recalcula desde las filas— para no alterar nada
+// más de lo que ya traía el cierre.
+async function ajustarCierrePorGastoQuitado(g) {
+  if (esCatExcluida(g.categoria)) return;
+  const c = ST.cierresDia.find(x => x.fecha === g.fecha && x.turno === g.turno);
+  if (!c) return;
+  const gastos = Math.max(0, (c.gastos || 0) - (g.monto || 0));
+  const resultado = (c.resultado || 0) + ((c.gastos || 0) - gastos);
   if (gastos === c.gastos && resultado === c.resultado) return;
-  await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`, { gastos, resultado });
+  await sbPatch('cierres_dia', `fecha=eq.${g.fecha}&turno=eq.${g.turno}`, { gastos, resultado });
   c.gastos = gastos;
   c.resultado = resultado;
 }

@@ -39,6 +39,13 @@ function datosSabado({ conPrestamo = true, conFiado = true } = {}) {
   return d;
 }
 
+// Quitar un gasto pide confirmación (ventana del sistema): se acepta y se espera a que termine.
+const quitarGasto = async (page, id) => {
+  const p = page.evaluate(i => eliminarGastoDia(i), id);
+  await page.locator(VENTANA).locator('button[data-eleccion="si"]').click();
+  await p;
+};
+
 const abrirManual = async page => {
   await page.evaluate(() => abrirModalCierreManual());
   await expect(page.locator('#cierremanual-contenido')).toBeVisible();
@@ -432,7 +439,7 @@ test.describe('un cierre manual solo se corrige en su propio formulario', () => 
 
   test('quitar un gasto desde Egresos (✕) deja el cierre manual cuadrado: gastos y resultado se recalculan', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: 'admin', datos: conManual() });
-    await page.evaluate(() => eliminarGastoDia(50));
+    await quitarGasto(page, 50);
     await page.waitForFunction(() => !ST.gastosDia.some(g => g.id === 50));
     const c = await cierreDe(page);
     expect(c).toMatchObject({ gastos: 0, resultado: 600000 });
@@ -446,23 +453,34 @@ test.describe('un cierre manual solo se corrige en su propio formulario', () => 
     d.cierres_dia.find(c => c.id === 90).gastos = 24000;
     d.cierres_dia.find(c => c.id === 90).resultado = 576000;
     await abrirSistema(page, { usuario: 'admin', datos: d });
-    await page.evaluate(() => eliminarGastoDia(50));
+    await quitarGasto(page, 50);
     await page.waitForFunction(() => !ST.gastosDia.some(g => g.id === 50));
     expect(await cierreDe(page)).toMatchObject({ gastos: 4000, resultado: 596000 });
   });
 
   test('quitar el préstamo (no cuenta como gasto) no cambia ni toca el cierre manual', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: 'admin', datos: conManual() });
-    await page.evaluate(() => eliminarGastoDia(51));
+    await quitarGasto(page, 51);
     await page.waitForFunction(() => !ST.gastosDia.some(g => g.id === 51));
     expect(escritura(reg, 'PATCH', 'cierres_dia')).toHaveLength(0);
     expect(await cierreDe(page)).toMatchObject({ gastos: 20000, resultado: 580000 });
   });
 
-  test('quitar un gasto de un turno cuyo cierre es NORMAL no toca el cierre (comportamiento de siempre)', async ({ page }) => {
+  test('quitar un gasto de un turno cuyo cierre es NORMAL también actualiza ese cierre (baja los gastos, sube el resultado)', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: 'admin', datos: datosSabado() });
-    await page.evaluate(() => eliminarGastoDia(1));      // gasto del 18-oct, cuyo cierre es normal
+    await quitarGasto(page, 1);      // 6.000 del 18-oct, cuyo cierre es normal (gastos 90.000, resultado 490.000)
     await page.waitForFunction(() => !ST.gastosDia.some(g => g.id === 1));
+    expect(await cierreDe(page, '2026-10-18')).toMatchObject({ gastos: 84000, resultado: 496000 });
+    expect(escritura(reg, 'PATCH', 'cierres_dia')[0].cuerpo).toEqual({ gastos: 84000, resultado: 496000 });
+  });
+
+  test('quitar un gasto de un turno SIN cierre solo lo borra (no toca ningún cierre)', async ({ page }) => {
+    const d = datosSabado();
+    d.gastos_dia.push({ id: 60, fecha: '2026-10-19', turno: 'almuerzo', nombre: 'Hielo', monto: 3000, categoria: 'otro' });
+    const reg = await abrirSistema(page, { usuario: 'admin', datos: d });
+    await quitarGasto(page, 60);
+    await page.waitForFunction(() => !ST.gastosDia.some(g => g.id === 60));
+    expect(escritura(reg, 'DELETE', 'gastos_dia')).toHaveLength(1);
     expect(escritura(reg, 'PATCH', 'cierres_dia')).toHaveLength(0);
   });
 });
