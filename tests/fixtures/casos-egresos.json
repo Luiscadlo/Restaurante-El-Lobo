@@ -934,7 +934,77 @@
    "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
    "mod": {
     "0": {
-     "emoji": "<b>"
+     "emoji": "<"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con «>»",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": ">"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con «&»",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "&"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con comillas dobles",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "\""
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con comilla simple",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "'"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con tilde invertida",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "`"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con barra invertida",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "\\"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con un carácter de control",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "\u0007"
     }
    }
   }

@@ -634,6 +634,26 @@ test.describe('pantalla «Categorías de egresos»', () => {
     await expect(page.locator('#cfgegr-contador')).toHaveText('1 cambio sin guardar');
   });
 
+  test('el historial cuenta cada versión contra la anterior, no contra los valores de siempre', async ({ page }) => {
+    await abrirAdmin(page);
+    await escribir(nombreEgr(page, 0), 'Sueldos');                                                        // 1.ª versión: cambia «Nómina»
+    await page.click('#cfgegr-guardar');
+    await expect(page.locator('#cfgegr-hoy')).toContainText('por dueno1');
+    await expect(page.locator('#cfgegr-contador')).toHaveText('');
+    await escribir(nombreEgr(page, 1), 'Compras');                                                        // 2.ª versión: cambia «Proveedores»
+    await page.click('#cfgegr-guardar');
+    await expect(page.locator('#cfgegr-contador')).toHaveText('');
+    const filas = page.locator('#config-historial tbody tr', { hasText: 'Categorías de egresos' });
+    await expect(filas).toHaveCount(2);
+    const ultima = (await filas.nth(0).innerText());
+    const primera = (await filas.nth(1).innerText());
+    expect(ultima).toContain('1 cambio');                                                                 // solo lo de esta versión...
+    expect(ultima).toContain('«Proveedores» → «Compras»');
+    expect(ultima).not.toContain('Sueldos');                                                              // ...no lo que ya había cambiado antes
+    expect(primera).toContain('1 cambio');
+    expect(primera).toContain('«Nómina» → «Sueldos»');
+  });
+
   test('tras guardar no queda borrador: «Descartar» queda apagado', async ({ page }) => {
     await abrirAdmin(page);
     await escribir(nombreEgr(page, 0), 'Sueldos');
