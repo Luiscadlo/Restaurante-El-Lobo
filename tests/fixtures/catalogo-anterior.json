@@ -1,0 +1,498 @@
+{
+ "pedido_almuerzo": [
+  "OPTION||— Selecciona para habilitar los campos —|undefined",
+  "OPTGROUP||☀️ ALMUERZOS (9am – 4pm)|undefined",
+  "OPTION|completo|Almuerzo Completo (con sopa) · $14.000|14000",
+  "OPTION|seco|Almuerzo Seco (sin sopa) · $12.000|12000",
+  "OPTION|asado130|Asado 130g · $17.000|17000",
+  "OPTION|asado200|Asado 200g · $20.000|20000",
+  "OPTION|porcion-sopa|Porción de Sopa · $6.000|6000",
+  "OPTION|porcion-arroz|Porción de Arroz · $4.000|4000",
+  "OPTION|porcion-proteina|Porción de Proteína · $8.000|8000",
+  "OPTION|sopa-y-arroz|Sopa y Arroz · $11.000|11000"
+ ],
+ "pedido_cena": [
+  "OPTION||— Selecciona un producto —|undefined",
+  "OPTGROUP||🌙 PERROS|undefined",
+  "OPTION|PE01|Perro Sencillo · $5.000|5000",
+  "OPTION|PE02|Perro Doble · $7.000|7000",
+  "OPTION|PE03|Perro Doble con Chorizo · $8.500|8500",
+  "OPTION|PE04|Perro Choriperro Doble · $9.000|9000",
+  "OPTION|PE05|Perro Suizo · $10.000|10000",
+  "OPTION|PE06|Perro Especial · $15.000|15000",
+  "OPTGROUP||🌙 HAMBURGUESAS|undefined",
+  "OPTION|HB01|Hamburguesa Sencillo · $14.000|14000",
+  "OPTION|HB02|Hamburguesa Lobo · $20.000|20000",
+  "OPTGROUP||🌙 ASADOS|undefined",
+  "OPTION|CRA01|Asado de Carne · $16.000|16000",
+  "OPTION|CRA02|Asado de Pechuga · $16.000|16000",
+  "OPTION|CRA03|Asado de Cerdo · $16.000|16000",
+  "OPTGROUP||🌙 PICADAS|undefined",
+  "OPTION|PI01|Picada de Pollo · $16.000|16000",
+  "OPTION|PI02|Picada de Carne · $16.000|16000",
+  "OPTION|PI03|Picada de Cerdo · $16.000|16000",
+  "OPTION|PI04|Picada Mixta · $20.000|20000",
+  "OPTION|PI05|Picada Trifásica · $30.000|30000",
+  "OPTGROUP||🌙 SALCHIPAPAS|undefined",
+  "OPTION|SL01|Salchipapa Sencilla · $12.000|12000",
+  "OPTION|SL02|Salchipapa Especial · $16.000|16000",
+  "OPTION|SL03|Salchipapa Especial Extra · $22.000|22000",
+  "OPTION|SL04|Choripapa · $14.000|14000",
+  "OPTGROUP||🌙 SANDWICH CUBANO|undefined",
+  "OPTION|CU01|Cubano de Pollo · $6.000|6000",
+  "OPTION|CU02|Cubano de Suizo · $8.500|8500",
+  "OPTION|CU03|Cubano de Jamón y Queso · $7.000|7000",
+  "OPTION|CU04|Cubano de Chorizo · $7.500|7500",
+  "OPTGROUP||🌙 AREPAS|undefined",
+  "OPTION|ARP01|Arepa de Pollo · $7.000|7000",
+  "OPTION|ARP02|Arepa de Chorizo · $8.000|8000",
+  "OPTION|ARP03|Arepa de Jamón · $6.500|6500",
+  "OPTION|ARP04|Arepa de Queso · $6.000|6000",
+  "OPTION|ARP05|Arepa de Pollo-Chorizo · $9.500|9500",
+  "OPTION|ARP06|Arepa de Suiza · $8.500|8500",
+  "OPTION|ARP07|Arepa de Hamburguesa · $9.000|9000",
+  "OPTION|ARP08|Arepa Especial · $13.000|13000",
+  "OPTION|ARP09|Arepa Trifásica · $14.000|14000",
+  "OPTION|ARP10|Arepa Mixta · $12.000|12000",
+  "OPTION|ARP11|Arepa Pollo-Suiza · $10.000|10000",
+  "OPTGROUP||🌙 SUIZOS|undefined",
+  "OPTION|SZ01|Suizo Mini Sencillo · $12.000|12000",
+  "OPTION|SZ02|Suizo Mini Especial · $17.000|17000",
+  "OPTION|SZ03|Suizo Sencillo · $16.000|16000",
+  "OPTION|SZ04|Suizo Especial · $21.000|21000",
+  "OPTION|SZ05|Suizo Especial Extra · $28.000|28000"
+ ],
+ "bebida": [
+  "OPTION||— Sin bebida —|0",
+  "OPTION|BEB01|Gaseosa Coca-Cola 400ml · $4.000|4000",
+  "OPTION|BEB02|Jugo Hit 500ml · $4.000|4000",
+  "OPTION|BEB03|Coca-Cola 1.5 Lt · $8.000|8000",
+  "OPTION|BEB04|Agua en botella · $2.000|2000",
+  "OPTION|BEB05|Coca-Cola 237ml · $2.000|2000",
+  "OPTION|BEB06|Avena y Agua de Arroz Costa Azul · $3.000|3000"
+ ],
+ "precios": {
+  "completo": 14000,
+  "seco": 12000,
+  "asado130": 17000,
+  "asado200": 20000,
+  "porcion-sopa": 6000,
+  "porcion-arroz": 4000,
+  "porcion-proteina": 8000,
+  "sopa-y-arroz": 11000
+ },
+ "labels": {
+  "completo": "Almuerzo Completo",
+  "seco": "Almuerzo Seco",
+  "asado130": "Asado 130g",
+  "asado200": "Asado 200g",
+  "porcion-sopa": "Porción de Sopa",
+  "porcion-arroz": "Porción de Arroz",
+  "porcion-proteina": "Porción de Proteína",
+  "sopa-y-arroz": "Sopa y Arroz",
+  "extra": "Producto adicional",
+  "PE01": "Perro Sencillo",
+  "PE02": "Perro Doble",
+  "PE03": "Perro Doble con Chorizo",
+  "PE04": "Perro Choriperro Doble",
+  "PE05": "Perro Suizo",
+  "PE06": "Perro Especial",
+  "HB01": "Hamburguesa Sencillo",
+  "HB02": "Hamburguesa Lobo",
+  "CRA01": "Asado de Carne",
+  "CRA02": "Asado de Pechuga",
+  "CRA03": "Asado de Cerdo",
+  "PI01": "Picada de Pollo",
+  "PI02": "Picada de Carne",
+  "PI03": "Picada de Cerdo",
+  "PI04": "Picada Mixta",
+  "PI05": "Picada Trifásica",
+  "SL01": "Salchipapa Sencilla",
+  "SL02": "Salchipapa Especial",
+  "SL03": "Salchipapa Especial Extra",
+  "SL04": "Choripapa",
+  "CU01": "Cubano de Pollo",
+  "CU02": "Cubano de Suizo",
+  "CU03": "Cubano de Jamón y Queso",
+  "CU04": "Cubano de Chorizo",
+  "ARP01": "Arepa de Pollo",
+  "ARP02": "Arepa de Chorizo",
+  "ARP03": "Arepa de Jamón",
+  "ARP04": "Arepa de Queso",
+  "ARP05": "Arepa de Pollo-Chorizo",
+  "ARP06": "Arepa de Suiza",
+  "ARP07": "Arepa de Hamburguesa",
+  "ARP08": "Arepa Especial",
+  "ARP09": "Arepa Trifásica",
+  "ARP10": "Arepa Mixta",
+  "ARP11": "Arepa Pollo-Suiza",
+  "SZ01": "Suizo Mini Sencillo",
+  "SZ02": "Suizo Mini Especial",
+  "SZ03": "Suizo Sencillo",
+  "SZ04": "Suizo Especial",
+  "SZ05": "Suizo Especial Extra",
+  "ADI01": "Papa Francesa",
+  "ADI02": "Ensalada",
+  "ADI03": "Gratinado",
+  "BEB01": "Gaseosa Coca-Cola 400ml",
+  "BEB02": "Jugo Hit 500ml",
+  "BEB03": "Coca-Cola 1.5 Lt",
+  "BEB04": "Agua en botella",
+  "BEB05": "Coca-Cola 237ml",
+  "BEB06": "Avena y Agua de Arroz Costa Azul"
+ },
+ "cr": [
+  [
+   "PE01",
+   "Perro Sencillo",
+   5000,
+   "PERROS"
+  ],
+  [
+   "PE02",
+   "Perro Doble",
+   7000,
+   "PERROS"
+  ],
+  [
+   "PE03",
+   "Perro Doble con Chorizo",
+   8500,
+   "PERROS"
+  ],
+  [
+   "PE04",
+   "Perro Choriperro Doble",
+   9000,
+   "PERROS"
+  ],
+  [
+   "PE05",
+   "Perro Suizo",
+   10000,
+   "PERROS"
+  ],
+  [
+   "PE06",
+   "Perro Especial",
+   15000,
+   "PERROS"
+  ],
+  [
+   "HB01",
+   "Hamburguesa Sencillo",
+   14000,
+   "HAMBURGUESAS"
+  ],
+  [
+   "HB02",
+   "Hamburguesa Lobo",
+   20000,
+   "HAMBURGUESAS"
+  ],
+  [
+   "CRA01",
+   "Asado de Carne",
+   16000,
+   "ASADOS"
+  ],
+  [
+   "CRA02",
+   "Asado de Pechuga",
+   16000,
+   "ASADOS"
+  ],
+  [
+   "CRA03",
+   "Asado de Cerdo",
+   16000,
+   "ASADOS"
+  ],
+  [
+   "PI01",
+   "Picada de Pollo",
+   16000,
+   "PICADAS"
+  ],
+  [
+   "PI02",
+   "Picada de Carne",
+   16000,
+   "PICADAS"
+  ],
+  [
+   "PI03",
+   "Picada de Cerdo",
+   16000,
+   "PICADAS"
+  ],
+  [
+   "PI04",
+   "Picada Mixta",
+   20000,
+   "PICADAS"
+  ],
+  [
+   "PI05",
+   "Picada Trifásica",
+   30000,
+   "PICADAS"
+  ],
+  [
+   "SL01",
+   "Salchipapa Sencilla",
+   12000,
+   "SALCHIPAPAS"
+  ],
+  [
+   "SL02",
+   "Salchipapa Especial",
+   16000,
+   "SALCHIPAPAS"
+  ],
+  [
+   "SL03",
+   "Salchipapa Especial Extra",
+   22000,
+   "SALCHIPAPAS"
+  ],
+  [
+   "SL04",
+   "Choripapa",
+   14000,
+   "SALCHIPAPAS"
+  ],
+  [
+   "CU01",
+   "Cubano de Pollo",
+   6000,
+   "SANDWICH CUBANO"
+  ],
+  [
+   "CU02",
+   "Cubano de Suizo",
+   8500,
+   "SANDWICH CUBANO"
+  ],
+  [
+   "CU03",
+   "Cubano de Jamón y Queso",
+   7000,
+   "SANDWICH CUBANO"
+  ],
+  [
+   "CU04",
+   "Cubano de Chorizo",
+   7500,
+   "SANDWICH CUBANO"
+  ],
+  [
+   "ARP01",
+   "Arepa de Pollo",
+   7000,
+   "AREPAS"
+  ],
+  [
+   "ARP02",
+   "Arepa de Chorizo",
+   8000,
+   "AREPAS"
+  ],
+  [
+   "ARP03",
+   "Arepa de Jamón",
+   6500,
+   "AREPAS"
+  ],
+  [
+   "ARP04",
+   "Arepa de Queso",
+   6000,
+   "AREPAS"
+  ],
+  [
+   "ARP05",
+   "Arepa de Pollo-Chorizo",
+   9500,
+   "AREPAS"
+  ],
+  [
+   "ARP06",
+   "Arepa de Suiza",
+   8500,
+   "AREPAS"
+  ],
+  [
+   "ARP07",
+   "Arepa de Hamburguesa",
+   9000,
+   "AREPAS"
+  ],
+  [
+   "ARP08",
+   "Arepa Especial",
+   13000,
+   "AREPAS"
+  ],
+  [
+   "ARP09",
+   "Arepa Trifásica",
+   14000,
+   "AREPAS"
+  ],
+  [
+   "ARP10",
+   "Arepa Mixta",
+   12000,
+   "AREPAS"
+  ],
+  [
+   "ARP11",
+   "Arepa Pollo-Suiza",
+   10000,
+   "AREPAS"
+  ],
+  [
+   "SZ01",
+   "Suizo Mini Sencillo",
+   12000,
+   "SUIZOS"
+  ],
+  [
+   "SZ02",
+   "Suizo Mini Especial",
+   17000,
+   "SUIZOS"
+  ],
+  [
+   "SZ03",
+   "Suizo Sencillo",
+   16000,
+   "SUIZOS"
+  ],
+  [
+   "SZ04",
+   "Suizo Especial",
+   21000,
+   "SUIZOS"
+  ],
+  [
+   "SZ05",
+   "Suizo Especial Extra",
+   28000,
+   "SUIZOS"
+  ],
+  [
+   "ADI01",
+   "Papa Francesa",
+   5000,
+   "ADICIONALES"
+  ],
+  [
+   "ADI02",
+   "Ensalada",
+   3000,
+   "ADICIONALES"
+  ],
+  [
+   "ADI03",
+   "Gratinado",
+   5000,
+   "ADICIONALES"
+  ],
+  [
+   "BEB01",
+   "Gaseosa Coca-Cola 400ml",
+   4000,
+   "BEBIDAS"
+  ],
+  [
+   "BEB02",
+   "Jugo Hit 500ml",
+   4000,
+   "BEBIDAS"
+  ],
+  [
+   "BEB03",
+   "Coca-Cola 1.5 Lt",
+   8000,
+   "BEBIDAS"
+  ],
+  [
+   "BEB04",
+   "Agua en botella",
+   2000,
+   "BEBIDAS"
+  ],
+  [
+   "BEB05",
+   "Coca-Cola 237ml",
+   2000,
+   "BEBIDAS"
+  ],
+  [
+   "BEB06",
+   "Avena y Agua de Arroz Costa Azul",
+   3000,
+   "BEBIDAS"
+  ]
+ ],
+ "extra": [
+  {
+   "n": "Botella de agua",
+   "precio": 1000
+  },
+  {
+   "n": "Avena",
+   "precio": 4000
+  },
+  {
+   "n": "Papa Francesa",
+   "precio": 5000
+  },
+  {
+   "n": "Ensalada",
+   "precio": 3000
+  },
+  {
+   "n": "Gratinado",
+   "precio": 5000
+  },
+  {
+   "n": "Jugo Hit 500ml",
+   "precio": 4000
+  },
+  {
+   "n": "Caraqueña",
+   "precio": 4000
+  },
+  {
+   "n": "Agua de arroz",
+   "precio": 4000
+  },
+  {
+   "n": "Bretaña",
+   "precio": 4000
+  },
+  {
+   "n": "Pony Malta",
+   "precio": 4000
+  },
+  {
+   "n": "Coca-Cola 400ml",
+   "precio": 4000
+  },
+  {
+   "n": "Gaseosa pequeña",
+   "precio": 2000
+  },
+  {
+   "n": "Botella de agua grande",
+   "precio": 2000
+  },
+  {
+   "n": "Coca-Cola 1.5 Lt",
+   "precio": 8000
+  }
+ ]
+}

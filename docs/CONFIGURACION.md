@@ -1,8 +1,8 @@
-# ⚙️ Configuración del negocio (etapa 1)
+# ⚙️ Configuración del negocio (etapas 1 y 2)
 
 Pestaña **⚙️ Configuración** — solo el administrador. Aquí se cambian los valores que antes estaban escritos a mano en el
-código. Esta es la **etapa 1** del plan: lo primero y más simple. Las siguientes (productos y precios, menú, finanzas,
-turnos y horarios) se suman a la misma tabla y la misma pantalla.
+código. La **etapa 1** (nombre, mesas, recargos, respaldo) y la **etapa 2** (🍽️ **Productos y precios**, más abajo) viven en
+la misma tabla y la misma pantalla. Las siguientes (categorías de egresos y cuentas, finanzas) se suman igual.
 
 ## Regla de oro
 
@@ -76,6 +76,50 @@ fuera de rango o de otro tipo (mesas = −3, nombre vacío…), una fecha invent
 Para **deshacer**: `sql/rollback_configuracion.sql` quita la tabla, el disparador y las funciones (¡borra el historial de
 configuración!; haz antes un «Respaldo completo»). El sistema vuelve a los valores de siempre.
 
+## 🍽️ Productos y precios (etapa 2)
+
+Tres tablas dentro de la misma pestaña. Cada una guarda el catálogo **completo** como una versión nueva (con «vigente desde»
+y quién lo hizo); la versión anterior queda para siempre.
+
+| Tabla | Qué contiene | Qué se puede hacer |
+|---|---|---|
+| ☀️ Almuerzos | Los 8 tipos de siempre (completo, seco, asado 130 g, asado 200 g, porción de sopa, porción de arroz, porción de proteína, sopa y arroz) | Cambiar **nombre** y **precio**, **retirar** o reactivar. **No** se crean tipos nuevos |
+| 🌙 Comidas rápidas, bebidas y adicionales | Los 49 productos de siempre (perros, hamburguesas, asados, picadas, salchipapas, cubanos, arepas, suizos, adicionales y bebidas) | Cambiar nombre, precio o categoría; retirar o reactivar; **agregar productos nuevos**; una **categoría nueva** se crea escribiendo su nombre; hay buscador |
+| ➕ Productos adicionales | La lista que autocompleta nombre y valor en «Agregar producto» de un pedido | Cambiar, retirar, agregar y quitar. Igual se puede escribir cualquier otro a mano |
+
+Cómo se usa: escribe sobre la tabla (la fila cambiada se marca y aparece «N cambios sin guardar»), pulsa **Guardar cambios** de
+esa tabla y confirma: la ventana lista, en palabras, cada cambio («Almuerzo Completo: $14.000 → $15.500», «🚫 Se retira: …»,
+«➕ Nuevo: …»). **Descartar** deshace lo escrito sin guardar. Mientras escribes, nada se manda a la base.
+
+**Reglas** (las exige la pantalla y, otra vez, la base de datos):
+- Precio entero de **$100 a $500.000**. Nombre de 1 a 60 caracteres, sin espacios al principio ni al final y **sin** los caracteres `<` `>` `&` `"` `'` `\` ni la tilde invertida ni caracteres de control
+  (los nombres se pintan en muchas pantallas: nada que parezca código). Los espacios dobles se arreglan solos.
+- Categoría: 1 a 30 caracteres en MAYÚSCULAS (la pantalla las pasa sola). `BEBIDAS` alimenta el desplegable de bebida y `ADICIONALES`
+  se vende con el precio escrito a mano en el pedido.
+- Los productos **nunca se borran, se retiran**: la base exige que cada versión traiga todos los códigos de la anterior (y los de
+  El Lobo). Así un pedido viejo siempre se puede mostrar. Un producto retirado deja de ofrecerse para vender, pero sigue
+  existiendo (se puede reactivar). Debe quedar al menos un almuerzo y una comida rápida activos.
+- Cada producto nuevo recibe un **código que no cambia nunca** (`X001`, `X002`…). Solo lo ve el administrador en esta tabla.
+- Los adicionales no tienen código; el nombre no puede repetirse (sin importar mayúsculas).
+
+**Qué cambia y qué no** (la regla de oro de arriba):
+- Un precio nuevo rige para lo que se venda **desde que se guarda**. Lo ya vendido, cerrado o cobrado **no cambia**: cada pedido guarda su monto.
+- Un **pedido pendiente** que ya estaba tomado y se edita después usa los **precios de cuando se tomó** (igual que el recargo de «para llevar»).
+- Los pedidos y reportes muestran el **nombre actual** del producto (el código es el mismo). Un producto de una categoría nueva
+  aparece en el Tablero con esa categoría.
+- Si **otro administrador** guardó un cambio en el mismo catálogo mientras tú editabas, no se pisa su cambio: la pantalla se
+  actualiza y hay que repetir lo tuyo sobre lo nuevo.
+- Sin nada guardado todo se ve y cobra **exactamente igual que antes** (una prueba lo compara con la versión anterior). Los demás
+  equipos toman el cambio al recargar la página.
+
+**Instalación**: `sql/configuracion_etapa_2.sql` (después de la etapa 1; una transacción; seguro de repetir; no toca ningún dato).
+Verificación esperada: `catalogos_instalados = true · disparador = 1 · anon_con_permisos = false`. Para deshacer:
+`sql/rollback_configuracion_etapa_2.sql` (deja la base como al terminar la etapa 1; **no** borra los catálogos guardados).
+Hasta que se instale, la pantalla muestra «falta instalar» y los botones quedan apagados.
+
+**Lo que NO está en El Lobo**: ocultar secciones, horarios y turnos, y la plantilla de imagen del menú se dejan para una copia
+del sistema pensada para otros tipos de negocio (fase 2).
+
 ## Respaldos
 
 - El **Respaldo completo** incluye la historia de la configuración (17 tablas).
@@ -91,3 +135,6 @@ configuración!; haz antes un «Respaldo completo»). El sistema vuelve a los va
 | Pantalla: valores de siempre sin configuración, lectura con historia, guardar/validar/cancelar, mesas, respaldo, texto nunca interpretado como código | `tests/configuracion.spec.js` |
 | Restaurar y Empezar de cero con la tabla nueva | `tests/python/test_restaurar_desde_sistema.py`, `tests/restaurar-desde-sistema.spec.js` |
 | Las reglas dicen lo mismo en la base, la pantalla y el servidor falso | `test_los_rangos_son_los_mismos_…` |
+| **Etapa 2 · base de datos real:** 95 casos de validación con su mensaje exacto, «los productos se retiran, no se borran», sellos, permisos, instalar sobre la etapa 1, repetir, rollback | `tests/python/test_configuracion_etapa_2.py` |
+| **Etapa 2 · pantalla:** sin catálogo guardado = idéntico a antes; precios, nombres, retirados, categorías nuevas; pedidos viejos con su precio de entonces; edición, confirmación, validaciones, cambios simultáneos, permisos; y los **mismos 95 casos** contra la pantalla y el servidor falso | `tests/configuracion-productos.spec.js` + `tests/fixtures/casos-catalogo.json` |
+| Foto de cómo se veía todo antes de la etapa 2 | `tests/fixtures/catalogo-anterior.json` |

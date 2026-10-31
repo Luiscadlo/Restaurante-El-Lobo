@@ -74,7 +74,67 @@ function validarConfiguracion(clave, valor) {
     if (clave === 'negocio_emoji' && largo > 8) return mal('El símbolo del negocio puede tener hasta 8 caracteres.');
     return null;
   }
+  if (CLAVES_CATALOGO.includes(clave)) { const m = validarCatalogo(clave, valor); return m ? mal(m) : null; }
   return { code: '22023', message: `La configuración "${clave}" no existe.`, details: 'configuracion_clave_desconocida', hint: null };
+}
+
+// Réplica de seguridad.validar_catalogo y seguridad.validar_catalogo_historia (sql/configuracion_etapa_2.sql), escrita aparte
+// del código de la página a propósito: si las dos se descuadran, una prueba lo avisa. Devuelve null o el texto del error.
+const CLAVES_CATALOGO = ['catalogo_almuerzos', 'catalogo_rapidas', 'catalogo_extras'];
+const CODIGOS_BASE = {
+  catalogo_almuerzos: ['completo', 'seco', 'asado130', 'asado200', 'porcion-sopa', 'porcion-arroz', 'porcion-proteina', 'sopa-y-arroz'],
+  catalogo_rapidas: ['PE01', 'PE02', 'PE03', 'PE04', 'PE05', 'PE06', 'HB01', 'HB02', 'CRA01', 'CRA02', 'CRA03', 'PI01', 'PI02', 'PI03', 'PI04', 'PI05',
+    'SL01', 'SL02', 'SL03', 'SL04', 'CU01', 'CU02', 'CU03', 'CU04', 'ARP01', 'ARP02', 'ARP03', 'ARP04', 'ARP05', 'ARP06', 'ARP07', 'ARP08', 'ARP09',
+    'ARP10', 'ARP11', 'SZ01', 'SZ02', 'SZ03', 'SZ04', 'SZ05', 'ADI01', 'ADI02', 'ADI03', 'BEB01', 'BEB02', 'BEB03', 'BEB04', 'BEB05', 'BEB06'],
+  catalogo_extras: [],
+};
+function validarCatalogo(clave, valor) {
+  const que = clave === 'catalogo_almuerzos' ? 'El catálogo de almuerzos' : clave === 'catalogo_rapidas' ? 'El catálogo de comidas rápidas' : 'La lista de productos adicionales';
+  if (!Array.isArray(valor)) return `${que} debe ser una lista.`;
+  const n = valor.length;
+  if ((clave === 'catalogo_almuerzos' && n !== 8) || (clave === 'catalogo_rapidas' && (n < 1 || n > 300)) || (clave === 'catalogo_extras' && n > 100)) return `${que} trae ${n} productos y esa cantidad no es válida.`;
+  const esperadas = clave === 'catalogo_rapidas' ? 'activo,categoria,codigo,nombre,precio' : clave === 'catalogo_almuerzos' ? 'activo,codigo,nombre,precio' : 'activo,nombre,precio';
+  const codigos = [], nombres = [];
+  const cuenta = s => [...s].length;
+  const sinBorde = s => s.replace(/^ +| +$/g, '');                 // btrim() de la base: solo espacios
+  const prohibido = s => /[<>&"'`\\\u0000-\u001f\u007f]/.test(s);
+  for (const it of valor) {
+    if (it === null || typeof it !== 'object' || Array.isArray(it)) return `${que} trae un producto mal formado.`;
+    if (Object.keys(it).sort().join(',') !== esperadas) return `${que} trae un producto con campos que no corresponden.`;
+    if (typeof it.nombre !== 'string') return 'El nombre de cada producto debe ser un texto.';
+    if (cuenta(it.nombre) < 1 || cuenta(it.nombre) > 60 || it.nombre !== sinBorde(it.nombre)) return 'El nombre de cada producto debe tener entre 1 y 60 caracteres, sin espacios al principio ni al final.';
+    if (prohibido(it.nombre)) return 'Los nombres no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    if (typeof it.precio !== 'number') return `El precio de "${it.nombre}" debe ser un número.`;
+    if (!Number.isInteger(it.precio) || it.precio < 100 || it.precio > 500000) return `El precio de "${it.nombre}" debe ser un número entero entre 100 y 500000.`;
+    if (typeof it.activo !== 'boolean') return `"${it.nombre}" debe estar activo o retirado (verdadero o falso).`;
+    if (clave === 'catalogo_extras') {
+      if (nombres.includes(it.nombre.toLowerCase())) return `El producto adicional "${it.nombre}" está repetido.`;
+      nombres.push(it.nombre.toLowerCase());
+    } else {
+      if (typeof it.codigo !== 'string') return `El código de "${it.nombre}" debe ser un texto.`;
+      if (clave === 'catalogo_almuerzos') {
+        if (!CODIGOS_BASE.catalogo_almuerzos.includes(it.codigo)) return `El código "${it.codigo}" no es un tipo de almuerzo de El Lobo.`;
+      } else if (!/^[A-Z][A-Z0-9]{1,7}$/.test(it.codigo)) return `El código "${it.codigo}" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.`;
+      if (codigos.includes(it.codigo)) return `El código "${it.codigo}" está repetido.`;
+      codigos.push(it.codigo);
+    }
+    if (clave === 'catalogo_rapidas') {
+      if (typeof it.categoria !== 'string') return `La categoría de "${it.nombre}" debe ser un texto.`;
+      if (cuenta(it.categoria) < 1 || cuenta(it.categoria) > 30 || it.categoria !== sinBorde(it.categoria) || it.categoria !== it.categoria.toUpperCase()) return `La categoría de "${it.nombre}" debe tener entre 1 y 30 caracteres, en MAYÚSCULAS y sin espacios al principio ni al final.`;
+      if (prohibido(it.categoria)) return 'Las categorías no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    }
+  }
+  if (CODIGOS_BASE[clave].some(c => !codigos.includes(c))) return `${que} no puede quitar productos de El Lobo: se retiran, no se borran.`;
+  return null;
+}
+// La versión nueva debe traer todos los códigos de la anterior (por «vigente desde», luego por id).
+function validarCatalogoHistoria(clave, valor, filas) {
+  if (clave !== 'catalogo_almuerzos' && clave !== 'catalogo_rapidas') return null;
+  const previas = (filas || []).filter(f => f.clave === clave).sort((a, b) => (String(a.vigente_desde) < String(b.vigente_desde) ? -1 : String(a.vigente_desde) > String(b.vigente_desde) ? 1 : (a.id || 0) - (b.id || 0)));
+  const ultima = previas[previas.length - 1];
+  if (!ultima || !Array.isArray(ultima.valor)) return null;
+  const faltan = ultima.valor.filter(x => x && 'codigo' in x && !valor.some(y => y.codigo === x.codigo)).map(x => x.codigo);
+  return faltan.length ? `No se pueden borrar productos (${faltan.join(', ')}): se retiran, para que los pedidos viejos se sigan mostrando.` : null;
 }
 const b64url = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
 
@@ -329,7 +389,8 @@ async function abrirSistema(page, opciones = {}) {
       // Configuración: el disparador de la base valida, y pone él mismo vigente_desde / creado_en / creado_por.
       if (tabla === 'configuracion' && metodo === 'POST') {
         const nuevas = (Array.isArray(cuerpo) ? cuerpo : [cuerpo || {}]);
-        const malo = nuevas.map(f => validarConfiguracion(f.clave, f.valor)).find(Boolean);
+        const malo = nuevas.map(f => validarConfiguracion(f.clave, f.valor)).find(Boolean)
+          || nuevas.map(f => { const m = validarCatalogoHistoria(f.clave, f.valor, datos.configuracion); return m ? { code: '22023', message: m, details: 'configuracion_invalida', hint: null } : null; }).find(Boolean);
         if (malo) { reg.denegadas.push(`${rol} I configuracion (valor inválido)`); return route.fulfill({ status: 400, contentType: 'application/json', headers: cors, body: JSON.stringify(malo) }); }
         const correo = (() => { try { return JSON.parse(Buffer.from(bearer.split('.')[1], 'base64url').toString()).email || ''; } catch (e) { return ''; } })();
         const sello = reg.control.ahora.toISOString();
@@ -402,4 +463,4 @@ async function abrirSistema(page, opciones = {}) {
   return reg;
 }
 
-module.exports = { abrirSistema, TABLAS_LOADSTATE, TABLAS_CAJA, TABLAS_SOLO_ADMIN, USUARIOS, USUARIO_POR_ROL, URL_HTML, FECHA_HOY };
+module.exports = { abrirSistema, CODIGOS_BASE, TABLAS_LOADSTATE, TABLAS_CAJA, TABLAS_SOLO_ADMIN, USUARIOS, USUARIO_POR_ROL, URL_HTML, FECHA_HOY };
