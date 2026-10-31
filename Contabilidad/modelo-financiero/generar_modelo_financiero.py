@@ -193,7 +193,7 @@ def config_impresion(ws, horizontal=True, ajustar_ancho=True):
 # CAPA DE DATOS DIARIOS — funciones de módulo reutilizables (mensual y diario)
 # ══════════════════════════════════════════════════════════════════════
 # Rubros de egreso del modelo. MISMA regla que el Estado de Resultados
-# mensual (ver suma_cat() más abajo): Egresos.cat y Gastos_Cierre.categoria →
+# mensual (ver suma_grupo() más abajo): Egresos.cat y Gastos_Cierre.categoria →
 # 4 rubros. "prestamo" (plata propia que se saca de la caja) se EXCLUYE: no es
 # un gasto del negocio. Cualquier otra categoría es "huérfana": no se suma en
 # ningún lado y se reporta por consola (nunca se reasigna en silencio).
@@ -209,6 +209,49 @@ MAPA_RUBRO = {
     "otro": "otros",
 }
 CATEGORIAS_EXCLUIDAS = {"prestamo"}
+# Categorías de egresos CONFIGURABLES (⚙️ Configuración → «Categorías de egresos», etapa 4): cada categoría tiene un
+# código (el que guardan los gastos) y un GRUPO que dice en qué rubro se suma. El export del sistema trae la hoja
+# «Categorias_Egresos» (codigo, nombre, grupo, donde, activo) con las categorías de hoy, incluidas las retiradas.
+# grupo → rubro; «excluido» (no cuenta como egreso, como el préstamo) se descarta.
+GRUPO_RUBRO = {"proveedor": "insumos", "desechable": "insumos", "nomina": "nomina", "operativo": "arriendo_servicios", "otro": "otros"}
+GRUPO_EXCLUIDO = "excluido"
+GRUPO_DESECHABLE = "desechable"
+# Las 7 de El Lobo (código → grupo): iguales a MAPA_RUBRO y CATEGORIAS_EXCLUIDAS de arriba. Rigen siempre, y son las únicas
+# si el export es viejo (sin la hoja «Categorias_Egresos»). Un código base nunca cambia de grupo (la base lo impide).
+CATEGORIAS_BASE_GRUPO = {"proveedor": "proveedor", "desechables": "desechable", "nomina": "nomina",
+                         "arriendo": "operativo", "servicios": "operativo", "otro": "otro", "prestamo": "excluido"}
+
+
+def grupos_de_categorias(hoja):
+    """código → grupo de TODAS las categorías: las 7 de El Lobo más las que traiga la hoja «Categorias_Egresos» del export
+    (DataFrame; vacío o None = export viejo → solo las 7). Una fila con grupo desconocido, sin código o repetida se ignora
+    (su categoría queda «huérfana»: no se suma y se avisa, nunca se reasigna en silencio); y una fila que contradiga el
+    grupo de una de las 7 de El Lobo no gana (esas no cambian de grupo)."""
+    grupos = dict(CATEGORIAS_BASE_GRUPO)
+    if hoja is None or getattr(hoja, "empty", True) or not {"codigo", "grupo"}.issubset(hoja.columns):
+        return grupos
+    validos = set(GRUPO_RUBRO) | {GRUPO_EXCLUIDO}
+    vistos = set()
+    for codigo, grupo in zip(hoja["codigo"], hoja["grupo"]):
+        if not isinstance(codigo, str) or not codigo.strip() or codigo in vistos:
+            continue
+        vistos.add(codigo)
+        if not isinstance(grupo, str) or grupo not in validos:
+            continue
+        if codigo in CATEGORIAS_BASE_GRUPO and CATEGORIAS_BASE_GRUPO[codigo] != grupo:
+            print(f"  (aviso: la hoja Categorias_Egresos pone «{codigo}» en el grupo «{grupo}»; se conserva «{CATEGORIAS_BASE_GRUPO[codigo]}», que no cambia)")
+            continue
+        grupos[codigo] = grupo
+    return grupos
+
+
+def _mapas_de_grupos(grupos):
+    """(código → rubro, códigos excluidos) a partir de código → grupo."""
+    grupos = CATEGORIAS_BASE_GRUPO if grupos is None else grupos
+    return ({c: GRUPO_RUBRO[g] for c, g in grupos.items() if g in GRUPO_RUBRO},
+            {c for c, g in grupos.items() if g == GRUPO_EXCLUIDO})
+
+
 RUBROS = ["insumos", "nomina", "arriendo_servicios", "otros"]
 RUBRO_LABEL = {
     "insumos": "Insumos", "nomina": "Nómina",
@@ -488,21 +531,24 @@ def dias_operados(ingresos_dia):
     return ingresos_dia.index[ingresos_dia["total"] > 0]
 
 
-def egresos_diarios(egresos, gastos_cierre):
+def egresos_diarios(egresos, gastos_cierre, grupos=None):
     """Egresos por día y rubro, en formato largo (fecha, rubro, monto):
     Egresos (columna "cat") + Gastos_Cierre (columna "categoria"), mapeados a
-    los 4 rubros del modelo con la misma regla EXACTA que suma_cat() mensual
+    los 4 rubros del modelo con la misma regla EXACTA que suma_grupo() mensual
     (coincidencia exacta de texto). Devuelve (egresos_largo, huerfanos):
     "prestamo" se descarta; una categoría fuera de MAPA_RUBRO (o vacía) es
     huérfana → no se suma y se lista en `huerfanos` (origen, categoria, n,
-    monto) para reportarla — nunca se reasigna en silencio."""
+    monto) para reportarla — nunca se reasigna en silencio.
+    `grupos` (código → grupo, ver grupos_de_categorias) es el mapa de hoy del
+    sistema: trae también las categorías que creó la persona; sin él rigen las 7 de siempre."""
+    mapa_rubro, excluidas_ = _mapas_de_grupos(grupos)
     partes, huerfanas = [], []
     for origen, df, col in (("Egresos", egresos, "cat"), ("Gastos_Cierre", gastos_cierre, "categoria")):
         if df is None or df.empty or col not in df.columns or "fecha" not in df.columns:
             continue
         t = pd.DataFrame({"fecha": df["fecha"], "categoria": df[col], "monto": _num(df, "monto").fillna(0)})
-        excluida = t["categoria"].isin(CATEGORIAS_EXCLUIDAS)
-        rubro = t["categoria"].map(MAPA_RUBRO)
+        excluida = t["categoria"].isin(excluidas_)
+        rubro = t["categoria"].map(mapa_rubro)
         huerf = rubro.isna() & ~excluida
         if huerf.any():
             h = t[huerf].assign(categoria=lambda d: d["categoria"].astype("object").where(d["categoria"].notna(), "<sin categoría>"))
@@ -605,11 +651,11 @@ def preparar_pedidos(pagados, pendientes, cierres=None):
     return ped, gratis
 
 
-def construir_diario(cierres, aperturas, egresos, gastos_cierre, pagados, pendientes, hoy=None):
+def construir_diario(cierres, aperturas, egresos, gastos_cierre, pagados, pendientes, hoy=None, grupos=None):
     """Arma el paquete de datos DIARIOS que comparten el modelo mensual y los
     gráficos (dict de DataFrames). Todo sale de las mismas hojas del export."""
     ing_dia = ingresos_diarios(cierres, aperturas)
-    egr, huerf = egresos_diarios(egresos, gastos_cierre)
+    egr, huerf = egresos_diarios(egresos, gastos_cierre, grupos)
     ped, gratis = preparar_pedidos(pagados, pendientes, cierres)
     if cierres is not None and not cierres.empty and {"fecha", "turno"}.issubset(cierres.columns):
         # OJO: _num() devuelve 0.0 (no NaN) cuando falta la columna — correcto
@@ -725,6 +771,8 @@ def cargar_datos_reales(path_excel, mes_inicio=MES_INICIO_DATOS_REALES):
     abonos = hoja("Abonos_Fiado")
     aperturas = hoja("Aperturas_Turno")
     desc_log = hoja("Descuentos_Log")      # opcional: solo existe si ya se dio algún descuento
+    # Categorías de egresos de hoy (código → grupo). Un export viejo no trae la hoja: rigen las 7 de El Lobo.
+    grupos = grupos_de_categorias(hoja("Categorias_Egresos"))
 
     # Recorta TODO a partir de mes_inicio — datos de antes (ej. el mes de
     # prueba) se ignoran en cualquier tabla con columna "fecha", antes de que
@@ -812,25 +860,27 @@ def cargar_datos_reales(path_excel, mes_inicio=MES_INICIO_DATOS_REALES):
         desc_cena = float(descuentos_de(ing_cena).sum()) if not ing_cena.empty else 0.0
         n_ped_desc = contar_pedidos_con_descuento(pd.concat([ing_alm, ing_cena], ignore_index=True)) if (not ing_alm.empty or not ing_cena.empty) else 0
 
-        def suma_cat(df, cat):
+        def suma_grupo(df, grupo):
             # "egresos" guarda la categoría en la columna "cat"; "gastos_dia"
             # (los gastos registrados al cierre del turno) la guarda en
-            # "categoria" — mismos valores (nomina/proveedor/desechables/otro),
-            # columna distinta. gastos_dia tampoco maneja arriendo/servicios
-            # (esos son gastos fijos mensuales, no de cierre diario).
+            # "categoria" — mismos códigos, columna distinta. Se suman TODOS los
+            # códigos del grupo (las 7 de El Lobo y las que haya creado la persona):
+            # el grupo manda, no el nombre. Un código fuera del mapa no se suma
+            # (huérfano: egresos_diarios() lo reporta).
             col = "cat" if "cat" in df.columns else ("categoria" if "categoria" in df.columns else None)
             if df.empty or col is None:
                 return 0.0
-            return float(df[df[col] == cat]["monto"].sum())
+            codigos = [c for c, g in grupos.items() if g == grupo]
+            return float(df[df[col].isin(codigos)]["monto"].sum())
 
         # Costo de insumos = proveedores + desechables; costo_desechables es la
         # parte de los insumos que corresponde a desechables (ya está dentro de
         # costo_insumos, NO se suma otra vez).
-        costo_desechables = suma_cat(egresos_mes, "desechables") + suma_cat(gastos_mes, "desechables")
-        costo_insumos = suma_cat(egresos_mes, "proveedor") + suma_cat(gastos_mes, "proveedor") + costo_desechables
-        nomina        = suma_cat(egresos_mes, "nomina") + suma_cat(gastos_mes, "nomina")
-        arriendo_serv = suma_cat(egresos_mes, "arriendo") + suma_cat(egresos_mes, "servicios")
-        otros         = suma_cat(egresos_mes, "otro") + suma_cat(gastos_mes, "otro")
+        costo_desechables = suma_grupo(egresos_mes, GRUPO_DESECHABLE) + suma_grupo(gastos_mes, GRUPO_DESECHABLE)
+        costo_insumos = suma_grupo(egresos_mes, "proveedor") + suma_grupo(gastos_mes, "proveedor") + costo_desechables
+        nomina        = suma_grupo(egresos_mes, "nomina") + suma_grupo(gastos_mes, "nomina")
+        arriendo_serv = suma_grupo(egresos_mes, "operativo") + suma_grupo(gastos_mes, "operativo")
+        otros         = suma_grupo(egresos_mes, "otro") + suma_grupo(gastos_mes, "otro")
 
         filas.append(dict(
             periodo=str(periodo), anio=periodo.year, mes=periodo.month,
@@ -857,6 +907,7 @@ def cargar_datos_reales(path_excel, mes_inicio=MES_INICIO_DATOS_REALES):
         cierres.drop(columns="periodo", errors="ignore"), aperturas.drop(columns="periodo", errors="ignore"),
         egresos.drop(columns="periodo", errors="ignore"), gastos_cierre.drop(columns="periodo", errors="ignore"),
         pedidos.drop(columns="periodo", errors="ignore"), pendientes.drop(columns="periodo", errors="ignore"),
+        grupos=grupos,
     )
     if not hist.empty:
         hist = enriquecer_hist(hist, diario)

@@ -339,6 +339,115 @@ class TestCargarDatosReales:
 
 
 # ───────────────────────────────────────────────────────────────────────────────────────────────
+# Categorías de egresos configurables (etapa 4): el rubro de cada gasto sale del GRUPO de su categoría
+# (hoja «Categorias_Egresos» del export), no de su nombre ni de una lista fija de 7 códigos.
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+BASE_NOMBRES = {"nomina": "Nómina", "proveedor": "Proveedores", "arriendo": "Arriendo", "servicios": "Servicios",
+                "desechables": "Desechables", "otro": "Otro", "prestamo": "Préstamo"}
+
+
+def _cat(codigo, nombre, grupo, donde="ambos", activo=True):
+    return dict(codigo=codigo, nombre=nombre, grupo=grupo, donde=donde, activo=activo)
+
+
+def _hoja_categorias(extra=(), cambios=None):
+    """Las 7 de El Lobo (como las exporta el sistema) más `extra`; `cambios` pisa campos de alguna (p. ej. renombrarla o retirarla)."""
+    base = [_cat(c, BASE_NOMBRES[c], g, d) for c, g, d in (
+        ("nomina", "nomina", "ambos"), ("proveedor", "proveedor", "ambos"), ("arriendo", "operativo", "egresos"),
+        ("servicios", "operativo", "egresos"), ("desechables", "desechable", "ambos"), ("otro", "otro", "ambos"), ("prestamo", "excluido", "cierre"))]
+    for c in base:
+        c.update((cambios or {}).get(c["codigo"], {}))
+    return pd.DataFrame(base + list(extra))
+
+
+EXTRA = [_cat("cat1", "Mantenimiento", "otro"), _cat("cat2", "Retiro del dueño", "excluido", "cierre"), _cat("cat3", "Internet", "operativo"),
+         _cat("cat5", "Envases", "desechable"), _cat("cat6", "Verduras", "proveedor"), _cat("cat7", "Bonos", "nomina")]
+
+
+def _hojas_egresos(con_hoja):
+    h = _hojas()
+    h["Egresos"] = pd.DataFrame([dict(id=i, fecha="2026-10-14", cat=c, monto=m, description="(prueba)") for i, (c, m) in enumerate([
+        ("proveedor", 30_000), ("nomina", 100_000), ("arriendo", 500_000), ("servicios", 80_000), ("desechables", 10_000), ("otro", 5_000),
+        ("cat1", 7_000), ("cat3", 25_000), ("cat5", 3_000), ("cat6", 4_000), ("cat7", 9_000), ("zzz", 1_000)], 1)])
+    h["Gastos_Cierre"] = pd.DataFrame([dict(id=i, fecha="2026-10-14", turno="almuerzo", nombre="(prueba)", monto=m, categoria=c) for i, (c, m) in enumerate([
+        ("nomina", 20_000), ("cat1", 2_000), ("cat3", 6_000), ("cat2", 77_000), ("prestamo", 50_000)], 1)])
+    if con_hoja:
+        h["Categorias_Egresos"] = _hoja_categorias(EXTRA, cambios={"nomina": {"nombre": "Sueldos"}, "servicios": {"activo": False}})
+    return h
+
+
+class TestCategoriasConfigurables:
+    def test_las_siete_de_siempre_son_las_mismas_de_los_mapas_fijos(self):
+        base = m.grupos_de_categorias(None)
+        assert {c: m.GRUPO_RUBRO[g] for c, g in base.items() if g in m.GRUPO_RUBRO} == m.MAPA_RUBRO
+        assert {c for c, g in base.items() if g == m.GRUPO_EXCLUIDO} == m.CATEGORIAS_EXCLUIDAS
+        assert set(base) == set(BASE_NOMBRES)
+
+    def test_la_hoja_con_solo_las_siete_da_lo_mismo_que_no_traer_hoja(self):
+        assert m.grupos_de_categorias(_hoja_categorias()) == m.grupos_de_categorias(None) == m.grupos_de_categorias(pd.DataFrame())
+
+    def test_un_export_viejo_sin_la_hoja_calcula_igual_que_antes(self, tmp_path):
+        solo_siete = _hojas_egresos(False)
+        sin_hoja, _, d_sin = m.cargar_datos_reales(str(_escribir_excel(tmp_path / "viejo.xlsx", solo_siete)))
+        hojas = _hojas_egresos(False); hojas["Categorias_Egresos"] = _hoja_categorias()
+        con_siete, _, d_con = m.cargar_datos_reales(str(_escribir_excel(tmp_path / "siete.xlsx", hojas)))
+        pd.testing.assert_frame_equal(sin_hoja, con_siete)
+        pd.testing.assert_frame_equal(d_sin["egresos"], d_con["egresos"])
+        h = sin_hoja.iloc[0]
+        # con solo las 7: lo de cat1/cat3/cat5/cat6/cat7/cat2/zzz es «huérfano» (no se suma)
+        assert h["nomina"] == 100_000 + 20_000 and h["costo_desechables"] == 10_000
+        assert h["costo_insumos"] == 30_000 + 10_000 and h["arriendo_servicios"] == 580_000 and h["otros_gastos"] == 5_000
+
+    def test_las_categorias_nuevas_se_suman_en_el_rubro_de_su_grupo(self, tmp_path):
+        hist, _, diario = m.cargar_datos_reales(str(_escribir_excel(tmp_path / "nuevas.xlsx", _hojas_egresos(True))))
+        h = hist.iloc[0]
+        assert h["nomina"] == 100_000 + 9_000 + 20_000                                   # nómina + Bonos (cat7) + nómina del cierre
+        assert h["costo_desechables"] == 10_000 + 3_000                                  # desechables + Envases (cat5)
+        assert h["costo_insumos"] == 30_000 + 4_000 + 13_000                             # proveedores + Verduras (cat6) + desechables
+        assert h["arriendo_servicios"] == 500_000 + 80_000 + 25_000 + 6_000              # servicios (retirada: igual suma) + Internet (egresos y cierre)
+        assert h["otros_gastos"] == 5_000 + 7_000 + 2_000                                # otro + Mantenimiento (egresos y cierre)
+        # «Retiro del dueño» (excluido) y el préstamo no entran en ningún rubro
+        total = h["nomina"] + h["costo_insumos"] + h["arriendo_servicios"] + h["otros_gastos"]
+        assert total == 129_000 + 47_000 + 611_000 + 14_000
+        # y el diario (gráficos) reparte igual que el mes
+        por_rubro = diario["egresos"].groupby("rubro")["monto"].sum().to_dict()
+        assert por_rubro == dict(insumos=47_000, nomina=129_000, arriendo_servicios=611_000, otros=14_000)
+
+    def test_renombrar_o_retirar_una_categoria_no_cambia_las_cuentas(self, tmp_path):
+        a, _, _ = m.cargar_datos_reales(str(_escribir_excel(tmp_path / "a.xlsx", _hojas_egresos(True))))
+        hojas = _hojas_egresos(True)
+        hojas["Categorias_Egresos"] = _hoja_categorias(EXTRA, cambios={"nomina": {"nombre": "Otro nombre"}, "otro": {"activo": False}, "proveedor": {"nombre": "Insumos"}})
+        b, _, _ = m.cargar_datos_reales(str(_escribir_excel(tmp_path / "b.xlsx", hojas)))
+        pd.testing.assert_frame_equal(a, b)
+
+    def test_un_codigo_que_no_esta_en_la_hoja_es_huerfano_y_se_reporta(self, tmp_path):
+        _, _, diario = m.cargar_datos_reales(str(_escribir_excel(tmp_path / "h.xlsx", _hojas_egresos(True))))
+        h = diario["egresos_huerfanos"]
+        assert h[["origen", "categoria", "n", "monto"]].values.tolist() == [["Egresos", "zzz", 1, 1_000.0]]
+
+    def test_filas_malas_de_la_hoja_se_ignoran_y_una_de_las_siete_no_cambia_de_grupo(self, capsys):
+        hoja = _hoja_categorias([_cat("cat1", "Raro", "inventado"), _cat("", "Sin código", "otro"), _cat("cat3", "Internet", "operativo"),
+                                 _cat("cat3", "Repetida", "otro"), dict(codigo=None, nombre="x", grupo="otro", donde="ambos", activo=True)],
+                                cambios={"nomina": {"grupo": "otro"}})
+        g = m.grupos_de_categorias(hoja)
+        assert "cat1" not in g and "" not in g                           # grupo inventado / sin código → huérfanas
+        assert g["cat3"] == "operativo"                                  # la primera fila de un código gana
+        assert g["nomina"] == "nomina"                                   # las de El Lobo no cambian de grupo
+        assert "se conserva «nomina»" in capsys.readouterr().out
+
+    def test_una_hoja_sin_las_columnas_esperadas_se_trata_como_export_viejo(self):
+        assert m.grupos_de_categorias(pd.DataFrame([dict(a=1)])) == m.grupos_de_categorias(None)
+
+    def test_egresos_diarios_usa_los_grupos_que_se_le_pasan(self):
+        egr = df([dict(fecha=F18, cat="cat9", monto=1_000), dict(fecha=F18, cat="cat8", monto=500), dict(fecha=F18, cat="nomina", monto=200)])
+        largo, huerf = m.egresos_diarios(egr, None, {"nomina": "nomina", "cat9": "desechable", "cat8": "excluido"})
+        assert largo.groupby("rubro")["monto"].sum().to_dict() == dict(insumos=1_000, nomina=200)     # cat8 excluida: ni suma ni es huérfana
+        assert huerf.empty
+        largo2, huerf2 = m.egresos_diarios(egr, None)                                                  # sin grupos: solo las 7 de siempre
+        assert largo2["monto"].sum() == 200 and sorted(huerf2["categoria"]) == ["cat8", "cat9"]
+
+
+# ───────────────────────────────────────────────────────────────────────────────────────────────
 # El libro de Excel: las filas informativas existen y NO cambian ingresos ni utilidad.
 # ───────────────────────────────────────────────────────────────────────────────────────────────
 def _fila(ws, texto):

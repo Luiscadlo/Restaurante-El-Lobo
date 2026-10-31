@@ -75,6 +75,8 @@ function validarConfiguracion(clave, valor) {
     return null;
   }
   if (CLAVES_CATALOGO.includes(clave)) { const m = validarCatalogo(clave, valor); return m ? mal(m) : null; }
+  if (clave === 'categorias_egresos') { const m = validarCategorias(valor); return m ? mal(m) : null; }
+  if (clave === 'nombres_cuentas') { const m = validarCuentas(valor); return m ? mal(m) : null; }
   return { code: '22023', message: `La configuración "${clave}" no existe.`, details: 'configuracion_clave_desconocida', hint: null };
 }
 
@@ -129,12 +131,80 @@ function validarCatalogo(clave, valor) {
 }
 // La versión nueva debe traer todos los códigos de la anterior (por «vigente desde», luego por id).
 function validarCatalogoHistoria(clave, valor, filas) {
-  if (clave !== 'catalogo_almuerzos' && clave !== 'catalogo_rapidas') return null;
+  if (clave !== 'catalogo_almuerzos' && clave !== 'catalogo_rapidas' && clave !== 'categorias_egresos') return null;
   const previas = (filas || []).filter(f => f.clave === clave).sort((a, b) => (String(a.vigente_desde) < String(b.vigente_desde) ? -1 : String(a.vigente_desde) > String(b.vigente_desde) ? 1 : (a.id || 0) - (b.id || 0)));
   const ultima = previas[previas.length - 1];
   if (!ultima || !Array.isArray(ultima.valor)) return null;
   const faltan = ultima.valor.filter(x => x && 'codigo' in x && !valor.some(y => y.codigo === x.codigo)).map(x => x.codigo);
-  return faltan.length ? `No se pueden borrar productos (${faltan.join(', ')}): se retiran, para que los pedidos viejos se sigan mostrando.` : null;
+  if (faltan.length) return clave === 'categorias_egresos'
+    ? `No se pueden borrar categorías (${faltan.join(', ')}): se retiran, para que los gastos viejos se sigan mostrando.`
+    : `No se pueden borrar productos (${faltan.join(', ')}): se retiran, para que los pedidos viejos se sigan mostrando.`;
+  if (clave === 'categorias_egresos') {
+    const cambian = ultima.valor.filter(x => x && 'codigo' in x && valor.some(y => y.codigo === x.codigo && y.grupo !== x.grupo)).map(x => x.codigo);
+    if (cambian.length) return `No se puede cambiar el grupo de una categoría ya creada (${cambian.join(', ')}): lo que ya se registró seguiría contándose distinto.`;
+  }
+  return null;
+}
+
+// Réplica de seguridad.validar_categorias_egresos y seguridad.validar_nombres_cuentas (sql/configuracion_etapa_4.sql), escrita
+// aparte del código de la página a propósito. Devuelve null o el texto del error.
+const CATEGORIAS_BASE = [['nomina', 'nomina'], ['proveedor', 'proveedor'], ['arriendo', 'operativo'], ['servicios', 'operativo'], ['desechables', 'desechable'], ['otro', 'otro'], ['prestamo', 'excluido']];
+function validarCategorias(valor) {
+  const que = 'La lista de categorías de egresos';
+  if (!Array.isArray(valor)) return `${que} debe ser una lista.`;
+  if (valor.length < 7 || valor.length > 40) return `${que} trae ${valor.length} categorías y esa cantidad no es válida.`;
+  const cuenta = s => [...s].length;
+  const sinBorde = s => s.replace(/^ +| +$/g, '');
+  const prohibido = s => /[<>&"'`\\\u0000-\u001f\u007f]/.test(s);
+  const codigos = [], nombres = [];
+  for (const it of valor) {
+    if (it === null || typeof it !== 'object' || Array.isArray(it)) return `${que} trae una categoría mal formada.`;
+    if (Object.keys(it).sort().join(',') !== 'activo,codigo,donde,grupo,nombre') return `${que} trae una categoría con campos que no corresponden.`;
+    if (typeof it.nombre !== 'string') return 'El nombre de cada categoría debe ser un texto.';
+    if (cuenta(it.nombre) < 1 || cuenta(it.nombre) > 40 || it.nombre !== sinBorde(it.nombre)) return 'El nombre de cada categoría debe tener entre 1 y 40 caracteres, sin espacios al principio ni al final.';
+    if (prohibido(it.nombre)) return 'Los nombres no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    if (nombres.includes(it.nombre.toLowerCase())) return `El nombre de categoría "${it.nombre}" está repetido.`;
+    nombres.push(it.nombre.toLowerCase());
+    if (typeof it.codigo !== 'string') return `El código de "${it.nombre}" debe ser un texto.`;
+    if (!/^[a-z][a-z0-9_]{1,15}$/.test(it.codigo)) return `El código "${it.codigo}" no sirve: una letra minúscula seguida de 1 a 15 letras minúsculas, números o guion bajo.`;
+    if (codigos.includes(it.codigo)) return `El código "${it.codigo}" está repetido.`;
+    codigos.push(it.codigo);
+    if (!['nomina', 'proveedor', 'operativo', 'desechable', 'otro', 'excluido'].includes(it.grupo)) return `El grupo de "${it.nombre}" no es válido.`;
+    if (!['egresos', 'cierre', 'ambos'].includes(it.donde)) return `El lugar de uso de "${it.nombre}" no es válido (egresos, cierre o ambos).`;
+    if (it.grupo === 'excluido' && it.donde !== 'cierre') return `"${it.nombre}" no cuenta como egreso, así que solo puede usarse en el cierre.`;
+    const base = CATEGORIAS_BASE.find(b => b[0] === it.codigo);
+    if (base && base[1] !== it.grupo) return `La categoría "${it.nombre}" es de El Lobo y no puede cambiar de grupo.`;
+    if (typeof it.activo !== 'boolean') return `"${it.nombre}" debe estar activa o retirada (verdadero o falso).`;
+  }
+  if (CATEGORIAS_BASE.some(b => !codigos.includes(b[0]))) return `${que} no puede quitar categorías de El Lobo: se retiran, no se borran.`;
+  if (!valor.some(c => c.activo && ['egresos', 'ambos'].includes(c.donde))) return 'Debe quedar al menos una categoría activa para registrar egresos.';
+  if (!valor.some(c => c.activo && ['cierre', 'ambos'].includes(c.donde))) return 'Debe quedar al menos una categoría activa para el cierre del día.';
+  return null;
+}
+function validarCuentas(valor) {
+  if (!Array.isArray(valor)) return 'Los nombres de las cuentas deben ser una lista.';
+  if (valor.length !== 3) return `Los nombres de las cuentas traen ${valor.length} cuentas y deben ser exactamente 3.`;
+  const cuenta = s => [...s].length;
+  const sinBorde = s => s.replace(/^ +| +$/g, '');
+  const prohibido = s => /[<>&"'`\\\u0000-\u001f\u007f]/.test(s);
+  const codigos = [], nombres = [];
+  for (const it of valor) {
+    if (it === null || typeof it !== 'object' || Array.isArray(it)) return 'Los nombres de las cuentas traen una cuenta mal formada.';
+    if (Object.keys(it).sort().join(',') !== 'codigo,emoji,nombre') return 'Los nombres de las cuentas traen una cuenta con campos que no corresponden.';
+    if (typeof it.codigo !== 'string') return 'El código de cada cuenta debe ser un texto.';
+    if (!['efectivo', 'transf_almuerzos', 'transf_rapidas'].includes(it.codigo)) return `El código de cuenta "${it.codigo}" no existe.`;
+    if (codigos.includes(it.codigo)) return `La cuenta "${it.codigo}" está repetida.`;
+    codigos.push(it.codigo);
+    if (typeof it.nombre !== 'string') return 'El nombre de cada cuenta debe ser un texto.';
+    if (cuenta(it.nombre) < 1 || cuenta(it.nombre) > 30 || it.nombre !== sinBorde(it.nombre)) return 'El nombre de cada cuenta debe tener entre 1 y 30 caracteres, sin espacios al principio ni al final.';
+    if (prohibido(it.nombre)) return 'Los nombres no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    if (nombres.includes(it.nombre.toLowerCase())) return `El nombre de cuenta "${it.nombre}" está repetido.`;
+    nombres.push(it.nombre.toLowerCase());
+    if (typeof it.emoji !== 'string') return 'El símbolo de cada cuenta debe ser un texto.';
+    if (cuenta(it.emoji) > 8 || it.emoji !== sinBorde(it.emoji)) return 'El símbolo de cada cuenta puede tener hasta 8 caracteres, sin espacios al principio ni al final.';
+    if (prohibido(it.emoji)) return 'Los símbolos no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+  }
+  return null;
 }
 const b64url = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
 
@@ -463,4 +533,4 @@ async function abrirSistema(page, opciones = {}) {
   return reg;
 }
 
-module.exports = { abrirSistema, CODIGOS_BASE, TABLAS_LOADSTATE, TABLAS_CAJA, TABLAS_SOLO_ADMIN, USUARIOS, USUARIO_POR_ROL, URL_HTML, FECHA_HOY };
+module.exports = { abrirSistema, CODIGOS_BASE, CATEGORIAS_BASE, TABLAS_LOADSTATE, TABLAS_CAJA, TABLAS_SOLO_ADMIN, USUARIOS, USUARIO_POR_ROL, URL_HTML, FECHA_HOY };
