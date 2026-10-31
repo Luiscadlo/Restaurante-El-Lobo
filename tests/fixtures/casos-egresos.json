@@ -1,0 +1,1012 @@
+{
+ "comentario": "Casos compartidos por las pruebas de Python (Postgres real), de la pantalla y del servidor falso para categorías de egresos y nombres de cuentas: las tres reglas deben dar el MISMO veredicto y el MISMO mensaje. «mensaje» null = válido. Cada caso parte de la lista base de El Lobo y le aplica: quitar (posiciones), mod (posición → campos), sin (posición → campos que se borran), agregar (elementos al final, tal cual), relleno (n categorías válidas al final); o trae su «valor» completo.",
+ "casos": [
+  {
+   "id": "categorias: las 7 de El Lobo",
+   "clave": "categorias_egresos",
+   "mensaje": null
+  },
+  {
+   "id": "categorias: se cambia un nombre",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "nombre": "Sueldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: el nombre puede tener tildes, ñ y emoji",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "mod": {
+    "4": {
+     "nombre": "Desechables y envases ☕"
+    }
+   }
+  },
+  {
+   "id": "categorias: nueva de grupo «otro» en ambos lados",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "cat1",
+     "nombre": "Mantenimiento",
+     "grupo": "otro",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: nueva de grupo «excluido» solo en el cierre",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "cat1",
+     "nombre": "Retiro del dueño",
+     "grupo": "excluido",
+     "donde": "cierre",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: nueva de grupo «operativo» solo en Egresos",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "cat1",
+     "nombre": "Internet",
+     "grupo": "operativo",
+     "donde": "egresos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: nueva de grupo «nomina» (mismo grupo que una de El Lobo)",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "cat1",
+     "nombre": "Prima de servicios",
+     "grupo": "nomina",
+     "donde": "egresos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: nueva ya retirada",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "cat1",
+     "nombre": "Vieja",
+     "grupo": "otro",
+     "donde": "ambos",
+     "activo": false
+    }
+   ]
+  },
+  {
+   "id": "categorias: se retira una categoría",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "mod": {
+    "5": {
+     "activo": false
+    }
+   }
+  },
+  {
+   "id": "categorias: arriendo y servicios también en el cierre",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "mod": {
+    "2": {
+     "donde": "ambos"
+    },
+    "3": {
+     "donde": "ambos"
+    }
+   }
+  },
+  {
+   "id": "categorias: préstamo con otro nombre",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "mod": {
+    "6": {
+     "nombre": "Adelanto del dueño"
+    }
+   }
+  },
+  {
+   "id": "categorias: código con guion bajo y números",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "mant_2026",
+     "nombre": "Mantenimiento 2026",
+     "grupo": "otro",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: 40 en total",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "relleno": 33
+  },
+  {
+   "id": "categorias: nombre de 40 caracteres",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "nombre": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
+    }
+   }
+  },
+  {
+   "id": "categorias: no es una lista (texto)",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos debe ser una lista.",
+   "valor": "hola"
+  },
+  {
+   "id": "categorias: no es una lista (objeto)",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos debe ser una lista.",
+   "valor": {}
+  },
+  {
+   "id": "categorias: 6 en total",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos trae 6 categorías y esa cantidad no es válida.",
+   "quitar": [
+    6
+   ]
+  },
+  {
+   "id": "categorias: 41 en total",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos trae 41 categorías y esa cantidad no es válida.",
+   "relleno": 34
+  },
+  {
+   "id": "categorias: una categoría que no es objeto",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos trae una categoría mal formada.",
+   "agregar": [
+    null
+   ]
+  },
+  {
+   "id": "categorias: una categoría que es una lista",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos trae una categoría mal formada.",
+   "agregar": [
+    [
+     1
+    ]
+   ]
+  },
+  {
+   "id": "categorias: campo de más",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos trae una categoría con campos que no corresponden.",
+   "mod": {
+    "0": {
+     "extra": 1
+    }
+   }
+  },
+  {
+   "id": "categorias: campo de menos",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos trae una categoría con campos que no corresponden.",
+   "sin": {
+    "0": [
+     "donde"
+    ]
+   }
+  },
+  {
+   "id": "categorias: nombre que no es texto",
+   "clave": "categorias_egresos",
+   "mensaje": "El nombre de cada categoría debe ser un texto.",
+   "mod": {
+    "0": {
+     "nombre": 5
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre vacío",
+   "clave": "categorias_egresos",
+   "mensaje": "El nombre de cada categoría debe tener entre 1 y 40 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": ""
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre de 41 caracteres",
+   "clave": "categorias_egresos",
+   "mensaje": "El nombre de cada categoría debe tener entre 1 y 40 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con espacio al principio",
+   "clave": "categorias_egresos",
+   "mensaje": "El nombre de cada categoría debe tener entre 1 y 40 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": " Sueldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con espacio al final",
+   "clave": "categorias_egresos",
+   "mensaje": "El nombre de cada categoría debe tener entre 1 y 40 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "Sueldos "
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con «menor»",
+   "clave": "categorias_egresos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sue<ldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con «mayor»",
+   "clave": "categorias_egresos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sue>ldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con «ampersand»",
+   "clave": "categorias_egresos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sue&ldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con «comillas»",
+   "clave": "categorias_egresos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sue\"ldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con «apóstrofo»",
+   "clave": "categorias_egresos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sue'ldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con «tilde»",
+   "clave": "categorias_egresos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sue`ldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con «barra»",
+   "clave": "categorias_egresos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sue\\ldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre con salto de línea",
+   "clave": "categorias_egresos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sue\nldos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre repetido (sin importar mayúsculas)",
+   "clave": "categorias_egresos",
+   "mensaje": "El nombre de categoría \"Proveedores\" está repetido.",
+   "mod": {
+    "0": {
+     "nombre": "proveedores"
+    }
+   }
+  },
+  {
+   "id": "categorias: nombre repetido con una nueva",
+   "clave": "categorias_egresos",
+   "mensaje": "El nombre de categoría \"Otro\" está repetido.",
+   "agregar": [
+    {
+     "codigo": "cat1",
+     "nombre": "Otro",
+     "grupo": "otro",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: código que no es texto",
+   "clave": "categorias_egresos",
+   "mensaje": "El código de \"Nómina\" debe ser un texto.",
+   "mod": {
+    "0": {
+     "codigo": 5
+    }
+   }
+  },
+  {
+   "id": "categorias: código con mayúscula",
+   "clave": "categorias_egresos",
+   "mensaje": "El código \"Cat1\" no sirve: una letra minúscula seguida de 1 a 15 letras minúsculas, números o guion bajo.",
+   "agregar": [
+    {
+     "codigo": "Cat1",
+     "nombre": "Mantenimiento",
+     "grupo": "otro",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: código de una sola letra",
+   "clave": "categorias_egresos",
+   "mensaje": "El código \"c\" no sirve: una letra minúscula seguida de 1 a 15 letras minúsculas, números o guion bajo.",
+   "agregar": [
+    {
+     "codigo": "c",
+     "nombre": "Mantenimiento",
+     "grupo": "otro",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: código que empieza con número",
+   "clave": "categorias_egresos",
+   "mensaje": "El código \"1cat\" no sirve: una letra minúscula seguida de 1 a 15 letras minúsculas, números o guion bajo.",
+   "agregar": [
+    {
+     "codigo": "1cat",
+     "nombre": "Mantenimiento",
+     "grupo": "otro",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: código de 17 caracteres",
+   "clave": "categorias_egresos",
+   "mensaje": "El código \"abcdefghijklmnopq\" no sirve: una letra minúscula seguida de 1 a 15 letras minúsculas, números o guion bajo.",
+   "agregar": [
+    {
+     "codigo": "abcdefghijklmnopq",
+     "nombre": "Mantenimiento",
+     "grupo": "otro",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: código con guion",
+   "clave": "categorias_egresos",
+   "mensaje": "El código \"mi-cat\" no sirve: una letra minúscula seguida de 1 a 15 letras minúsculas, números o guion bajo.",
+   "agregar": [
+    {
+     "codigo": "mi-cat",
+     "nombre": "Mantenimiento",
+     "grupo": "otro",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: código repetido",
+   "clave": "categorias_egresos",
+   "mensaje": "El código \"nomina\" está repetido.",
+   "agregar": [
+    {
+     "codigo": "nomina",
+     "nombre": "Otra nómina",
+     "grupo": "nomina",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: grupo que no existe",
+   "clave": "categorias_egresos",
+   "mensaje": "El grupo de \"Nómina\" no es válido.",
+   "mod": {
+    "0": {
+     "grupo": "inventado"
+    }
+   }
+  },
+  {
+   "id": "categorias: grupo que no es texto",
+   "clave": "categorias_egresos",
+   "mensaje": "El grupo de \"Nómina\" no es válido.",
+   "mod": {
+    "0": {
+     "grupo": 7
+    }
+   }
+  },
+  {
+   "id": "categorias: «dónde» que no existe",
+   "clave": "categorias_egresos",
+   "mensaje": "El lugar de uso de \"Nómina\" no es válido (egresos, cierre o ambos).",
+   "mod": {
+    "0": {
+     "donde": "afuera"
+    }
+   }
+  },
+  {
+   "id": "categorias: «dónde» que no es texto",
+   "clave": "categorias_egresos",
+   "mensaje": "El lugar de uso de \"Nómina\" no es válido (egresos, cierre o ambos).",
+   "mod": {
+    "0": {
+     "donde": null
+    }
+   }
+  },
+  {
+   "id": "categorias: lo que no cuenta como egreso en «ambos»",
+   "clave": "categorias_egresos",
+   "mensaje": "\"Préstamo\" no cuenta como egreso, así que solo puede usarse en el cierre.",
+   "mod": {
+    "6": {
+     "donde": "ambos"
+    }
+   }
+  },
+  {
+   "id": "categorias: lo que no cuenta como egreso en «egresos»",
+   "clave": "categorias_egresos",
+   "mensaje": "\"Préstamo\" no cuenta como egreso, así que solo puede usarse en el cierre.",
+   "mod": {
+    "6": {
+     "donde": "egresos"
+    }
+   }
+  },
+  {
+   "id": "categorias: nueva «excluida» en «ambos»",
+   "clave": "categorias_egresos",
+   "mensaje": "\"Retiro\" no cuenta como egreso, así que solo puede usarse en el cierre.",
+   "agregar": [
+    {
+     "codigo": "cat1",
+     "nombre": "Retiro",
+     "grupo": "excluido",
+     "donde": "ambos",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "categorias: una de El Lobo cambia de grupo",
+   "clave": "categorias_egresos",
+   "mensaje": "La categoría \"Nómina\" es de El Lobo y no puede cambiar de grupo.",
+   "mod": {
+    "0": {
+     "grupo": "otro"
+    }
+   }
+  },
+  {
+   "id": "categorias: el préstamo pasa a contar como egreso",
+   "clave": "categorias_egresos",
+   "mensaje": "La categoría \"Préstamo\" es de El Lobo y no puede cambiar de grupo.",
+   "mod": {
+    "6": {
+     "grupo": "otro",
+     "donde": "ambos"
+    }
+   }
+  },
+  {
+   "id": "categorias: activa que no es verdadero/falso",
+   "clave": "categorias_egresos",
+   "mensaje": "\"Nómina\" debe estar activa o retirada (verdadero o falso).",
+   "mod": {
+    "0": {
+     "activo": "si"
+    }
+   }
+  },
+  {
+   "id": "categorias: sin la primera de El Lobo",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos no puede quitar categorías de El Lobo: se retiran, no se borran.",
+   "quitar": [
+    0
+   ],
+   "relleno": 1
+  },
+  {
+   "id": "categorias: sin el préstamo",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos no puede quitar categorías de El Lobo: se retiran, no se borran.",
+   "quitar": [
+    6
+   ],
+   "relleno": 1
+  },
+  {
+   "id": "categorias: un código de El Lobo cambiado por otro",
+   "clave": "categorias_egresos",
+   "mensaje": "La lista de categorías de egresos no puede quitar categorías de El Lobo: se retiran, no se borran.",
+   "mod": {
+    "2": {
+     "codigo": "renta"
+    }
+   }
+  },
+  {
+   "id": "categorias: ninguna activa para Egresos",
+   "clave": "categorias_egresos",
+   "mensaje": "Debe quedar al menos una categoría activa para registrar egresos.",
+   "mod": {
+    "0": {
+     "activo": false
+    },
+    "1": {
+     "activo": false
+    },
+    "2": {
+     "activo": false
+    },
+    "3": {
+     "activo": false
+    },
+    "4": {
+     "activo": false
+    },
+    "5": {
+     "activo": false
+    }
+   }
+  },
+  {
+   "id": "categorias: ninguna activa para el cierre",
+   "clave": "categorias_egresos",
+   "mensaje": "Debe quedar al menos una categoría activa para el cierre del día.",
+   "mod": {
+    "0": {
+     "activo": false
+    },
+    "1": {
+     "activo": false
+    },
+    "4": {
+     "activo": false
+    },
+    "5": {
+     "activo": false
+    },
+    "6": {
+     "activo": false
+    }
+   }
+  },
+  {
+   "id": "categorias: para el cierre solo queda una nueva",
+   "clave": "categorias_egresos",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "activo": false
+    },
+    "1": {
+     "activo": false
+    },
+    "4": {
+     "activo": false
+    },
+    "5": {
+     "activo": false
+    },
+    "6": {
+     "activo": false
+    }
+   },
+   "agregar": [
+    {
+     "codigo": "cat1",
+     "nombre": "Solo cierre",
+     "grupo": "otro",
+     "donde": "cierre",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "cuentas: las 3 de El Lobo",
+   "clave": "nombres_cuentas",
+   "mensaje": null
+  },
+  {
+   "id": "cuentas: se cambia un nombre y su símbolo",
+   "clave": "nombres_cuentas",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "nombre": "Caja menor",
+     "emoji": "💰"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo vacío",
+   "clave": "nombres_cuentas",
+   "mensaje": null,
+   "mod": {
+    "1": {
+     "emoji": ""
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo de 8 caracteres",
+   "clave": "nombres_cuentas",
+   "mensaje": null,
+   "mod": {
+    "1": {
+     "emoji": "😀😀😀😀😀😀😀😀"
+    }
+   }
+  },
+  {
+   "id": "cuentas: nombre de 30 caracteres",
+   "clave": "nombres_cuentas",
+   "mensaje": null,
+   "mod": {
+    "2": {
+     "nombre": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    }
+   }
+  },
+  {
+   "id": "cuentas: nombre con punto y paréntesis",
+   "clave": "nombres_cuentas",
+   "mensaje": null,
+   "mod": {
+    "2": {
+     "nombre": "Nequi (Comidas rápidas)"
+    }
+   }
+  },
+  {
+   "id": "cuentas: no es una lista",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los nombres de las cuentas deben ser una lista.",
+   "valor": "hola"
+  },
+  {
+   "id": "cuentas: solo 2",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los nombres de las cuentas traen 2 cuentas y deben ser exactamente 3.",
+   "quitar": [
+    2
+   ]
+  },
+  {
+   "id": "cuentas: 4",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los nombres de las cuentas traen 4 cuentas y deben ser exactamente 3.",
+   "agregar": [
+    {
+     "codigo": "otra",
+     "emoji": "",
+     "nombre": "Otra"
+    }
+   ]
+  },
+  {
+   "id": "cuentas: una cuenta que no es objeto",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los nombres de las cuentas traen una cuenta mal formada.",
+   "quitar": [
+    2
+   ],
+   "agregar": [
+    null
+   ]
+  },
+  {
+   "id": "cuentas: campo de más",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los nombres de las cuentas traen una cuenta con campos que no corresponden.",
+   "mod": {
+    "0": {
+     "extra": 1
+    }
+   }
+  },
+  {
+   "id": "cuentas: campo de menos",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los nombres de las cuentas traen una cuenta con campos que no corresponden.",
+   "sin": {
+    "0": [
+     "emoji"
+    ]
+   }
+  },
+  {
+   "id": "cuentas: código que no es texto",
+   "clave": "nombres_cuentas",
+   "mensaje": "El código de cada cuenta debe ser un texto.",
+   "mod": {
+    "0": {
+     "codigo": 3
+    }
+   }
+  },
+  {
+   "id": "cuentas: código que no existe",
+   "clave": "nombres_cuentas",
+   "mensaje": "El código de cuenta \"banco\" no existe.",
+   "mod": {
+    "0": {
+     "codigo": "banco"
+    }
+   }
+  },
+  {
+   "id": "cuentas: código repetido",
+   "clave": "nombres_cuentas",
+   "mensaje": "La cuenta \"efectivo\" está repetida.",
+   "mod": {
+    "2": {
+     "codigo": "efectivo"
+    }
+   }
+  },
+  {
+   "id": "cuentas: nombre que no es texto",
+   "clave": "nombres_cuentas",
+   "mensaje": "El nombre de cada cuenta debe ser un texto.",
+   "mod": {
+    "0": {
+     "nombre": 4
+    }
+   }
+  },
+  {
+   "id": "cuentas: nombre vacío",
+   "clave": "nombres_cuentas",
+   "mensaje": "El nombre de cada cuenta debe tener entre 1 y 30 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": ""
+    }
+   }
+  },
+  {
+   "id": "cuentas: nombre de 31 caracteres",
+   "clave": "nombres_cuentas",
+   "mensaje": "El nombre de cada cuenta debe tener entre 1 y 30 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+    }
+   }
+  },
+  {
+   "id": "cuentas: nombre con espacio al borde",
+   "clave": "nombres_cuentas",
+   "mensaje": "El nombre de cada cuenta debe tener entre 1 y 30 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": " Caja"
+    }
+   }
+  },
+  {
+   "id": "cuentas: nombre con «<»",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Ca<ja"
+    }
+   }
+  },
+  {
+   "id": "cuentas: nombre con comillas",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Ca\"ja"
+    }
+   }
+  },
+  {
+   "id": "cuentas: nombre repetido (sin importar mayúsculas)",
+   "clave": "nombres_cuentas",
+   "mensaje": "El nombre de cuenta \"transf. almuerzos\" está repetido.",
+   "mod": {
+    "0": {
+     "nombre": "Transf. Almuerzos"
+    },
+    "1": {
+     "nombre": "transf. almuerzos"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo que no es texto",
+   "clave": "nombres_cuentas",
+   "mensaje": "El símbolo de cada cuenta debe ser un texto.",
+   "mod": {
+    "0": {
+     "emoji": 9
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo de 9 caracteres",
+   "clave": "nombres_cuentas",
+   "mensaje": "El símbolo de cada cuenta puede tener hasta 8 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "emoji": "😀😀😀😀😀😀😀😀😀"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con espacio al borde",
+   "clave": "nombres_cuentas",
+   "mensaje": "El símbolo de cada cuenta puede tener hasta 8 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "emoji": " 💵"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con «<»",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "<"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con «>»",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": ">"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con «&»",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "&"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con comillas dobles",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "\""
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con comilla simple",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "'"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con tilde invertida",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "`"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con barra invertida",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "\\"
+    }
+   }
+  },
+  {
+   "id": "cuentas: símbolo con un carácter de control",
+   "clave": "nombres_cuentas",
+   "mensaje": "Los símbolos no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "emoji": "\u0007"
+    }
+   }
+  }
+ ]
+}

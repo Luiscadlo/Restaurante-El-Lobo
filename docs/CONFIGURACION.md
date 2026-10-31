@@ -1,8 +1,8 @@
-# ⚙️ Configuración del negocio (etapas 1 y 2)
+# ⚙️ Configuración del negocio (etapas 1, 2 y 4)
 
 Pestaña **⚙️ Configuración** — solo el administrador. Aquí se cambian los valores que antes estaban escritos a mano en el
 código. La **etapa 1** (nombre, mesas, recargos, respaldo) y la **etapa 2** (🍽️ **Productos y precios**, más abajo) viven en
-la misma tabla y la misma pantalla. Las siguientes (categorías de egresos y cuentas, finanzas) se suman igual.
+la misma tabla y la misma pantalla; igual la **etapa 4** (🧾 **Egresos y cuentas**, más abajo). Las siguientes (finanzas) se suman igual.
 
 ## Regla de oro
 
@@ -120,6 +120,64 @@ Hasta que se instale, la pantalla muestra «falta instalar» y los botones queda
 **Lo que NO está en El Lobo**: ocultar secciones, horarios y turnos, y la plantilla de imagen del menú se dejan para una copia
 del sistema pensada para otros tipos de negocio (fase 2).
 
+## 🧾 Egresos y cuentas (etapa 4)
+
+Dos paneles al final de la pestaña. Cada uno guarda su lista **completa** como una versión nueva (con «vigente desde» y quién la hizo).
+
+### Categorías de egresos y gastos
+
+Las categorías con las que se clasifican los gastos del cierre del día y los egresos. Las 7 de El Lobo (Nómina, Proveedores,
+Arriendo, Servicios, Desechables, Otro y Préstamo) ya vienen; la persona puede **cambiar el nombre**, decidir **dónde se usa**,
+**retirar** o reactivar, y **crear categorías nuevas**.
+
+| Campo | Qué hace | Se puede cambiar |
+|---|---|---|
+| Código | Lo que guardan los gastos (`nomina`, `proveedor`… y `cat1`, `cat2`… para las nuevas) | Nunca |
+| Nombre | Lo que se ve en listas, tablas, colores y reportes (1–40 caracteres, sin los signos de código de siempre, sin repetir) | Siempre |
+| **Grupo** | En qué casilla de los reportes y del modelo financiero se suma: Nómina · Proveedores (insumos) · Arriendo y servicios · Desechables · Otros gastos · **No cuenta como egreso** | **Solo al crearla; después nunca** |
+| Se usa | Solo en Egresos · solo en el cierre del día · en los dos. «No cuenta como egreso» solo va al cierre | Siempre |
+| Estado | Activa o retirada | Siempre |
+
+- **Por qué el grupo no cambia:** si una categoría pasara de «Otros» a «Nómina», todos los gastos que ya registraste se moverían
+  de casilla y los reportes de meses cerrados cambiarían. La base de datos lo impide (y también que se borre una categoría).
+- **«No cuenta como egreso»** es para plata que sale de la caja pero no es un gasto del negocio (como los préstamos): resta de
+  la caja esperada del día, pero no entra a Egresos, al Tablero ni al modelo financiero.
+- **Retirar** una categoría la quita de las listas para registrar, pero los gastos viejos la siguen mostrando (y al editarlos se
+  puede conservar). El filtro del historial de Egresos sigue ofreciéndola como «(retirada)».
+- Debe quedar al menos una categoría activa para Egresos y una para el cierre.
+- Las **sumas** (Egresos, Ingresos financiero, Tablero, modelo financiero) siguen el **grupo**, no el nombre: una categoría
+  nueva «Mantenimiento» de grupo *Otros gastos* suma en «Otros».
+- Los nombres que ves son **siempre los de hoy**, también en gastos viejos; los montos y los códigos guardados no cambian.
+- Mientras no cambies el nombre de una categoría de siempre, las listas de los formularios conservan su rótulo largo de
+  siempre («Nómina de empleados», «Servicios públicos», «Préstamos (no cuenta como egreso)»).
+
+### Nombres de las cuentas
+
+Cómo se llaman las **3 cuentas** de la caja (efectivo y las dos de transferencia): símbolo (hasta 8 caracteres, puede quedar
+vacío) y nombre (1–30, sin repetir). Las cuentas siguen siendo las mismas y **sus saldos no cambian**; aquí no se crean cuentas
+nuevas. Mientras una cuenta conserve su nombre de siempre, las tarjetas de Caja conservan su rótulo largo
+(«☀️ Transferencia — Almuerzos»).
+
+### Cómo se usa, qué cambia y qué no
+
+Igual que Productos y precios: escribe sobre la tabla (la fila cambiada se marca, «N cambios sin guardar»), **Guardar cambios** y
+confirma la ventana que lo cuenta en palabras («Nombre: «Nómina» → «Sueldos»», «➕ Nueva categoría: Mantenimiento · Otros gastos ·
+en Egresos y en el cierre», «🚫 Se retira: Otro»). **Descartar** deshace lo escrito. Si otro administrador cambió lo mismo mientras
+tanto, no se pisa su cambio. Lo guardado rige desde ese momento en todo el sistema (sin recargar); los demás equipos lo toman al
+recargar. **Sin nada guardado todo se ve y suma exactamente igual que antes** (una prueba lo compara con la versión anterior).
+
+### Modelo financiero (Python)
+
+El Excel de «Exportar a Excel» trae dos hojas nuevas: `Categorias_Egresos` (código, nombre, grupo, se usa, activa) y
+`Nombres_Cuentas`. El generador del modelo lee el **grupo** de cada código para saber en qué rubro suma (Proveedores y
+Desechables → insumos; Nómina; Arriendo y servicios; Otros; «No cuenta como egreso» se descarta). Un export viejo, sin la hoja,
+usa las 7 de El Lobo. Un código que no esté en la hoja es «huérfano»: no se suma y se avisa por consola.
+
+**Instalación**: `sql/configuracion_etapa_4.sql` (después de las etapas 1 y 2; una transacción; seguro de repetir; no toca ningún
+dato). Verificación esperada: `categorias_instaladas = true · disparador = 1 · anon_con_permisos = false`. Para deshacer:
+`sql/rollback_configuracion_etapa_4.sql` (deja la base como al terminar la etapa 2; **no** borra lo guardado). Hasta que se
+instale, la pantalla muestra «falta instalar» y los botones quedan apagados.
+
 ## Respaldos
 
 - El **Respaldo completo** incluye la historia de la configuración (17 tablas).
@@ -138,3 +196,7 @@ del sistema pensada para otros tipos de negocio (fase 2).
 | **Etapa 2 · base de datos real:** 95 casos de validación con su mensaje exacto, «los productos se retiran, no se borran», sellos, permisos, instalar sobre la etapa 1, repetir, rollback | `tests/python/test_configuracion_etapa_2.py` |
 | **Etapa 2 · pantalla:** sin catálogo guardado = idéntico a antes; precios, nombres, retirados, categorías nuevas; pedidos viejos con su precio de entonces; edición, confirmación, validaciones, cambios simultáneos, permisos; y los **mismos 95 casos** contra la pantalla y el servidor falso | `tests/configuracion-productos.spec.js` + `tests/fixtures/casos-catalogo.json` |
 | Foto de cómo se veía todo antes de la etapa 2 | `tests/fixtures/catalogo-anterior.json` |
+| **Etapa 4 · base de datos real:** 93 casos compartidos con su mensaje exacto (categorías y cuentas), «las categorías se retiran, no se borran», «el grupo no cambia», sellos, permisos, instalar sobre las etapas 1 y 2, repetir, rollback | `tests/python/test_configuracion_etapa_4.py` |
+| **Etapa 4 · pantalla:** sin nada guardado = idéntico a antes (foto de 9 vistas); listas, etiquetas, colores y sumas por grupo con categorías y nombres de cuentas guardados; edición, confirmación, validaciones, cambios simultáneos, permisos; y los **mismos 93 casos** contra la pantalla y el servidor falso | `tests/configuracion-egresos.spec.js` + `tests/fixtures/casos-egresos.json` |
+| Foto de cómo se veía todo antes de la etapa 4 | `tests/fixtures/egresos-anterior.json` |
+| Modelo financiero: el rubro sale del grupo (categorías nuevas, renombradas, retiradas, excluidas, huérfanas, export viejo) | `tests/python/test_motor_funciones.py` → `TestCategoriasConfigurables` |

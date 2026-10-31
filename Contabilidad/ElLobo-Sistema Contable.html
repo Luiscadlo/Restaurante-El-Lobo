@@ -1043,21 +1043,10 @@
           <div class="form-row-3">
             <div class="form-group"><label>Fecha</label><input type="date" id="egr-fecha"></div>
             <div class="form-group"><label>Categoría</label>
-              <select id="egr-cat">
-                <option value="nomina">Nómina de empleados</option>
-                <option value="proveedor">Proveedores</option>
-                <option value="arriendo">Arriendo</option>
-                <option value="servicios">Servicios públicos</option>
-                <option value="desechables">Desechables</option>
-                <option value="otro">Otro</option>
-              </select>
+              <select id="egr-cat" data-categorias="egresos:form"></select>
             </div>
             <div class="form-group"><label>¿De qué cuenta sale?</label>
-              <select id="egr-cuenta">
-                <option value="efectivo">💵 Efectivo</option>
-                <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
-                <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
-              </select>
+              <select id="egr-cuenta" data-cuentas="1"></select>
             </div>
           </div>
           <div class="form-group mb">
@@ -1128,24 +1117,11 @@
           </div>
           <div>
             <div class="filtro-label">Categoría</div>
-            <select onchange="setFEgrSelect('cat', this.value)">
-              <option value="todas">Todas</option>
-              <option value="nomina">Nómina</option>
-              <option value="proveedor">Proveedores</option>
-              <option value="arriendo">Arriendo</option>
-              <option value="servicios">Servicios</option>
-              <option value="desechables">Desechables</option>
-              <option value="otro">Otro</option>
-            </select>
+            <select data-categorias="filtro:corto" onchange="setFEgrSelect('cat', this.value)"></select>
           </div>
           <div>
             <div class="filtro-label">Cuenta</div>
-            <select onchange="setFEgrSelect('cuenta', this.value)">
-              <option value="todas">Todas</option>
-              <option value="efectivo">💵 Efectivo</option>
-              <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
-              <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
-            </select>
+            <select data-cuentas="todas" onchange="setFEgrSelect('cuenta', this.value)"></select>
           </div>
           <div>
             <div class="filtro-label">Método de pago</div>
@@ -1263,11 +1239,7 @@
             <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="ingext-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
           </div>
           <div class="form-group mb"><label>¿A qué cuenta entra?</label>
-            <select id="ingext-cuenta">
-              <option value="efectivo">💵 Efectivo</option>
-              <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
-              <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
-            </select>
+            <select id="ingext-cuenta" data-cuentas="1"></select>
           </div>
           <div class="form-group mb"><label>Descripción</label><input type="text" id="ingext-desc" placeholder="ej: Venta de canecas usadas…"></div>
           <button class="btn btn-primary" onclick="agregarIngresoExtra()">+ Registrar ingreso</button>
@@ -1343,9 +1315,9 @@
             <div class="filtro-label">Cuenta <span style="text-transform:none;">(solo ingresos adicionales)</span></div>
             <div class="filter-bar" style="margin-bottom:0;" id="ingresoshist-filtros-cuenta">
               <button class="filter-btn active" onclick="setFIngresosHist('cuenta','todas',this)">Todas</button>
-              <button class="filter-btn" onclick="setFIngresosHist('cuenta','efectivo',this)">💵 Efectivo</button>
-              <button class="filter-btn" onclick="setFIngresosHist('cuenta','transf_almuerzos',this)">☀️ Transf. Almuerzos</button>
-              <button class="filter-btn" onclick="setFIngresosHist('cuenta','transf_rapidas',this)">🌙 Transf. Comidas rápidas</button>
+              <button class="filter-btn" data-cta="efectivo" onclick="setFIngresosHist('cuenta','efectivo',this)">💵 Efectivo</button>
+              <button class="filter-btn" data-cta="transf_almuerzos" onclick="setFIngresosHist('cuenta','transf_almuerzos',this)">☀️ Transf. Almuerzos</button>
+              <button class="filter-btn" data-cta="transf_rapidas" onclick="setFIngresosHist('cuenta','transf_rapidas',this)">🌙 Transf. Comidas rápidas</button>
             </div>
           </div>
         </div>
@@ -1473,13 +1445,7 @@
       <div class="panel-body">
         <div class="form-row mb">
           <div class="form-group"><label>Categoría</label>
-            <select id="dd-gasto-cat">
-              <option value="nomina">Nómina de empleados</option>
-              <option value="proveedor">Proveedores</option>
-              <option value="desechables">Desechables</option>
-              <option value="otro">Otro</option>
-              <option value="prestamo">Préstamos (no cuenta como egreso)</option>
-            </select>
+            <select id="dd-gasto-cat" data-categorias="cierre:form"></select>
           </div>
           <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="dd-gasto-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
         </div>
@@ -1608,9 +1574,9 @@
   </div>
   <div style="font-size:11px;color:var(--text3);margin:-4px 0 12px;">💰 Los 4 montos de abajo son la <strong>utilidad acumulada del período elegido arriba</strong> (Hoy/Semana/Mes/Todo) — cambia el filtro para ver cuánto vas acumulando semana a semana o mes a mes. Cada cuenta ya descuenta los gastos/egresos y suma los aportes/ingresos que le hayas asignado a ella, dentro de ese mismo período.</div>
   <div class="kpi-grid">
-    <div class="kpi-card green"><div class="kpi-label">💵 Efectivo</div><div class="kpi-value" id="caja-efectivo">$0</div><div class="kpi-sub" id="caja-sub-efectivo">Acumulado</div></div>
-    <div class="kpi-card accent"><div class="kpi-label">☀️ Transferencia — Almuerzos</div><div class="kpi-value" id="caja-transf-almuerzos">$0</div><div class="kpi-sub" id="caja-sub-transf-almuerzos">Acumulado</div></div>
-    <div class="kpi-card purple"><div class="kpi-label">🌙 Transferencia — Comidas rápidas</div><div class="kpi-value" id="caja-transf-rapidas">$0</div><div class="kpi-sub" id="caja-sub-transf-rapidas">Acumulado</div></div>
+    <div class="kpi-card green"><div class="kpi-label" data-cta="efectivo" data-cta-f="kpi">💵 Efectivo</div><div class="kpi-value" id="caja-efectivo">$0</div><div class="kpi-sub" id="caja-sub-efectivo">Acumulado</div></div>
+    <div class="kpi-card accent"><div class="kpi-label" data-cta="transf_almuerzos" data-cta-f="kpi">☀️ Transferencia — Almuerzos</div><div class="kpi-value" id="caja-transf-almuerzos">$0</div><div class="kpi-sub" id="caja-sub-transf-almuerzos">Acumulado</div></div>
+    <div class="kpi-card purple"><div class="kpi-label" data-cta="transf_rapidas" data-cta-f="kpi">🌙 Transferencia — Comidas rápidas</div><div class="kpi-value" id="caja-transf-rapidas">$0</div><div class="kpi-sub" id="caja-sub-transf-rapidas">Acumulado</div></div>
     <div class="kpi-card blue"><div class="kpi-label">Total disponible en Caja</div><div class="kpi-value" id="caja-disponible">$0</div><div class="kpi-sub" id="caja-sub-disponible">Suma de las 3 cuentas</div></div>
   </div>
 
@@ -1632,19 +1598,11 @@
         </div>
         <div class="form-group mb">
           <label id="caja-mov-cuenta-label">¿De qué cuenta sale?</label>
-          <select id="caja-mov-cuenta">
-            <option value="efectivo">💵 Efectivo</option>
-            <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
-            <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
-          </select>
+          <select id="caja-mov-cuenta" data-cuentas="1"></select>
         </div>
         <div class="form-group mb" id="caja-mov-cuenta-destino-wrap" style="display:none;">
           <label>¿A qué cuenta entra?</label>
-          <select id="caja-mov-cuenta-destino">
-            <option value="efectivo">💵 Efectivo</option>
-            <option value="transf_almuerzos">☀️ Transf. Almuerzos</option>
-            <option value="transf_rapidas">🌙 Transf. Comidas rápidas</option>
-          </select>
+          <select id="caja-mov-cuenta-destino" data-cuentas="1"></select>
         </div>
         <div class="form-group mb">
           <label>Detalle <span class="req">*</span></label>
@@ -1655,7 +1613,7 @@
     </div>
     <div class="panel">
       <div class="panel-header"><div class="panel-title">Utilidades por día</div></div>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Efectivo</th><th>Transf. Almuerzos</th><th>Transf. Comidas rápidas</th><th>Total</th></tr></thead><tbody id="caja-historial-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th data-cta="efectivo" data-cta-f="nombre">Efectivo</th><th data-cta="transf_almuerzos" data-cta-f="nombre">Transf. Almuerzos</th><th data-cta="transf_rapidas" data-cta-f="nombre">Transf. Comidas rápidas</th><th>Total</th></tr></thead><tbody id="caja-historial-body"></tbody></table></div>
     </div>
   </div>
 
@@ -1779,6 +1737,8 @@
     <div id="config-paneles"></div>
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin:22px 0 8px;">🍽️ Productos y precios</div>
     <div id="config-catalogos"></div>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin:22px 0 8px;">🧾 Egresos y cuentas</div>
+    <div id="config-egresos"></div>
     <div class="panel">
       <div class="panel-header"><div class="panel-title">🕘 Historial de cambios</div></div>
       <div class="panel-body" id="config-historial"></div>
@@ -1968,13 +1928,7 @@
 
       <div class="form-group mb">
         <label>Categoría del gasto</label>
-        <select id="cm-gasto-cat">
-          <option value="nomina">Nómina de empleados</option>
-          <option value="proveedor">Proveedores</option>
-          <option value="desechables">Desechables</option>
-          <option value="otro">Otro</option>
-          <option value="prestamo">Préstamos (no cuenta como egreso)</option>
-        </select>
+        <select id="cm-gasto-cat" data-categorias="cierre:form"></select>
       </div>
       <div class="form-row mb">
         <div class="form-group"><label>Monto ($)</label><input type="text" inputmode="numeric" id="cm-gasto-monto" placeholder="0" oninput="formatMilesInput(this)"></div>
@@ -2330,6 +2284,24 @@ const CATALOGO_EXTRAS_BASE = Object.freeze([
   {"nombre": "Coca-Cola 1.5 Lt", "precio": 8000, "activo": true}
 ].map(Object.freeze));
 
+// Categorías de egresos y nombres de las 3 cuentas de El Lobo (etapa 4): lo que rige mientras no se guarde otra cosa.
+// grupo: nomina · proveedor · operativo (arriendo y servicios) · desechable · otro · excluido (no cuenta como egreso).
+// donde: egresos (pestaña Egresos) · cierre (gastos del cierre del día) · ambos.
+const CATEGORIAS_EGRESOS_BASE = Object.freeze([
+  {"codigo": "nomina", "nombre": "Nómina", "grupo": "nomina", "donde": "ambos", "activo": true},
+  {"codigo": "proveedor", "nombre": "Proveedores", "grupo": "proveedor", "donde": "ambos", "activo": true},
+  {"codigo": "arriendo", "nombre": "Arriendo", "grupo": "operativo", "donde": "egresos", "activo": true},
+  {"codigo": "servicios", "nombre": "Servicios", "grupo": "operativo", "donde": "egresos", "activo": true},
+  {"codigo": "desechables", "nombre": "Desechables", "grupo": "desechable", "donde": "ambos", "activo": true},
+  {"codigo": "otro", "nombre": "Otro", "grupo": "otro", "donde": "ambos", "activo": true},
+  {"codigo": "prestamo", "nombre": "Préstamo", "grupo": "excluido", "donde": "cierre", "activo": true}
+].map(Object.freeze));
+const NOMBRES_CUENTAS_BASE = Object.freeze([
+  {"codigo": "efectivo", "emoji": "💵", "nombre": "Efectivo"},
+  {"codigo": "transf_almuerzos", "emoji": "☀️", "nombre": "Transf. Almuerzos"},
+  {"codigo": "transf_rapidas", "emoji": "🌙", "nombre": "Transf. Comidas rápidas"}
+].map(Object.freeze));
+
 // Etiquetas y precios EN USO: se rellenan con reconstruirCatalogo() (ver «Configuración del negocio») a partir de lo que rige hoy.
 const LABELS = { extra: 'Producto adicional' };
 const PRECIOS = {};
@@ -2473,7 +2445,8 @@ const CFG_DEFECTOS = Object.freeze({
   mesas: 8, recargo_para_llevar: 1000, empaque_domicilio: 1000,
   respaldo_dia_semana: 0, respaldo_rojo_dias: 10,
   negocio_nombre: 'El Lobo', negocio_emoji: '🐺',
-  catalogo_almuerzos: CATALOGO_ALMUERZOS_BASE, catalogo_rapidas: CATALOGO_RAPIDAS_BASE, catalogo_extras: CATALOGO_EXTRAS_BASE
+  catalogo_almuerzos: CATALOGO_ALMUERZOS_BASE, catalogo_rapidas: CATALOGO_RAPIDAS_BASE, catalogo_extras: CATALOGO_EXTRAS_BASE,
+  categorias_egresos: CATEGORIAS_EGRESOS_BASE, nombres_cuentas: NOMBRES_CUENTAS_BASE
 });
 // Reglas de cada valor. ESPEJO de seguridad.validar_configuracion (sql/configuracion.sql): si cambia una, cambia la otra
 // (una prueba automática compara los rangos de los dos lados).
@@ -2487,13 +2460,17 @@ const CFG_REGLAS = Object.freeze({
   negocio_emoji:       { tipo: 'simbolo' },
   catalogo_almuerzos:  { tipo: 'catalogo' },
   catalogo_rapidas:    { tipo: 'catalogo' },
-  catalogo_extras:     { tipo: 'catalogo' }
+  catalogo_extras:     { tipo: 'catalogo' },
+  categorias_egresos:  { tipo: 'categorias' },
+  nombres_cuentas:     { tipo: 'cuentas' }
 });
 // null = el valor sirve; si no, el texto que se le muestra a la persona.
 function cfgValidar(clave, valor) {
   const r = CFG_REGLAS[clave];
   if (!r) return `La configuración «${clave}» no existe.`;
   if (r.tipo === 'catalogo') return cfgValidarCatalogo(clave, valor);
+  if (r.tipo === 'categorias') return cfgValidarCategorias(valor);
+  if (r.tipo === 'cuentas') return cfgValidarCuentas(valor);
   if (r.tipo === 'entero') {
     if (typeof valor !== 'number' || !Number.isFinite(valor)) return `${r.nombre} debe ser un número.`;
     if (!Number.isInteger(valor) || valor < r.min || valor > r.max) return `${r.nombre} debe ser un número entero entre ${r.min.toLocaleString('es-CO')} y ${r.max.toLocaleString('es-CO')}.`;
@@ -2676,6 +2653,161 @@ function gruposRapidasHtml(instante, incluir = []) {
 function opcionesBebidaHtml(instante) {
   return `<option value="" data-monto="0">— Sin bebida —</option>` +
     catalogoParaOpciones(instante).rapidas.filter(p => p.cat === 'BEBIDAS' && p.activo).map(p => _opcionHtml(p)).join('');
+}
+
+// ── Categorías de egresos y nombres de las cuentas (etapa 4) ───────────────────────────────────────────
+// Las categorías de gastos/egresos (nómina, proveedores, arriendo…) y los nombres de las 3 cuentas (efectivo y las dos de
+// transferencia) salen de la configuración (claves categorias_egresos y nombres_cuentas: cada guardado es una versión completa,
+// con «vigente desde»). Cada categoría tiene un CÓDIGO que no cambia nunca (es lo que guardan los gastos) y un GRUPO que dice en
+// qué casilla de los reportes y del modelo financiero se suma. El grupo NO se puede cambiar después de creada la categoría:
+// así un gasto ya registrado nunca cambia de lugar. Una categoría no se borra: se retira (activo: false) y los gastos viejos la
+// siguen mostrando. «excluido» = no cuenta como egreso (como los préstamos: solo restan de la caja del día).
+// Los nombres que se muestran son SIEMPRE los de hoy (también en gastos viejos); los montos y los códigos guardados no cambian.
+const CAT_GRUPOS = ['nomina', 'proveedor', 'operativo', 'desechable', 'otro', 'excluido'];
+const CAT_DONDE = ['egresos', 'cierre', 'ambos'];
+const CTA_CODIGOS = ['efectivo', 'transf_almuerzos', 'transf_rapidas'];
+const GRUPO_NOMBRE = { nomina: 'Nómina', proveedor: 'Proveedores (insumos)', operativo: 'Arriendo y servicios', desechable: 'Desechables', otro: 'Otros gastos', excluido: 'No cuenta como egreso' };
+const DONDE_NOMBRE = { egresos: 'solo en Egresos', cierre: 'solo en el cierre del día', ambos: 'en Egresos y en el cierre' };
+const GRUPO_BADGE = { nomina: 'badge-blue', operativo: 'badge-gray', excluido: 'badge-purple', otro: 'badge-accent', desechable: 'badge-green', proveedor: 'badge-red' };
+// Nombre largo que llevaban las listas de los formularios (mientras la categoría conserve su nombre de siempre).
+const CAT_ETIQUETA_FORM = { nomina: 'Nómina de empleados', servicios: 'Servicios públicos', prestamo: 'Préstamos (no cuenta como egreso)' };
+// Rótulo largo que llevaban las tarjetas de Caja (mientras la cuenta conserve su nombre y símbolo de siempre).
+const CTA_ROTULO_KPI = { efectivo: '💵 Efectivo', transf_almuerzos: '☀️ Transferencia — Almuerzos', transf_rapidas: '🌙 Transferencia — Comidas rápidas' };
+
+// ESPEJO de seguridad.validar_categorias_egresos (sql/configuracion_etapa_4.sql): null = sirve; si no, el texto para la persona.
+function cfgValidarCategorias(valor) {
+  const que = 'La lista de categorías de egresos';
+  if (!Array.isArray(valor)) return `${que} debe ser una lista.`;
+  const n = valor.length;
+  if (n < 7 || n > 40) return `${que} trae ${n} categorías y esa cantidad no es válida.`;
+  const largo = s => [...s].length;
+  const sinEspaciosBorde = s => s.replace(/^ +| +$/g, '');         // como btrim() de la base: solo espacios
+  const codigos = new Set(), nombres = new Set();
+  for (const it of valor) {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return `${que} trae una categoría mal formada.`;
+    if (Object.keys(it).sort().join(',') !== 'activo,codigo,donde,grupo,nombre') return `${que} trae una categoría con campos que no corresponden.`;
+    if (typeof it.nombre !== 'string') return 'El nombre de cada categoría debe ser un texto.';
+    const nom = it.nombre;
+    if (largo(nom) < 1 || largo(nom) > 40 || nom !== sinEspaciosBorde(nom)) return 'El nombre de cada categoría debe tener entre 1 y 40 caracteres, sin espacios al principio ni al final.';
+    if (CAT_PROHIBIDOS.test(nom)) return 'Los nombres no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    if (nombres.has(nom.toLowerCase())) return `El nombre de categoría "${nom}" está repetido.`;
+    nombres.add(nom.toLowerCase());
+    if (typeof it.codigo !== 'string') return `El código de "${nom}" debe ser un texto.`;
+    const cod = it.codigo;
+    if (!/^[a-z][a-z0-9_]{1,15}$/.test(cod)) return `El código "${cod}" no sirve: una letra minúscula seguida de 1 a 15 letras minúsculas, números o guion bajo.`;
+    if (codigos.has(cod)) return `El código "${cod}" está repetido.`;
+    codigos.add(cod);
+    if (typeof it.grupo !== 'string' || !CAT_GRUPOS.includes(it.grupo)) return `El grupo de "${nom}" no es válido.`;
+    if (typeof it.donde !== 'string' || !CAT_DONDE.includes(it.donde)) return `El lugar de uso de "${nom}" no es válido (egresos, cierre o ambos).`;
+    if (it.grupo === 'excluido' && it.donde !== 'cierre') return `"${nom}" no cuenta como egreso, así que solo puede usarse en el cierre.`;
+    const base = CATEGORIAS_EGRESOS_BASE.find(b => b.codigo === cod);
+    if (base && base.grupo !== it.grupo) return `La categoría "${nom}" es de El Lobo y no puede cambiar de grupo.`;
+    if (typeof it.activo !== 'boolean') return `"${nom}" debe estar activa o retirada (verdadero o falso).`;
+  }
+  if (CATEGORIAS_EGRESOS_BASE.some(b => !codigos.has(b.codigo))) return `${que} no puede quitar categorías de El Lobo: se retiran, no se borran.`;
+  if (!valor.some(c => c.activo && (c.donde === 'egresos' || c.donde === 'ambos'))) return 'Debe quedar al menos una categoría activa para registrar egresos.';
+  if (!valor.some(c => c.activo && (c.donde === 'cierre' || c.donde === 'ambos'))) return 'Debe quedar al menos una categoría activa para el cierre del día.';
+  return null;
+}
+// ESPEJO de seguridad.validar_nombres_cuentas.
+function cfgValidarCuentas(valor) {
+  if (!Array.isArray(valor)) return 'Los nombres de las cuentas deben ser una lista.';
+  if (valor.length !== 3) return `Los nombres de las cuentas traen ${valor.length} cuentas y deben ser exactamente 3.`;
+  const largo = s => [...s].length;
+  const sinEspaciosBorde = s => s.replace(/^ +| +$/g, '');
+  const codigos = new Set(), nombres = new Set();
+  for (const it of valor) {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return 'Los nombres de las cuentas traen una cuenta mal formada.';
+    if (Object.keys(it).sort().join(',') !== 'codigo,emoji,nombre') return 'Los nombres de las cuentas traen una cuenta con campos que no corresponden.';
+    if (typeof it.codigo !== 'string') return 'El código de cada cuenta debe ser un texto.';
+    if (!CTA_CODIGOS.includes(it.codigo)) return `El código de cuenta "${it.codigo}" no existe.`;
+    if (codigos.has(it.codigo)) return `La cuenta "${it.codigo}" está repetida.`;
+    codigos.add(it.codigo);
+    if (typeof it.nombre !== 'string') return 'El nombre de cada cuenta debe ser un texto.';
+    const nom = it.nombre;
+    if (largo(nom) < 1 || largo(nom) > 30 || nom !== sinEspaciosBorde(nom)) return 'El nombre de cada cuenta debe tener entre 1 y 30 caracteres, sin espacios al principio ni al final.';
+    if (CAT_PROHIBIDOS.test(nom)) return 'Los nombres no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    if (nombres.has(nom.toLowerCase())) return `El nombre de cuenta "${nom}" está repetido.`;
+    nombres.add(nom.toLowerCase());
+    if (typeof it.emoji !== 'string') return 'El símbolo de cada cuenta debe ser un texto.';
+    const emo = it.emoji;
+    if (largo(emo) > 8 || emo !== sinEspaciosBorde(emo)) return 'El símbolo de cada cuenta puede tener hasta 8 caracteres, sin espacios al principio ni al final.';
+    if (CAT_PROHIBIDOS.test(emo)) return 'Los símbolos no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+  }
+  return null;
+}
+
+// Vistas «de hoy» (se rehacen en categoriasYCuentasAlDia). Sin configuración guardada: las de El Lobo.
+let CAT_MAPA = new Map(CATEGORIAS_EGRESOS_BASE.map(c => [c.codigo, c]));
+let CTA_MAPA = new Map(NOMBRES_CUENTAS_BASE.map(c => [c.codigo, c]));
+const catNombre = codigo => { const c = CAT_MAPA.get(codigo); return c ? c.nombre : (codigo == null ? '' : String(codigo)); };
+const catNombreHtml = codigo => escaparHtml(catNombre(codigo));
+const catGrupo = codigo => { const c = CAT_MAPA.get(codigo); return c ? c.grupo : null; };      // null = categoría que ya no está en la lista
+const esCatExcluida = codigo => catGrupo(codigo) === 'excluido';
+const sumaGrupo = (lista, grupo, campo = 'cat') => lista.filter(e => catGrupo(e[campo]) === grupo).reduce((a, b) => a + b.monto, 0);
+const catC = codigo => { const c = CAT_MAPA.get(codigo); return c ? GRUPO_BADGE[c.grupo] : 'badge-red'; };
+const cuentaBadge = c => c === 'transf_almuerzos' ? 'badge-accent' : c === 'transf_rapidas' ? 'badge-purple' : 'badge-green';
+const cuentaEtiqueta = codigo => { const c = CTA_MAPA.get(codigo); return c ? `${c.emoji} ${c.nombre}`.trim() : String(codigo == null ? '' : codigo); };
+const cuentaDeSiempre = codigo => { const c = CTA_MAPA.get(codigo), b = NOMBRES_CUENTAS_BASE.find(x => x.codigo === codigo); return !!c && !!b && c.nombre === b.nombre && c.emoji === b.emoji; };
+// Texto de un rótulo de cuenta: 'boton' = símbolo + nombre · 'nombre' = solo el nombre · 'kpi' = tarjeta de Caja (conserva el rótulo largo de siempre mientras no se cambie).
+function cuentaTexto(codigo, forma) {
+  const c = CTA_MAPA.get(codigo);
+  if (!c) return String(codigo);
+  if (forma === 'nombre') return c.nombre;
+  if (forma === 'kpi' && cuentaDeSiempre(codigo)) return CTA_ROTULO_KPI[codigo] || cuentaEtiqueta(codigo);
+  return cuentaEtiqueta(codigo);
+}
+function catEtiqueta(c, modo) {
+  const deSiempre = CATEGORIAS_EGRESOS_BASE.find(b => b.codigo === c.codigo);
+  if (modo === 'form') {
+    if (deSiempre && deSiempre.nombre === c.nombre && CAT_ETIQUETA_FORM[c.codigo]) return CAT_ETIQUETA_FORM[c.codigo];
+    return c.nombre + (c.grupo === 'excluido' ? ' (no cuenta como egreso)' : '');
+  }
+  return c.nombre;
+}
+// <option>s de categorías. donde: 'egresos' | 'cierre' | 'filtro' (todas las que cuentan como egreso). `seleccion` aparece aunque esté retirada.
+function opcionesCategoriaHtml(donde, seleccion, modo) {
+  const lista = [...CAT_MAPA.values()].filter(c => {
+    if (donde === 'filtro') return c.grupo !== 'excluido';
+    return (c.donde === donde || c.donde === 'ambos') && (c.activo || c.codigo === seleccion);
+  });
+  return lista.map(c => `<option value="${escaparHtml(c.codigo)}"${c.codigo === seleccion ? ' selected' : ''}>${escaparHtml(catEtiqueta(c, modo))}${c.activo ? '' : ' (retirada)'}</option>`).join('');
+}
+function opcionesCuentaHtml(seleccion, prefijo = '') {
+  return CTA_CODIGOS.map(cod => `<option value="${cod}"${cod === seleccion ? ' selected' : ''}>${prefijo}${escaparHtml(cuentaEtiqueta(cod))}</option>`).join('');
+}
+function poblarCategoriasEnDOM() {
+  document.querySelectorAll('select[data-categorias]').forEach(sel => {
+    const [donde, modo] = sel.dataset.categorias.split(':');
+    const previo = sel.value;
+    sel.innerHTML = (donde === 'filtro' ? '<option value="todas">Todas</option>' : '') + opcionesCategoriaHtml(donde, previo, modo || 'corto');
+    if ([...sel.options].some(o => o.value === previo)) sel.value = previo;
+  });
+}
+function aplicarCuentasEnDOM() {
+  document.querySelectorAll('select[data-cuentas]').forEach(sel => {
+    const previo = sel.value;
+    sel.innerHTML = (sel.dataset.cuentas === 'todas' ? '<option value="todas">Todas</option>' : '') + opcionesCuentaHtml(null);
+    if ([...sel.options].some(o => o.value === previo)) sel.value = previo;
+  });
+  document.querySelectorAll('[data-cta]').forEach(el => {
+    const t = cuentaTexto(el.dataset.cta, el.dataset.ctaF || 'boton');
+    if (el.textContent !== t) el.textContent = t;
+  });
+}
+// Si la configuración trae categorías o nombres de cuentas distintos a los que están en uso, los rehace y vuelve a armar las listas
+// de la página. Barato: compara una firma de las versiones guardadas. Devuelve true si cambió algo.
+let firmaCategoriasCuentas = null;
+function categoriasYCuentasAlDia() {
+  const firma = Array.isArray(ST.configuracion)
+    ? ST.configuracion.filter(f => f && (f.clave === 'categorias_egresos' || f.clave === 'nombres_cuentas')).map(f => `${f.id}@${f.vigente_desde}`).join('|') : '';
+  if (firma === firmaCategoriasCuentas) return false;
+  firmaCategoriasCuentas = firma;
+  CAT_MAPA = new Map(CFG.v('categorias_egresos').map(c => [c.codigo, c]));
+  CTA_MAPA = new Map(CFG.v('nombres_cuentas').map(c => [c.codigo, c]));
+  poblarCategoriasEnDOM();
+  aplicarCuentasEnDOM();
+  return true;
 }
 
 // "Para llevar" aplica a mesas y a "sin mesa" (cliente esperando de pie), no a domicilio/fiado
@@ -3500,14 +3632,10 @@ const metC = m => m==='efectivo'?'badge-green':m==='dividido'?'badge-purple':m==
 // Color de cada categoría de egreso — "Otro" va en amarillo (accent) para que
 // no se confunda con Proveedores (rojo) y Desechables en verde, que es el único
 // tono que no usa ninguna otra categoría.
-const catC = c => c==='nomina'?'badge-blue':['arriendo','servicios'].includes(c)?'badge-gray':c==='prestamo'?'badge-purple':c==='otro'?'badge-accent':c==='desechables'?'badge-green':'badge-red';
-const CAT_LABELS = { nomina:'Nómina', proveedor:'Proveedores', arriendo:'Arriendo', servicios:'Servicios', desechables:'Desechables', otro:'Otro', prestamo:'Préstamo' };
 
 // Las 3 cuentas/fondos de Caja: efectivo, y transferencia separada por turno
 // (almuerzos vs. comidas rápidas) — así se sabe cuál se ha ido gastando y
 // cuál debería tener capital, en vez de mezclar todo en una sola bolsa.
-const CUENTA_LABELS = { efectivo: '💵 Efectivo', transf_almuerzos: '☀️ Transf. Almuerzos', transf_rapidas: '🌙 Transf. Comidas rápidas' };
-const cuentaBadge = c => c === 'transf_almuerzos' ? 'badge-accent' : c === 'transf_rapidas' ? 'badge-purple' : 'badge-green';
 
 // ── Pago dividido (efectivo + transferencia en un mismo pedido) ────────
 // metodo='dividido' guarda el reparto exacto en monto_efectivo/monto_transferencia
@@ -4293,6 +4421,9 @@ function exportarExcelCompleto() {
   addSheet('Pedidos_Pendientes', ST.pendientes.map(conDescuentoForzado));
   addSheet('Egresos', d.egresos);
   addSheet('Gastos_Cierre', d.gastos);
+  // Categorías de egresos de hoy (código → grupo): el modelo financiero las lee para saber en qué rubro va cada una, también las que se creen.
+  addSheet('Categorias_Egresos', CFG.v('categorias_egresos'));
+  addSheet('Nombres_Cuentas', CFG.v('nombres_cuentas'));
   // platos_familia (almuerzos de la familia) se fuerza como columna aunque
   // ningún cierre la traiga todavía (migración sin correr), para que el
   // esquema del Excel sea estable. Vacío = NULL = "no registrado".
@@ -4897,6 +5028,7 @@ function onHoraChange() {
 
 pintarTurnoManual();
 catalogoAlDia();          // arma PRECIOS / LABELS / catálogo desde la configuración (por ahora, los valores de El Lobo)
+categoriasYCuentasAlDia(); // categorías de egresos y nombres de cuentas (listas del formulario)
 rebuildPedidoSelect();
 // Reloj del header en tiempo real (solo visual, no toca el formulario)
 setInterval(actualizarReloj, 1000);
@@ -7924,7 +8056,7 @@ function prepararFormCierreManual(cierreExistente = null) {
   document.getElementById('cm-platos-familia').value = (cierreExistente && cierreExistente.platos_familia != null) ? cierreExistente.platos_familia : '';
   document.getElementById('cm-gasto-monto').value = '';
   document.getElementById('cm-gasto-nombre').value = '';
-  document.getElementById('cm-gasto-cat').value = 'nomina';
+  document.getElementById('cm-gasto-cat').selectedIndex = 0;
   cierreManualTurno = cierreExistente ? cierreExistente.turno : 'almuerzo';
   // Los gastos reales de ese turno (insertados la vez que se guardó) se
   // precargan en la cola para poder editarlos/quitarlos — al guardar se
@@ -7987,14 +8119,14 @@ function renderGastosCierreManual() {
   cont.innerHTML = cierreManualGastos.length
     ? cierreManualGastos.map((g, i) => `
         <div class="report-line">
-          <span><span class="badge ${catC(g.categoria)}">${CAT_LABELS[g.categoria] || g.categoria}</span> ${g.nombre ? ' ' + g.nombre : ''}</span>
+          <span><span class="badge ${catC(g.categoria)}">${catNombreHtml(g.categoria)}</span> ${g.nombre ? ' ' + g.nombre : ''}</span>
           <span style="display:flex;align-items:center;gap:8px;">
             <strong class="amount-neg">${fmt(g.monto)}</strong>
             <button class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="quitarGastoCierreManual(${i})">✕</button>
           </span>
         </div>`).join('')
     : '';
-  const total = cierreManualGastos.filter(g => g.categoria !== 'prestamo').reduce((a,b) => a + b.monto, 0);
+  const total = cierreManualGastos.filter(g => !esCatExcluida(g.categoria)).reduce((a,b) => a + b.monto, 0);
   document.getElementById('cm-gastos-total').textContent = fmt(total);
 }
 
@@ -8012,7 +8144,7 @@ async function guardarCierreManual() {
 
   const efectivo      = valMiles('cm-efectivo');
   const transferencia = valMiles('cm-transferencia');
-  const gastos = cierreManualGastos.filter(g => g.categoria !== 'prestamo').reduce((a,b) => a + b.monto, 0);
+  const gastos = cierreManualGastos.filter(g => !esCatExcluida(g.categoria)).reduce((a,b) => a + b.monto, 0);
   const resultado = efectivo + transferencia - gastos;
 
   // "editando" = se abrió este formulario desde "Editar"/"Corregir cierre"
@@ -8076,7 +8208,7 @@ async function guardarCierreManual() {
         ST.gastosDia.push(row);
       } catch (e) {
         console.error(e);
-        showToast(`⚠ No se pudo guardar el gasto "${g.nombre || CAT_LABELS[g.categoria] || g.categoria}"`, 'warning');
+        showToast(`⚠ No se pudo guardar el gasto "${g.nombre || catNombre(g.categoria)}"`, 'warning');
       }
     }
 
@@ -9299,7 +9431,7 @@ function pasaFiltroEgr(e, f) {
 // Egresos "de verdad" (los que cargas tú directo aquí, ej: arriendo, servicios)
 // + los gastos categorizados que se registran día a día en Cierre (nómina,
 // proveedores, otros) — así el total del mes por categoría queda completo en
-// un solo lugar. Los de categoría "prestamo" quedan afuera a propósito: solo
+// un solo lugar. Los de una categoría que «no cuenta como egreso» (los préstamos) quedan afuera a propósito: solo
 // restan de la caja del día, nunca cuentan como egreso del negocio.
 function egresosCombinados() {
   // e.description (en inglés) es el nombre real de la columna en Supabase
@@ -9311,7 +9443,7 @@ function egresosCombinados() {
   // (así se descuentan en calcularAcumuladosCaja) — por eso quedan fijos en
   // la cuenta "efectivo", sin preguntar, a diferencia de los de este formulario.
   const deCierre = ST.gastosDia
-    .filter(g => g.categoria && g.categoria !== 'prestamo')
+    .filter(g => g.categoria && !esCatExcluida(g.categoria))
     .map(g => ({
       id: g.id, fecha: g.fecha, cat: g.categoria, descripcion: g.nombre, monto: g.monto, origen: 'cierre', turno: g.turno, cuenta: 'efectivo'
     }));
@@ -9324,19 +9456,8 @@ function filaEgresoEdit(e) {
   return `<tr>
     <td><input type="date" id="egr-edit-fecha-${e.id}" value="${e.fecha}" style="width:100%;"></td>
     <td><input type="text" id="egr-edit-desc-${e.id}" value="${(e.descripcion||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
-    <td><select id="egr-edit-cat-${e.id}" style="width:100%;">
-      <option value="nomina"${e.cat==='nomina'?' selected':''}>Nómina</option>
-      <option value="proveedor"${e.cat==='proveedor'?' selected':''}>Proveedores</option>
-      <option value="arriendo"${e.cat==='arriendo'?' selected':''}>Arriendo</option>
-      <option value="servicios"${e.cat==='servicios'?' selected':''}>Servicios</option>
-      <option value="desechables"${e.cat==='desechables'?' selected':''}>Desechables</option>
-      <option value="otro"${e.cat==='otro'?' selected':''}>Otro</option>
-    </select></td>
-    <td><select id="egr-edit-cuenta-${e.id}" style="width:100%;">
-      <option value="efectivo"${e.cuenta==='efectivo'?' selected':''}>💵 Efectivo</option>
-      <option value="transf_almuerzos"${e.cuenta==='transf_almuerzos'?' selected':''}>☀️ Transf. Almuerzos</option>
-      <option value="transf_rapidas"${e.cuenta==='transf_rapidas'?' selected':''}>🌙 Transf. Comidas rápidas</option>
-    </select></td>
+    <td><select id="egr-edit-cat-${e.id}" style="width:100%;">${opcionesCategoriaHtml('egresos', e.cat, 'corto')}</select></td>
+    <td><select id="egr-edit-cuenta-${e.id}" style="width:100%;">${opcionesCuentaHtml(e.cuenta)}</select></td>
     <td>
       <select id="egr-edit-turno-${e.id}" style="width:100%;">
         <option value=""${!e.turno?' selected':''}>— No aplica —</option>
@@ -9375,8 +9496,8 @@ function renderEgresos() {
         return `<tr>
         <td>${e.fecha}</td>
         <td style="color:var(--text)">${e.descripcion||'—'}</td>
-        <td><span class="badge ${catC(e.cat)}">${CAT_LABELS[e.cat]||e.cat}</span></td>
-        <td><span class="badge ${cuentaBadge(e.cuenta)}">${CUENTA_LABELS[e.cuenta]||e.cuenta}</span></td>
+        <td><span class="badge ${catC(e.cat)}">${catNombreHtml(e.cat)}</span></td>
+        <td><span class="badge ${cuentaBadge(e.cuenta)}">${escaparHtml(cuentaEtiqueta(e.cuenta))}</span></td>
         <td style="font-size:11px;color:var(--text3);">${origenTxt}</td>
         <td class="amount-neg">${fmt(e.monto)}</td>
         <td style="white-space:nowrap;display:flex;gap:4px;">${acciones}</td>
@@ -9391,11 +9512,11 @@ function renderEgresos() {
 
   // El desglose por categoría sigue exactamente los mismos filtros de la
   // tabla de abajo (período/rango/categoría/cuenta/método).
-  document.getElementById('egr-nom').textContent    = fmt(list.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('egr-prov').textContent   = fmt(list.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('egr-arr').textContent    = fmt(list.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0));
-  document.getElementById('egr-desech').textContent = fmt(list.filter(e=>e.cat==='desechables').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('egr-otros').textContent  = fmt(list.filter(e=>e.cat==='otro').reduce((a,b)=>a+b.monto,0));
+  document.getElementById('egr-nom').textContent    = fmt(sumaGrupo(list, 'nomina'));
+  document.getElementById('egr-prov').textContent   = fmt(sumaGrupo(list, 'proveedor'));
+  document.getElementById('egr-arr').textContent    = fmt(sumaGrupo(list, 'operativo'));
+  document.getElementById('egr-desech').textContent = fmt(sumaGrupo(list, 'desechable'));
+  document.getElementById('egr-otros').textContent  = fmt(sumaGrupo(list, 'otro'));
   document.getElementById('egr-total-periodo').textContent = fmt(list.reduce((a,b)=>a+b.monto,0));
 }
 
@@ -9712,11 +9833,11 @@ function renderTablero() {
   // de otros días) y no lo vendido en el período.
   document.getElementById('rp-ventas-lista').textContent = fmt(ventasPeriodo + descuentosPeriodo);
 
-  document.getElementById('rp-nom').textContent   = fmt(egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('rp-prov').textContent  = fmt(egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('rp-arr').textContent   = fmt(egrs.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0));
-  document.getElementById('rp-desech').textContent = fmt(egrs.filter(e=>e.cat==='desechables').reduce((a,b)=>a+b.monto,0));
-  document.getElementById('rp-otros').textContent = fmt(egrs.filter(e=>e.cat==='otro').reduce((a,b)=>a+b.monto,0));
+  document.getElementById('rp-nom').textContent   = fmt(sumaGrupo(egrs, 'nomina'));
+  document.getElementById('rp-prov').textContent  = fmt(sumaGrupo(egrs, 'proveedor'));
+  document.getElementById('rp-arr').textContent   = fmt(sumaGrupo(egrs, 'operativo'));
+  document.getElementById('rp-desech').textContent = fmt(sumaGrupo(egrs, 'desechable'));
+  document.getElementById('rp-otros').textContent = fmt(sumaGrupo(egrs, 'otro'));
   document.getElementById('rp-tegr').textContent  = fmt(tE);
 
   // Top por campo
@@ -9790,7 +9911,7 @@ function renderTablero() {
     else if (mg>=25) drivers.push({tp:'positive',ti:'🟢 Margen saludable',bo:`Con ${mg}% de margen el negocio está en buena forma.`});
     else             drivers.push({tp:'neutral', ti:'🟡 Margen en zona media',bo:`${mg}% de margen. Un ajuste de precio del 5–10% puede mejorar la situación.`});
 
-    const gastoProv = egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0);
+    const gastoProv = sumaGrupo(egrs, 'proveedor');
     if (gastoProv/tI > 0.35) drivers.push({tp:'negative',ti:'🍗 Costo de proveedores alto',bo:'Proveedores >35% de ingresos. Negocia precios o revisa porciones.'});
 
     // % de comidas rápidas: ventas de cena / ventas totales, las dos por
@@ -9948,11 +10069,7 @@ function filaIngresoExtraEdit(f) {
     <td><input type="date" id="ingext-edit-fecha-${f.id}" value="${f.fecha}" style="width:100%;"></td>
     <td style="font-size:11px;color:var(--text3);">➕ Adicional</td>
     <td><input type="text" id="ingext-edit-desc-${f.id}" value="${(f.detalle||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
-    <td><select id="ingext-edit-cuenta-${f.id}" style="width:100%;">
-      <option value="efectivo"${f.cuenta==='efectivo'?' selected':''}>💵 Efectivo</option>
-      <option value="transf_almuerzos"${f.cuenta==='transf_almuerzos'?' selected':''}>☀️ Transf. Almuerzos</option>
-      <option value="transf_rapidas"${f.cuenta==='transf_rapidas'?' selected':''}>🌙 Transf. Comidas rápidas</option>
-    </select></td>
+    <td><select id="ingext-edit-cuenta-${f.id}" style="width:100%;">${opcionesCuentaHtml(f.cuenta)}</select></td>
     <td>—</td>
     <td>—</td>
     <td><input type="text" inputmode="numeric" id="ingext-edit-monto-${f.id}" value="${Number(f.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
@@ -9979,11 +10096,11 @@ function renderIngresosFinanciero() {
   const totalIngresos = totalCierres + totalExtras;
 
   const egrs        = egresosCombinados().filter(e => enFiltroFecha(e.fecha, fIngresosHist));
-  const nomina      = egrs.filter(e=>e.cat==='nomina').reduce((a,b)=>a+b.monto,0);
-  const proveedores = egrs.filter(e=>e.cat==='proveedor').reduce((a,b)=>a+b.monto,0);
-  const operativos  = egrs.filter(e=>['arriendo','servicios'].includes(e.cat)).reduce((a,b)=>a+b.monto,0);
-  const desechables = egrs.filter(e=>e.cat==='desechables').reduce((a,b)=>a+b.monto,0);
-  const otros       = egrs.filter(e=>e.cat==='otro').reduce((a,b)=>a+b.monto,0);
+  const nomina      = sumaGrupo(egrs, 'nomina');
+  const proveedores = sumaGrupo(egrs, 'proveedor');
+  const operativos  = sumaGrupo(egrs, 'operativo');
+  const desechables = sumaGrupo(egrs, 'desechable');
+  const otros       = sumaGrupo(egrs, 'otro');
   const despuesNominaProv = totalIngresos - nomina - proveedores;
   const despuesOperativos = despuesNominaProv - operativos;
   // Utilidad neta = TODOS los ingresos menos TODOS los egresos del período,
@@ -10053,7 +10170,7 @@ function renderIngresosFinanciero() {
         <td>${f.fecha}</td>
         <td style="font-size:11px;color:var(--text3);">${f.origen}</td>
         <td style="color:var(--text);font-size:12px;">${f.detalle}</td>
-        <td>${f.cuenta ? `<span class="badge ${cuentaBadge(f.cuenta)}">${CUENTA_LABELS[f.cuenta]||f.cuenta}</span>` : '—'}</td>
+        <td>${f.cuenta ? `<span class="badge ${cuentaBadge(f.cuenta)}">${escaparHtml(cuentaEtiqueta(f.cuenta))}</span>` : '—'}</td>
         <td>${f.efectivo !== null ? fmt(f.efectivo) : '—'}</td>
         <td>${f.transferencia !== null ? fmt(f.transferencia) : '—'}</td>
         <td class="amount-pos">${fmt(f.monto)}</td>
@@ -10295,7 +10412,7 @@ function calcularVentasFijas(fecha, turno) {
 // efectivo se espera encontrar al cierre, nunca la utilidad ni Egresos.
 function calcularGastosTurno(fecha, turno) {
   const delTurno = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno);
-  const reales       = delTurno.filter(g => g.categoria !== 'prestamo').reduce((a,b)=>a+b.monto,0);
+  const reales       = delTurno.filter(g => !esCatExcluida(g.categoria)).reduce((a,b)=>a+b.monto,0);
   const conPrestamos  = delTurno.reduce((a,b)=>a+b.monto,0);
   return { reales, conPrestamos };
 }
@@ -10707,13 +10824,7 @@ function renderDiaADia() {
         if (ddEditId === g.id) {
           return `<tr>
             <td><input type="text"   id="dd-edit-nombre-${g.id}" value="${(g.nombre||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
-            <td><select id="dd-edit-cat-${g.id}" style="width:100%;">
-              <option value="nomina"${g.categoria==='nomina'?' selected':''}>Nómina</option>
-              <option value="proveedor"${g.categoria==='proveedor'?' selected':''}>Proveedores</option>
-              <option value="desechables"${g.categoria==='desechables'?' selected':''}>Desechables</option>
-              <option value="otro"${g.categoria==='otro'?' selected':''}>Otro</option>
-              <option value="prestamo"${g.categoria==='prestamo'?' selected':''}>Préstamo</option>
-            </select></td>
+            <td><select id="dd-edit-cat-${g.id}" style="width:100%;">${opcionesCategoriaHtml('cierre', g.categoria, 'corto')}</select></td>
             <td><input type="text" inputmode="numeric" id="dd-edit-monto-${g.id}" value="${Number(g.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
             <td style="white-space:nowrap;display:flex;gap:4px;">
               <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="guardarEdicionGastoDia(${g.id})">✓ Guardar</button>
@@ -10723,7 +10834,7 @@ function renderDiaADia() {
         }
         return `<tr>
           <td style="color:var(--text)">${g.nombre || '—'}</td>
-          <td>${g.categoria ? `<span class="badge ${catC(g.categoria)}">${CAT_LABELS[g.categoria]||g.categoria}</span>` : '<span style="color:var(--text3);font-size:11px;">sin categoría</span>'}</td>
+          <td>${g.categoria ? `<span class="badge ${catC(g.categoria)}">${catNombreHtml(g.categoria)}</span>` : '<span style="color:var(--text3);font-size:11px;">sin categoría</span>'}</td>
           <td class="amount-neg">${fmt(g.monto)}</td>
           <td style="white-space:nowrap;display:flex;gap:4px;">
             <button class="btn btn-edit"   onclick="editarGastoDia(${g.id})">✏</button>
@@ -10883,7 +10994,7 @@ async function advertirSiQuedaNegativo({ cuentaNueva, efectoNuevo, cuentaVieja, 
   if (cuentaVieja && cuentaVieja === cuentaNueva) saldoBase -= (efectoViejo || 0);
   const resultante = saldoBase + efectoNuevo;
   if (resultante < 0) {
-    return await confirmarSistema({ titulo: '⚠ Esta cuenta quedaría en negativo', cuerpo: `La cuenta "${CUENTA_LABELS[cuentaNueva] || cuentaNueva}" quedará en ${fmtSigned(resultante)} con este movimiento.`, aceptar: 'Continuar de todas formas' });
+    return await confirmarSistema({ titulo: '⚠ Esta cuenta quedaría en negativo', cuerpo: `La cuenta "${cuentaEtiqueta(cuentaNueva)}" quedará en ${fmtSigned(resultante)} con este movimiento.`, aceptar: 'Continuar de todas formas' });
   }
   return true;
 }
@@ -10983,16 +11094,8 @@ function filaMovimientoCajaEdit(m) {
       <option value="aporte"${m.tipo==='aporte'?' selected':''}>➕ Aporte</option>
       <option value="traspaso"${m.tipo==='traspaso'?' selected':''}>🔁 Traspaso</option>
     </select></td>
-    <td><select id="caja-edit-cuenta-${m.id}" style="width:100%;">
-      <option value="efectivo"${m.cuenta==='efectivo'?' selected':''}>💵 Efectivo</option>
-      <option value="transf_almuerzos"${m.cuenta==='transf_almuerzos'?' selected':''}>☀️ Transf. Almuerzos</option>
-      <option value="transf_rapidas"${m.cuenta==='transf_rapidas'?' selected':''}>🌙 Transf. Comidas rápidas</option>
-    </select>
-    <select id="caja-edit-cuenta-destino-${m.id}" style="width:100%;margin-top:4px;${m.tipo==='traspaso'?'':'display:none;'}">
-      <option value="efectivo"${m.cuenta_destino==='efectivo'?' selected':''}>→ 💵 Efectivo</option>
-      <option value="transf_almuerzos"${m.cuenta_destino==='transf_almuerzos'?' selected':''}>→ ☀️ Transf. Almuerzos</option>
-      <option value="transf_rapidas"${m.cuenta_destino==='transf_rapidas'?' selected':''}>→ 🌙 Transf. Comidas rápidas</option>
-    </select></td>
+    <td><select id="caja-edit-cuenta-${m.id}" style="width:100%;">${opcionesCuentaHtml(m.cuenta)}</select>
+    <select id="caja-edit-cuenta-destino-${m.id}" style="width:100%;margin-top:4px;${m.tipo==='traspaso'?'':'display:none;'}">${opcionesCuentaHtml(m.cuenta_destino, '→ ')}</select></td>
     <td><input type="text" id="caja-edit-desc-${m.id}" value="${(m.descripcion||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
     <td><input type="text" inputmode="numeric" id="caja-edit-monto-${m.id}" value="${Number(m.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
     <td style="white-space:nowrap;display:flex;gap:4px;">
@@ -11067,7 +11170,7 @@ function renderCaja() {
     ? movs.map(m => cajaMovEditId === m.id ? filaMovimientoCajaEdit(m) : `<tr>
         <td>${m.fecha}</td>
         <td><span class="badge ${TIPO_BADGE_CAJA[m.tipo]||'badge-red'}">${TIPO_LABEL_CAJA[m.tipo]||'➖ Gasto'}</span></td>
-        <td><span class="badge ${cuentaBadge(m.cuenta)}">${CUENTA_LABELS[m.cuenta]||m.cuenta||'💵 Efectivo'}</span>${m.tipo==='traspaso' ? ` → <span class="badge ${cuentaBadge(m.cuenta_destino)}">${CUENTA_LABELS[m.cuenta_destino]||m.cuenta_destino||'💵 Efectivo'}</span>` : ''}</td>
+        <td><span class="badge ${cuentaBadge(m.cuenta)}">${escaparHtml(cuentaEtiqueta(m.cuenta || 'efectivo'))}</span>${m.tipo==='traspaso' ? ` → <span class="badge ${cuentaBadge(m.cuenta_destino)}">${escaparHtml(cuentaEtiqueta(m.cuenta_destino || 'efectivo'))}</span>` : ''}</td>
         <td style="color:var(--text)">${m.descripcion}</td>
         <td class="${m.tipo==='aporte'?'amount-pos':m.tipo==='traspaso'?'':'amount-neg'}">${fmt(m.monto)}</td>
         <td style="white-space:nowrap;display:flex;gap:4px;">
@@ -11603,6 +11706,7 @@ function renderConfiguracion() {
     cfgActualizarBoton(c.clave);
   }
   cfgCatRender();
+  cfgEgrRender();
   cfgRenderHistorial();
 }
 
@@ -11614,16 +11718,17 @@ function cfgRenderHistorial() {
     cont.innerHTML = '<div style="font-size:12px;color:var(--text3);">Todavía no se ha cambiado nada: el sistema usa los valores de siempre de El Lobo. Cada cambio que guardes aparecerá aquí, con la fecha, la hora y quién lo hizo.</div>';
     return;
   }
-  const vigentes = new Set([...CFG_CAMPOS.map(c => c.clave), ...CFGCAT_CLAVES.map(k => CFGCAT[k].clave)].map(clave => CFG.fila(clave)).filter(Boolean));
+  const vigentes = new Set([...CFG_CAMPOS.map(c => c.clave), ...CFGCAT_CLAVES.map(k => CFGCAT[k].clave), CFGEGR_CLAVE, CFGCTA_CLAVE].map(clave => CFG.fila(clave)).filter(Boolean));
   const t = f => { const x = Date.parse(f.vigente_desde); return Number.isNaN(x) ? 0 : x; };
   const ordenadas = [...filas].sort((a, b) => (t(b) - t(a)) || ((b.id || 0) - (a.id || 0)));
   cont.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Desde</th><th>Qué</th><th>Valor</th><th>Quién</th><th></th></tr></thead>
     <tbody>${ordenadas.map((f, j) => {
-      const c = cfgCampo(f.clave), cat = cfgCatDe(f.clave);
-      const previo = cat ? ordenadas.slice(j + 1).find(x => x.clave === f.clave) : null;      // la versión anterior del catálogo
-      const valor = cat ? cfgResumenCatalogo(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave]) : cfgTexto(f.clave, f.valor);
-      return `<tr><td>${escaparHtml(fechaHoraLegible(f.vigente_desde))}</td><td>${escaparHtml(c ? c.titulo : cat ? 'Productos: ' + cat.titulo : f.clave)}</td><td>${escaparHtml(valor)}</td><td>${escaparHtml(f.creado_por || '—')}</td><td>${vigentes.has(f) ? '<span class="badge badge-green">rige hoy</span>' : ''}</td></tr>`;
+      const c = cfgCampo(f.clave), cat = cfgCatDe(f.clave), egr = f.clave === CFGEGR_CLAVE || f.clave === CFGCTA_CLAVE;
+      const previo = (cat || egr) ? ordenadas.slice(j + 1).find(x => x.clave === f.clave) : null;      // la versión anterior de la lista
+      const valor = cat ? cfgResumenCatalogo(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave])
+        : egr ? cfgResumenEgresos(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave]) : cfgTexto(f.clave, f.valor);
+      return `<tr><td>${escaparHtml(fechaHoraLegible(f.vigente_desde))}</td><td>${escaparHtml(c ? c.titulo : cat ? 'Productos: ' + cat.titulo : f.clave === CFGEGR_CLAVE ? 'Categorías de egresos' : f.clave === CFGCTA_CLAVE ? 'Nombres de las cuentas' : f.clave)}</td><td>${escaparHtml(valor)}</td><td>${escaparHtml(f.creado_por || '—')}</td><td>${vigentes.has(f) ? '<span class="badge badge-green">rige hoy</span>' : ''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 
@@ -11972,6 +12077,295 @@ async function cfgCatGuardar(k) {
   }
 }
 
+// ── Pantalla: Categorías de egresos y nombres de las cuentas (etapa 4) ───────────────────────────────────
+// Dos paneles. Lo que la persona va cambiando vive en una copia de trabajo (cfgEgr / cfgCta); «Guardar cambios» manda la lista
+// COMPLETA como una versión nueva. Nada se borra: «Retirar» solo deja de ofrecer la categoría. El código de una categoría nueva
+// (cat1, cat2…) y su grupo no cambian nunca.
+const CFGEGR_CLAVE = 'categorias_egresos', CFGCTA_CLAVE = 'nombres_cuentas';
+let cfgEgr = null, cfgCta = null;                       // copias de trabajo (null = nada cambiado)
+let cfgEgrFirma = null, cfgCtaFirma = null, cfgEgrConstruido = false;
+
+const cfgEgrVigente = () => CFG.v(CFGEGR_CLAVE);
+const cfgCtaVigente = () => CFG.v(CFGCTA_CLAVE);
+const cfgEgrFilas = () => cfgEgr || cfgEgrVigente();
+const cfgCtaFilas = () => cfgCta || cfgCtaVigente();
+function cfgEgrBorrador() { if (!cfgEgr) cfgEgr = JSON.parse(JSON.stringify(cfgEgrVigente())); return cfgEgr; }
+function cfgCtaBorrador() { if (!cfgCta) cfgCta = JSON.parse(JSON.stringify(cfgCtaVigente())); return cfgCta; }
+const cfgLimpiar = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+// Lo que se manda a la base (sin marcas internas, con el nombre limpio).
+function cfgEgrPayload(filas) { return filas.map(f => ({ codigo: f.codigo, nombre: cfgLimpiar(f.nombre), grupo: f.grupo, donde: f.donde, activo: !!f.activo })); }
+function cfgCtaPayload(filas) { return filas.map(f => ({ codigo: f.codigo, emoji: String(f.emoji == null ? '' : f.emoji).trim(), nombre: cfgLimpiar(f.nombre) })); }
+
+function cfgEgrCambios() {
+  if (!cfgEgr) return 0;
+  const ahora = cfgEgrPayload(cfgEgr), vigente = cfgEgrPayload(cfgEgrVigente());
+  return ahora.reduce((n, f, i) => n + ((i >= vigente.length || JSON.stringify(f) !== JSON.stringify(vigente[i])) ? 1 : 0), 0);
+}
+function cfgCtaCambios() {
+  if (!cfgCta) return 0;
+  const ahora = cfgCtaPayload(cfgCta), vigente = cfgCtaPayload(cfgCtaVigente());
+  return ahora.reduce((n, f, i) => n + (JSON.stringify(f) !== JSON.stringify(vigente[i]) ? 1 : 0), 0);
+}
+// Qué cambió entre dos versiones (en palabras): sirve para la confirmación y para el historial.
+function cfgEgrDiff(antes, despues) {
+  const lineas = [];
+  if (!Array.isArray(antes) || !Array.isArray(despues)) return lineas;
+  const previos = new Map(antes.map(f => [f.codigo, f]));
+  despues.forEach(f => {
+    const a = previos.get(f.codigo);
+    if (!a) { lineas.push(`➕ Nueva categoría: ${f.nombre} · ${GRUPO_NOMBRE[f.grupo]} · ${DONDE_NOMBRE[f.donde]}`); return; }
+    if (a.nombre !== f.nombre) lineas.push(`Nombre: «${a.nombre}» → «${f.nombre}»`);
+    if (a.donde !== f.donde) lineas.push(`${f.nombre}: se usa ${DONDE_NOMBRE[a.donde]} → ${DONDE_NOMBRE[f.donde]}`);
+    if (!!a.activo !== !!f.activo) lineas.push(f.activo ? `✅ Se reactiva: ${f.nombre}` : `🚫 Se retira: ${f.nombre}`);
+  });
+  return lineas;
+}
+function cfgCtaDiff(antes, despues) {
+  const lineas = [];
+  if (!Array.isArray(antes) || !Array.isArray(despues)) return lineas;
+  const previos = new Map(antes.map(f => [f.codigo, f]));
+  despues.forEach(f => {
+    const a = previos.get(f.codigo);
+    if (a && (a.nombre !== f.nombre || a.emoji !== f.emoji)) lineas.push(`Cuenta «${`${a.emoji} ${a.nombre}`.trim()}» → «${`${f.emoji} ${f.nombre}`.trim()}»`);
+  });
+  return lineas;
+}
+function cfgResumenEgresos(clave, valor, previo) {
+  const l = clave === CFGEGR_CLAVE ? cfgEgrDiff(previo, valor) : cfgCtaDiff(previo, valor);
+  if (!l.length) return 'sin diferencias';
+  return `${l.length} cambio${l.length === 1 ? '' : 's'}: ${l.slice(0, 3).join(' · ')}${l.length > 3 ? ` · …y ${l.length - 3} más` : ''}`;
+}
+
+function cfgEgrConstruir() {
+  const zona = document.getElementById('config-egresos');
+  if (!zona) return;
+  zona.innerHTML = `<div class="panel cfg-panel" id="cfgegr-panel">
+      <div class="panel-header"><div class="panel-title">🧾 Categorías de egresos y gastos</div></div>
+      <div class="panel-body">
+        <div class="cfg-ayuda">Las categorías con las que se clasifican los gastos del cierre y los egresos. Puedes cambiar el nombre, decidir dónde se usa, retirar una (deja de ofrecerse, pero los gastos viejos la siguen mostrando) o crear categorías nuevas. El <b>grupo</b> decide en qué casilla de los reportes y del modelo financiero se suma; se escoge al crear la categoría y ya no cambia, para que lo que ya registraste nunca se mueva de lugar. «No cuenta como egreso» es para plata que sale de la caja pero no es un gasto del negocio (como los préstamos).</div>
+        <div class="cfg-hoy" id="cfgegr-hoy"></div>
+        <div class="table-wrap cfgcat-largo"><table class="cfgcat-tabla"><thead><tr><th>Código</th><th>Nombre</th><th>Grupo</th><th>Se usa</th><th>Estado</th></tr></thead><tbody id="cfgegr-cuerpo"></tbody></table></div>
+        <div class="cfgcat-barra">
+          <div><button type="button" class="btn btn-outline" id="cfgegr-agregar" onclick="cfgEgrAgregar()">＋ Agregar categoría</button></div>
+          <div class="cfgcat-acciones">
+            <span class="cfgcat-contador" id="cfgegr-contador"></span>
+            <button type="button" class="btn btn-outline" id="cfgegr-descartar" onclick="cfgEgrDescartar()" disabled>Descartar</button>
+            <button type="button" class="btn btn-primary" id="cfgegr-guardar" onclick="cfgEgrGuardar()" disabled>Guardar cambios</button>
+          </div>
+        </div>
+      </div></div>
+    <div class="panel cfg-panel" id="cfgcta-panel">
+      <div class="panel-header"><div class="panel-title">🏦 Nombres de las cuentas</div></div>
+      <div class="panel-body">
+        <div class="cfg-ayuda">Cómo se llaman las 3 cuentas de la caja (efectivo y las dos de transferencia). Cambia el símbolo y el nombre; las cuentas siguen siendo las mismas y sus saldos no cambian. Aquí no se crean cuentas nuevas.</div>
+        <div class="cfg-hoy" id="cfgcta-hoy"></div>
+        <div class="table-wrap"><table class="cfgcat-tabla"><thead><tr><th>Cuenta</th><th>Símbolo</th><th>Nombre</th></tr></thead><tbody id="cfgcta-cuerpo"></tbody></table></div>
+        <div class="cfgcat-barra">
+          <div></div>
+          <div class="cfgcat-acciones">
+            <span class="cfgcat-contador" id="cfgcta-contador"></span>
+            <button type="button" class="btn btn-outline" id="cfgcta-descartar" onclick="cfgCtaDescartar()" disabled>Descartar</button>
+            <button type="button" class="btn btn-primary" id="cfgcta-guardar" onclick="cfgCtaGuardar()" disabled>Guardar cambios</button>
+          </div>
+        </div>
+      </div></div>`;
+  cfgEgrConstruido = true;
+}
+
+function cfgEgrBaseDe(f) { return cfgEgrVigente().find(x => x.codigo === f.codigo); }
+function cfgEgrClasesFila(f) {
+  const base = f._nuevo ? null : cfgEgrBaseDe(f);
+  const cambio = !f._nuevo && base && JSON.stringify(cfgEgrPayload([f])[0]) !== JSON.stringify(cfgEgrPayload([base])[0]);
+  return [f.activo ? '' : 'cfgcat-retirado', f._nuevo ? 'cfgcat-nuevo' : cambio ? 'cfgcat-cambio' : ''].filter(Boolean).join(' ');
+}
+function cfgEgrHtmlFila(f, i, habilitado) {
+  const dis = habilitado ? '' : ' disabled';
+  const grupo = f._nuevo
+    ? `<select aria-label="Grupo de ${escaparHtml(f.nombre || 'categoría nueva')}" onchange="cfgEgrEditar(${i},'grupo',this.value)"${dis}>${CAT_GRUPOS.map(g => `<option value="${g}"${g === f.grupo ? ' selected' : ''}>${escaparHtml(GRUPO_NOMBRE[g])}</option>`).join('')}</select>`
+    : `<span class="badge ${GRUPO_BADGE[f.grupo] || 'badge-gray'}">${escaparHtml(GRUPO_NOMBRE[f.grupo] || f.grupo)}</span>`;
+  const soloCierre = f.grupo === 'excluido';
+  const donde = `<select aria-label="Dónde se usa ${escaparHtml(f.nombre || 'la categoría nueva')}" onchange="cfgEgrEditar(${i},'donde',this.value)"${dis || (soloCierre ? ' disabled' : '')}>${CAT_DONDE.filter(d => !soloCierre || d === 'cierre').map(d => `<option value="${d}"${d === f.donde ? ' selected' : ''}>${escaparHtml(DONDE_NOMBRE[d])}</option>`).join('')}</select>`;
+  const estado = f._nuevo
+    ? `<span class="badge badge-gray">nueva</span> <button type="button" class="btn btn-outline" onclick="cfgEgrQuitar(${i})"${dis}>Quitar</button>`
+    : f.activo
+      ? `<span class="badge badge-green">activa</span> <button type="button" class="btn btn-outline" onclick="cfgEgrAlternar(${i})"${dis}>Retirar</button>`
+      : `<span class="badge badge-gray">retirada</span> <button type="button" class="btn btn-outline" onclick="cfgEgrAlternar(${i})"${dis}>Reactivar</button>`;
+  return `<tr id="cfgegr-fila-${i}" class="${cfgEgrClasesFila(f)}"><td class="cfgcat-cod">${escaparHtml(f.codigo)}</td>
+    <td><input type="text" maxlength="40" autocomplete="off" spellcheck="false" aria-label="Nombre" value="${escaparHtml(f.nombre || '')}" oninput="cfgEgrEditar(${i},'nombre',this.value)"${dis}></td>
+    <td>${grupo}</td><td>${donde}</td><td class="cfgcat-estado">${estado}</td></tr>`;
+}
+function cfgEgrRenderCuerpo() {
+  const cuerpo = document.getElementById('cfgegr-cuerpo');
+  if (!cuerpo) return;
+  const ok = CFG.disponible();
+  cuerpo.innerHTML = cfgEgrFilas().map((f, i) => cfgEgrHtmlFila(f, i, ok)).join('');
+}
+function cfgCtaRenderCuerpo() {
+  const cuerpo = document.getElementById('cfgcta-cuerpo');
+  if (!cuerpo) return;
+  const ok = CFG.disponible();
+  cuerpo.innerHTML = cfgCtaFilas().map((f, i) => {
+    const base = cfgCtaVigente().find(x => x.codigo === f.codigo);
+    const cambio = base && JSON.stringify(cfgCtaPayload([f])[0]) !== JSON.stringify(cfgCtaPayload([base])[0]);
+    return `<tr id="cfgcta-fila-${i}" class="${cambio ? 'cfgcat-cambio' : ''}"><td class="cfgcat-cod">${escaparHtml(f.codigo)}</td>
+      <td><input type="text" maxlength="16" autocomplete="off" aria-label="Símbolo de ${escaparHtml(f.codigo)}" style="max-width:80px;" value="${escaparHtml(f.emoji || '')}" oninput="cfgCtaEditar(${i},'emoji',this.value)"${ok ? '' : ' disabled'}></td>
+      <td><input type="text" maxlength="30" autocomplete="off" spellcheck="false" aria-label="Nombre de ${escaparHtml(f.codigo)}" value="${escaparHtml(f.nombre || '')}" oninput="cfgCtaEditar(${i},'nombre',this.value)"${ok ? '' : ' disabled'}></td></tr>`;
+  }).join('');
+}
+function cfgEgrActualizarHoy() {
+  const el = document.getElementById('cfgegr-hoy');
+  if (!el) return;
+  const filas = cfgEgrVigente(), fila = CFG.fila(CFGEGR_CLAVE), activas = filas.filter(f => f.activo).length;
+  el.innerHTML = `Hoy: <b>${activas} activa${activas === 1 ? '' : 's'}</b> de ${filas.length} · ` + (fila
+    ? `desde ${escaparHtml(fechaHoraLegible(fila.vigente_desde))} · por ${escaparHtml(fila.creado_por || '—')}`
+    : 'las categorías de siempre (nunca se han cambiado)');
+}
+function cfgCtaActualizarHoy() {
+  const el = document.getElementById('cfgcta-hoy');
+  if (!el) return;
+  const fila = CFG.fila(CFGCTA_CLAVE);
+  el.innerHTML = 'Hoy: ' + cfgCtaVigente().map(c => `<b>${escaparHtml(`${c.emoji} ${c.nombre}`.trim())}</b>`).join(' · ') + ' · ' + (fila
+    ? `desde ${escaparHtml(fechaHoraLegible(fila.vigente_desde))} · por ${escaparHtml(fila.creado_por || '—')}`
+    : 'los nombres de siempre (nunca se han cambiado)');
+}
+function cfgEgrActualizarBarra() {
+  const n = cfgEgrCambios(), ok = CFG.disponible();
+  const cont = document.getElementById('cfgegr-contador'), g = document.getElementById('cfgegr-guardar'), d = document.getElementById('cfgegr-descartar'), a = document.getElementById('cfgegr-agregar');
+  if (cont) cont.textContent = n ? `${n} cambio${n === 1 ? '' : 's'} sin guardar` : '';
+  if (g) g.disabled = !ok || n === 0;
+  if (d) d.disabled = !cfgEgr;
+  if (a) a.disabled = !ok;
+}
+function cfgCtaActualizarBarra() {
+  const n = cfgCtaCambios(), ok = CFG.disponible();
+  const cont = document.getElementById('cfgcta-contador'), g = document.getElementById('cfgcta-guardar'), d = document.getElementById('cfgcta-descartar');
+  if (cont) cont.textContent = n ? `${n} cambio${n === 1 ? '' : 's'} sin guardar` : '';
+  if (g) g.disabled = !ok || n === 0;
+  if (d) d.disabled = !cfgCta;
+}
+function cfgEgrRender() {
+  if (!document.getElementById('config-egresos')) return;
+  if (!cfgEgrConstruido) cfgEgrConstruir();
+  cfgEgrActualizarHoy();
+  cfgCtaActualizarHoy();
+  if (!cfgEgr) {                                        // mientras se edita no se pisa lo escrito
+    const firma = JSON.stringify(cfgEgrVigente()) + '|' + CFG.disponible();
+    if (firma !== cfgEgrFirma) { cfgEgrFirma = firma; cfgEgrRenderCuerpo(); }
+  }
+  if (!cfgCta) {
+    const firma = JSON.stringify(cfgCtaVigente()) + '|' + CFG.disponible();
+    if (firma !== cfgCtaFirma) { cfgCtaFirma = firma; cfgCtaRenderCuerpo(); }
+  }
+  cfgEgrActualizarBarra();
+  cfgCtaActualizarBarra();
+}
+
+function cfgEgrEditar(i, campo, valor) {
+  const filas = cfgEgrBorrador();
+  if (!filas[i]) return;
+  filas[i][campo] = valor;
+  if (campo === 'grupo' && valor === 'excluido') filas[i].donde = 'cierre';         // lo que no cuenta como egreso solo va al cierre
+  if (campo === 'grupo') cfgEgrRenderCuerpo();
+  else { const tr = document.getElementById('cfgegr-fila-' + i); if (tr) tr.className = cfgEgrClasesFila(filas[i]); }
+  cfgEgrActualizarBarra();
+}
+function cfgEgrAlternar(i) {
+  const filas = cfgEgrBorrador();
+  if (!filas[i]) return;
+  filas[i].activo = !filas[i].activo;
+  cfgEgrRenderCuerpo();
+  cfgEgrActualizarBarra();
+}
+function cfgEgrSiguienteCodigo(filas) {
+  const usados = new Set(filas.map(f => f.codigo));
+  for (let n = 1; ; n++) { const c = 'cat' + n; if (!usados.has(c)) return c; }
+}
+function cfgEgrAgregar() {
+  const filas = cfgEgrBorrador();
+  filas.push({ codigo: cfgEgrSiguienteCodigo(filas), nombre: '', grupo: 'otro', donde: 'ambos', activo: true, _nuevo: true });
+  cfgEgrRenderCuerpo();
+  cfgEgrActualizarBarra();
+  const el = document.querySelector(`#cfgegr-fila-${filas.length - 1} input`);
+  if (el) { el.focus(); if (el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }
+}
+function cfgEgrQuitar(i) {
+  const filas = cfgEgrBorrador();
+  if (!filas[i] || !filas[i]._nuevo) return;            // solo se quita lo que todavía no se ha guardado
+  filas.splice(i, 1);
+  cfgEgrRenderCuerpo();
+  cfgEgrActualizarBarra();
+}
+function cfgEgrDescartar() { cfgEgr = null; cfgEgrFirma = null; cfgEgrRenderCuerpo(); cfgEgrActualizarBarra(); }
+function cfgCtaEditar(i, campo, valor) {
+  const filas = cfgCtaBorrador();
+  if (!filas[i]) return;
+  filas[i][campo] = valor;
+  const tr = document.getElementById('cfgcta-fila-' + i);
+  if (tr) {
+    const base = cfgCtaVigente().find(x => x.codigo === filas[i].codigo);
+    tr.className = base && JSON.stringify(cfgCtaPayload([filas[i]])[0]) !== JSON.stringify(cfgCtaPayload([base])[0]) ? 'cfgcat-cambio' : '';
+  }
+  cfgCtaActualizarBarra();
+}
+function cfgCtaDescartar() { cfgCta = null; cfgCtaFirma = null; cfgCtaRenderCuerpo(); cfgCtaActualizarBarra(); }
+
+// Guardado común: revisa, avisa si otro administrador cambió lo mismo, pide confirmación y guarda una versión nueva.
+async function cfgEgrGuardarVersion({ clave, titulo, payload, lineas, descartar }) {
+  const mal = cfgValidar(clave, payload);
+  if (mal) { showToast('⚠ ' + mal, 'warning'); return; }
+  if (!lineas.length) { showToast('ℹ️ Ya está así: no hay nada que guardar', 'info'); return; }
+  try {
+    const frescas = await sbGetAll('configuracion', 'order=id.asc');
+    const ultimo = lista => lista.reduce((m, f) => (f && f.clave === clave && (f.id || 0) > m ? f.id : m), 0);
+    if (ultimo(frescas) !== ultimo(ST.configuracion)) {
+      ST.configuracion = frescas;
+      descartar();
+      renderAll();
+      showToast('⚠ Alguien más acaba de cambiar esto. Se actualizó la pantalla: revisa y vuelve a hacer tus cambios.', 'warning');
+      return;
+    }
+  } catch (e) { /* sin conexión: el guardado de abajo fallará con su propio aviso */ }
+  const ok = await confirmarSistema({
+    titulo: `¿Guardar los cambios en «${titulo}»?`,
+    cuerpo: `${lineas.slice(0, 12).join('\n')}${lineas.length > 12 ? `\n…y ${lineas.length - 12} cambios más` : ''}\n\nRigen desde ahora. Lo que ya registraste no cambia: los gastos y los movimientos conservan sus montos y sus códigos; solo cambia cómo se llaman.`,
+    aceptar: 'Sí, guardar'
+  });
+  if (!ok) return;
+  cfgGuardando = true;
+  try {
+    const guardadas = await sbInsert('configuracion', { clave, valor: payload });
+    ST.configuracion = (guardadas && guardadas.length) ? ST.configuracion.concat(guardadas) : await sbGetAll('configuracion', 'order=id.asc');
+    descartar();
+    showToast(`✅ Guardado: ${titulo} (${lineas.length} cambio${lineas.length === 1 ? '' : 's'}, rige desde ahora)`, 'ok');
+    renderAll();
+  } catch (e) {
+    console.error('No se pudo guardar la configuración:', e);
+    showToast('⚠ No se pudo guardar: ' + cfgMensajeError(e), 'warning');
+  } finally {
+    cfgGuardando = false;
+  }
+}
+async function cfgEgrGuardar() {
+  if (cfgGuardando) return;
+  if (!adminAutenticado) { showToast('⚠ Solo el administrador puede cambiar la configuración', 'warning'); return; }
+  if (!CFG.disponible()) { showToast('⚠ Falta instalar la configuración en Supabase (sql/configuracion.sql, sql/configuracion_etapa_2.sql y sql/configuracion_etapa_4.sql)', 'warning'); return; }
+  const filas = cfgEgr;
+  if (!filas) return;
+  for (const f of filas) if (!cfgLimpiar(f.nombre)) { showToast('⚠ Falta el nombre de una categoría' + (f._nuevo ? ' nueva' : ''), 'warning'); return; }
+  const payload = cfgEgrPayload(filas);
+  await cfgEgrGuardarVersion({ clave: CFGEGR_CLAVE, titulo: 'Categorías de egresos', payload, lineas: cfgEgrDiff(cfgEgrVigente(), payload), descartar: () => { cfgEgr = null; cfgEgrFirma = null; } });
+}
+async function cfgCtaGuardar() {
+  if (cfgGuardando) return;
+  if (!adminAutenticado) { showToast('⚠ Solo el administrador puede cambiar la configuración', 'warning'); return; }
+  if (!CFG.disponible()) { showToast('⚠ Falta instalar la configuración en Supabase (sql/configuracion.sql, sql/configuracion_etapa_2.sql y sql/configuracion_etapa_4.sql)', 'warning'); return; }
+  const filas = cfgCta;
+  if (!filas) return;
+  for (const f of filas) if (!cfgLimpiar(f.nombre)) { showToast('⚠ Falta el nombre de una cuenta', 'warning'); return; }
+  const payload = cfgCtaPayload(filas);
+  await cfgEgrGuardarVersion({ clave: CFGCTA_CLAVE, titulo: 'Nombres de las cuentas', payload, lineas: cfgCtaDiff(cfgCtaVigente(), payload), descartar: () => { cfgCta = null; cfgCtaFirma = null; } });
+}
+
 // ── TABS ──────────────────────────────────────────────────────────────
 function showTab(id, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -11985,6 +12379,7 @@ function showTab(id, el) {
 // ── RENDER ALL ────────────────────────────────────────────────────────
 function renderAll() {
   catalogoAlDia();
+  categoriasYCuentasAlDia();
   // Operativas — sin contraseña
   renderIngresos();
   renderPendientes();
