@@ -145,14 +145,16 @@ test.describe('la pestaña Menú de la copia de pruebas', () => {
     expect(reg.errores).toEqual([]);
   });
 
-  test('el Menú de adentro funciona: guarda su catálogo en el navegador y ofrece las categorías', async ({ page }) => {
+  test('el Menú de adentro funciona: recibe la lista de platos del sistema y ofrece las categorías', async ({ page }) => {
     await abrirSistema(page, { url: URL_SUELTO, usuario: 'admin' });
     await irAlMenu(page);
     const marco = page.frames().find(f => f.url() === 'about:srcdoc');
     expect(marco, 'no se encontró el marco del Menú').toBeTruthy();
     await expect(marco.locator('#lista-sopas')).toBeAttached();
-    const guardado = await marco.evaluate(() => { guardarCatalogo(catalogo); return Object.keys(JSON.parse(localStorage.getItem('elLobo_catalogo'))); });
+    expect(await marco.evaluate(() => origenPlatos)).toBe('sistema');            // el Menú de adentro comparte el almacenamiento del sistema
+    const guardado = await marco.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('elLobo_menu_platos'))));
     expect(guardado).toEqual(expect.arrayContaining(['sopas', 'arroces', 'proteinas', 'acomp']));
+    await expect(marco.locator('#lista-sopas label')).toHaveCount(9);
   });
 
   test('«Abrir en pestaña aparte» abre el Menú completo en otra pestaña (aunque no haya carpeta Menu/)', async ({ page, context }) => {
@@ -163,9 +165,9 @@ test.describe('la pestaña Menú de la copia de pruebas', () => {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     const [aparte] = await Promise.all([context.waitForEvent('page'), page.getByText('Abrir en pestaña aparte').click()]);
     await expect(aparte).toHaveTitle(/Menú del Día/);
-    await aparte.waitForFunction(() => document.readyState === 'complete' && typeof guardarCatalogo === 'function', null, { timeout: 20000 });
+    await aparte.waitForFunction(() => document.readyState === 'complete' && typeof buildMenuLists === 'function', null, { timeout: 20000 });
     await expect(aparte.getByText('Generador de Menú del Día')).toBeVisible();
-    expect(await aparte.evaluate(() => { guardarCatalogo(catalogo); return localStorage.getItem('elLobo_catalogo') !== null; })).toBe(true);
+    expect(await aparte.evaluate(() => origenPlatos)).toBe('sistema');           // y la pestaña aparte también recibe la lista del sistema
     expect(page.url()).toBe(URL_SUELTO);                                         // y la pestaña del sistema se quedó donde estaba (no navegó a «#»)
   });
 

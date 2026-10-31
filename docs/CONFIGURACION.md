@@ -1,8 +1,8 @@
-# ⚙️ Configuración del negocio (etapas 1, 2 y 4)
+# ⚙️ Configuración del negocio (etapas 1, 2, 3 y 4)
 
 Pestaña **⚙️ Configuración** — solo el administrador. Aquí se cambian los valores que antes estaban escritos a mano en el
 código. La **etapa 1** (nombre, mesas, recargos, respaldo) y la **etapa 2** (🍽️ **Productos y precios**, más abajo) viven en
-la misma tabla y la misma pantalla; igual la **etapa 4** (🧾 **Egresos y cuentas**, más abajo). Las siguientes (finanzas) se suman igual.
+la misma tabla y la misma pantalla; igual la **etapa 3** (📋 **Platos del menú**, más abajo) y la **etapa 4** (🧾 **Egresos y cuentas**, más abajo). Las siguientes se suman igual.
 
 ## Regla de oro
 
@@ -178,6 +178,60 @@ dato). Verificación esperada: `categorias_instaladas = true · disparador = 1 �
 `sql/rollback_configuracion_etapa_4.sql` (deja la base como al terminar la etapa 2; **no** borra lo guardado). Hasta que se
 instale, la pantalla muestra «falta instalar» y los botones quedan apagados.
 
+## 📋 Platos del menú (etapa 3)
+
+Un solo panel con **la lista de platos** del restaurante: sopas, arroces, proteínas, acompañamientos y asados. Esa lista la usan
+**dos** cosas que antes tenían cada una su copia (y ya no coincidían): el **autocompletado de Pedidos** y el **generador de la
+imagen del Menú**. Los 47 platos de El Lobo ya vienen; se pueden **crear**, **renombrar** y **retirar** (nunca se borran).
+
+| Campo | Qué hace | Se puede cambiar |
+|---|---|---|
+| Código | Identifica el plato (`SP01` sopa, `AR01` arroz, `PT01` proteína, `AC01` acompañamiento, `AS01` asado; los nuevos siguen la numeración) | Nunca |
+| Lista | A cuál de las 5 listas pertenece | Solo al crearlo |
+| Nombre | Lo que se ve en el autocompletado, el Menú y los reportes (1–50 caracteres, sin los signos de código de siempre; no se repite dentro de su lista; proteínas y asados cuentan como una sola lista para esto) | Siempre |
+| Estado | Activo o retirado | Siempre |
+
+- **Retirar** un plato lo quita del autocompletado y del generador del Menú, pero los pedidos viejos lo siguen mostrando y
+  contando. Se puede reactivar. La base de datos no deja borrar un plato ni dejar el menú sin los 47 de El Lobo.
+- **Renombrar** muestra debajo del nombre un aviso: «Vas a cambiar el nombre «X» por «Y». Ten en cuenta que los pedidos anteriores
+  con «X» se contarán junto con «Y» en los reportes, para que no se parta la estadística en dos». Al guardar, la ventana de
+  confirmación lo repite.
+- **Crear** un plato nuevo: se elige la lista y el nombre; el código lo pone el sistema.
+- **Máximo 300 platos** en total.
+
+### Qué cambia con un nombre nuevo y qué no
+
+Los pedidos guardan el plato como **texto** (el nombre que tenía ese día) y **nunca se modifican**. Lo que cambia es cómo los
+**cuenta** el sistema en los reportes de «platos más pedidos» del Tablero: cada pedido se lee con la lista que regía en la fecha
+en que se tomó, se reconoce el plato por su código y se cuenta bajo su nombre **de hoy**. Así, si «Sopa de Hueso» pasa a
+«Sopa de Huesos», los pedidos de todos los meses —también los anteriores al cambio— suman en «Sopa de Huesos». Si un nombre
+viejo ya no se puede reconocer (texto escrito a mano, plato que no estaba en la lista), se cuenta tal cual estaba escrito.
+Para saber si un plato es asado o proteína se mira su nombre de hoy, incluso retirado.
+
+### Generador de la imagen del Menú
+
+- El sistema le deja la lista de hoy (solo platos activos, sin los asados, que el generador no usa) en el almacenamiento del
+  navegador, al abrirse y cada vez que se guarda un cambio. El generador la lee: dentro de la pestaña «Menú» y en la pestaña
+  aparte, y se actualiza solo cuando llega una lista nueva (lo que ya estaba marcado para el menú del día se conserva; lo que
+  ya no existe se desmarca).
+- Si el generador se abre **sin** haber abierto antes el sistema (o la lista guardada está dañada), ofrece los platos de siempre.
+- Su pestaña «📋 Platos disponibles» ya **no edita**: solo muestra la lista y dice dónde se cambia («Configuración → Platos del
+  menú»). Ya no existe la lista propia del generador que vivía solo en el navegador.
+- **Pendiente (decisión del dueño):** la plantilla de imagen tiene los precios escritos dentro de la imagen.
+
+### Instalación
+
+`sql/configuracion_etapa_3.sql` (después de las etapas 1, 2 y 4; una transacción; seguro de repetir; no toca ningún dato).
+Verificación esperada: `platos_instalados = true · disparador = 1 · anon_con_permisos = false`. Para deshacer:
+`sql/rollback_configuracion_etapa_3.sql` (deja la base como al terminar la etapa 4; **no** borra lo guardado). Hasta que se
+instale, la pantalla muestra «falta instalar» y los botones quedan apagados; el autocompletado y el generador siguen con los
+platos de siempre.
+
+### Excel
+
+«Exportar a Excel» trae una hoja más, `Menu_Platos` (código, lista, nombre, activo). El modelo financiero en Python no la lee
+(no usa nombres de platos).
+
 ## Respaldos
 
 - El **Respaldo completo** incluye la historia de la configuración (17 tablas).
@@ -199,4 +253,7 @@ instale, la pantalla muestra «falta instalar» y los botones quedan apagados.
 | **Etapa 4 · base de datos real:** 93 casos compartidos con su mensaje exacto (categorías y cuentas), «las categorías se retiran, no se borran», «el grupo no cambia», sellos, permisos, instalar sobre las etapas 1 y 2, repetir, rollback | `tests/python/test_configuracion_etapa_4.py` |
 | **Etapa 4 · pantalla:** sin nada guardado = idéntico a antes (foto de 9 vistas); listas, etiquetas, colores y sumas por grupo con categorías y nombres de cuentas guardados; edición, confirmación, validaciones, cambios simultáneos, permisos; y los **mismos 93 casos** contra la pantalla y el servidor falso | `tests/configuracion-egresos.spec.js` + `tests/fixtures/casos-egresos.json` |
 | Foto de cómo se veía todo antes de la etapa 4 | `tests/fixtures/egresos-anterior.json` |
+| **Etapa 3 · base de datos real:** 78 casos compartidos con su mensaje exacto (platos del menú), «los platos se retiran, no se borran», los 47 de El Lobo siempre, sellos, permisos, instalar sobre las etapas 1, 2 y 4 (y orden 2→4→3), repetir, rollback | `tests/python/test_configuracion_etapa_3.py` |
+| **Etapa 3 · pantalla:** sin nada guardado = idéntico a antes; autocompletado, reportes (renombres, encadenados, nombres reutilizados, pedidos sin hora, asados), edición, aviso de renombre, confirmación, validaciones, cambios simultáneos, permisos, Excel; el generador del Menú recibe la lista, la refresca sin recargar, se protege de lo dañado y nunca interpreta un nombre como código; y los **mismos 78 casos** contra la pantalla y el servidor falso | `tests/configuracion-platos.spec.js` + `tests/fixtures/casos-platos.json` |
+| Foto de cómo se veía todo antes de la etapa 3 | `tests/fixtures/platos-anterior.json` |
 | Modelo financiero: el rubro sale del grupo (categorías nuevas, renombradas, retiradas, excluidas, huérfanas, export viejo) | `tests/python/test_motor_funciones.py` → `TestCategoriasConfigurables` |

@@ -1,0 +1,833 @@
+{
+ "comentario": "Casos compartidos por las pruebas de Python (Postgres real), de la pantalla y del servidor falso para los platos del menú: las tres reglas deben dar el MISMO veredicto y el MISMO mensaje. «mensaje» null = válido. Cada caso parte de la lista base de El Lobo (47 platos) y le aplica: quitar (posiciones), mod (posición → campos), sin (posición → campos que se borran), agregar (elementos al final, tal cual), relleno (n platos válidos al final: PT28, PT29… con nombre «Relleno n»); o trae su «valor» completo. (El caso «código con salto de línea al final» no está aquí porque su mensaje lleva un salto de línea y psql lo parte: se prueba aparte en cada lado.)",
+ "casos": [
+  {
+   "id": "platos: los 47 de El Lobo",
+   "clave": "menu_platos",
+   "mensaje": null
+  },
+  {
+   "id": "platos: se cambia un nombre",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "nombre": "Sopa de Huesos"
+    }
+   }
+  },
+  {
+   "id": "platos: el nombre puede tener tildes, ñ, emoji, paréntesis y barra",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "mod": {
+    "23": {
+     "nombre": "Pollo frito (año ñandú) 🍗 / BBQ - 2x1, con yuca."
+    }
+   }
+  },
+  {
+   "id": "platos: nuevo plato de sopa",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "SP10",
+     "lista": "sopa",
+     "nombre": "Sopa de Mondongo",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: nuevo plato de arroz",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "AR06",
+     "lista": "arroz",
+     "nombre": "Arroz con Pollo",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: nuevo plato de proteína",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "PT28",
+     "lista": "proteina",
+     "nombre": "Cerdo Agridulce",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: nuevo acompañamiento",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "AC04",
+     "lista": "acomp",
+     "nombre": "Ensalada",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: nuevo asado",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "AS04",
+     "lista": "asado",
+     "nombre": "Asado de Chigüiro",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: código de tres cifras",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "SP100",
+     "lista": "sopa",
+     "nombre": "Sopa de Ahuyama",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: un plato retirado",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "mod": {
+    "20": {
+     "activo": false
+    }
+   }
+  },
+  {
+   "id": "platos: se retiran todas las sopas",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "activo": false
+    },
+    "1": {
+     "activo": false
+    },
+    "2": {
+     "activo": false
+    },
+    "3": {
+     "activo": false
+    },
+    "4": {
+     "activo": false
+    },
+    "5": {
+     "activo": false
+    },
+    "6": {
+     "activo": false
+    },
+    "7": {
+     "activo": false
+    },
+    "8": {
+     "activo": false
+    }
+   }
+  },
+  {
+   "id": "platos: retirar y renombrar a la vez",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "mod": {
+    "10": {
+     "nombre": "Arroz con Coco",
+     "activo": false
+    }
+   }
+  },
+  {
+   "id": "platos: nombre de 50 caracteres justos",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "SP10",
+     "lista": "sopa",
+     "nombre": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: el mismo nombre en listas que no se mezclan (sopa y arroz)",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "AR06",
+     "lista": "arroz",
+     "nombre": "Sopa de Pollo",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: mismo nombre con otras mayúsculas en otra lista",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "AC04",
+     "lista": "acomp",
+     "nombre": "SOPA DE POLLO",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: un asado y una sopa con el mismo nombre",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "SP10",
+     "lista": "sopa",
+     "nombre": "Asado de Res",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: máximo 300 platos",
+   "clave": "menu_platos",
+   "mensaje": null,
+   "relleno": 253
+  },
+  {
+   "id": "platos: no es una lista (objeto)",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú debe ser una lista.",
+   "valor": {}
+  },
+  {
+   "id": "platos: no es una lista (texto)",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú debe ser una lista.",
+   "valor": "Sopa"
+  },
+  {
+   "id": "platos: no es una lista (nulo)",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú debe ser una lista.",
+   "valor": null
+  },
+  {
+   "id": "platos: lista vacía",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú trae 0 platos y esa cantidad no es válida.",
+   "valor": []
+  },
+  {
+   "id": "platos: 46 platos (falta uno)",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú trae 46 platos y esa cantidad no es válida.",
+   "quitar": [
+    0
+   ]
+  },
+  {
+   "id": "platos: 301 platos",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú trae 301 platos y esa cantidad no es válida.",
+   "relleno": 254
+  },
+  {
+   "id": "platos: se quita un plato de El Lobo aunque la cantidad dé",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú no puede quitar platos de El Lobo: se retiran, no se borran.",
+   "quitar": [
+    0
+   ],
+   "relleno": 1
+  },
+  {
+   "id": "platos: se quitan dos de El Lobo",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú no puede quitar platos de El Lobo: se retiran, no se borran.",
+   "quitar": [
+    45,
+    46
+   ],
+   "relleno": 2
+  },
+  {
+   "id": "platos: un elemento que es un texto",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú trae un plato mal formado.",
+   "agregar": [
+    "Sopa"
+   ]
+  },
+  {
+   "id": "platos: un elemento nulo",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú trae un plato mal formado.",
+   "agregar": [
+    null
+   ]
+  },
+  {
+   "id": "platos: un elemento que es otra lista",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú trae un plato mal formado.",
+   "agregar": [
+    [
+     1
+    ]
+   ]
+  },
+  {
+   "id": "platos: un plato sin «activo»",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú trae un plato con campos que no corresponden.",
+   "sin": {
+    "0": [
+     "activo"
+    ]
+   }
+  },
+  {
+   "id": "platos: un plato sin «lista»",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú trae un plato con campos que no corresponden.",
+   "sin": {
+    "0": [
+     "lista"
+    ]
+   }
+  },
+  {
+   "id": "platos: un plato con un campo de más",
+   "clave": "menu_platos",
+   "mensaje": "La lista de platos del menú trae un plato con campos que no corresponden.",
+   "mod": {
+    "0": {
+     "precio": 5000
+    }
+   }
+  },
+  {
+   "id": "platos: nombre que no es texto (número)",
+   "clave": "menu_platos",
+   "mensaje": "El nombre de cada plato debe ser un texto.",
+   "mod": {
+    "0": {
+     "nombre": 123
+    }
+   }
+  },
+  {
+   "id": "platos: nombre nulo",
+   "clave": "menu_platos",
+   "mensaje": "El nombre de cada plato debe ser un texto.",
+   "mod": {
+    "0": {
+     "nombre": null
+    }
+   }
+  },
+  {
+   "id": "platos: nombre vacío",
+   "clave": "menu_platos",
+   "mensaje": "El nombre de cada plato debe tener entre 1 y 50 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": ""
+    }
+   }
+  },
+  {
+   "id": "platos: nombre de 51 caracteres",
+   "clave": "menu_platos",
+   "mensaje": "El nombre de cada plato debe tener entre 1 y 50 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con espacio al principio",
+   "clave": "menu_platos",
+   "mensaje": "El nombre de cada plato debe tener entre 1 y 50 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": " Sopa"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con espacio al final",
+   "clave": "menu_platos",
+   "mensaje": "El nombre de cada plato debe tener entre 1 y 50 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "Sopa "
+    }
+   }
+  },
+  {
+   "id": "platos: nombre de solo espacios",
+   "clave": "menu_platos",
+   "mensaje": "El nombre de cada plato debe tener entre 1 y 50 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "  "
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con menor que",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopa<x"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con mayor que",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopa>x"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con ampersand",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopa&x"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con comillas dobles",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopa\"x"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con comilla simple",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopa'x"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con tilde invertida",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopa`x"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con barra invertida",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopa\\x"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con salto de línea",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopa\nx"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con tabulador al final",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopa\t"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con carácter DEL",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Sopax"
+    }
+   }
+  },
+  {
+   "id": "platos: nombre con un salto de línea al principio",
+   "clave": "menu_platos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "\nSopa"
+    }
+   }
+  },
+  {
+   "id": "platos: lista desconocida",
+   "clave": "menu_platos",
+   "mensaje": "La lista de \"Sopa de Hueso\" no es válida (sopa, arroz, proteina, acomp o asado).",
+   "mod": {
+    "0": {
+     "lista": "postre"
+    }
+   }
+  },
+  {
+   "id": "platos: lista con mayúscula",
+   "clave": "menu_platos",
+   "mensaje": "La lista de \"Sopa de Hueso\" no es válida (sopa, arroz, proteina, acomp o asado).",
+   "mod": {
+    "0": {
+     "lista": "Sopa"
+    }
+   }
+  },
+  {
+   "id": "platos: lista que es un número",
+   "clave": "menu_platos",
+   "mensaje": "La lista de \"Sopa de Hueso\" no es válida (sopa, arroz, proteina, acomp o asado).",
+   "mod": {
+    "0": {
+     "lista": 5
+    }
+   }
+  },
+  {
+   "id": "platos: lista nula",
+   "clave": "menu_platos",
+   "mensaje": "La lista de \"Sopa de Hueso\" no es válida (sopa, arroz, proteina, acomp o asado).",
+   "mod": {
+    "0": {
+     "lista": null
+    }
+   }
+  },
+  {
+   "id": "platos: lista vacía",
+   "clave": "menu_platos",
+   "mensaje": "La lista de \"Sopa de Hueso\" no es válida (sopa, arroz, proteina, acomp o asado).",
+   "mod": {
+    "0": {
+     "lista": ""
+    }
+   }
+  },
+  {
+   "id": "platos: código que no es texto",
+   "clave": "menu_platos",
+   "mensaje": "El código de \"Sopa de Hueso\" debe ser un texto.",
+   "mod": {
+    "0": {
+     "codigo": 10
+    }
+   }
+  },
+  {
+   "id": "platos: código nulo",
+   "clave": "menu_platos",
+   "mensaje": "El código de \"Sopa de Hueso\" debe ser un texto.",
+   "mod": {
+    "0": {
+     "codigo": null
+    }
+   }
+  },
+  {
+   "id": "platos: código de una sola cifra",
+   "clave": "menu_platos",
+   "mensaje": "El código \"SP1\" no sirve para la lista sopa: debe ser SP seguido de 2 o 3 números.",
+   "mod": {
+    "0": {
+     "codigo": "SP1"
+    }
+   }
+  },
+  {
+   "id": "platos: código de cuatro cifras",
+   "clave": "menu_platos",
+   "mensaje": "El código \"SP1000\" no sirve para la lista sopa: debe ser SP seguido de 2 o 3 números.",
+   "mod": {
+    "0": {
+     "codigo": "SP1000"
+    }
+   }
+  },
+  {
+   "id": "platos: código en minúsculas",
+   "clave": "menu_platos",
+   "mensaje": "El código \"sp10\" no sirve para la lista sopa: debe ser SP seguido de 2 o 3 números.",
+   "mod": {
+    "0": {
+     "codigo": "sp10"
+    }
+   }
+  },
+  {
+   "id": "platos: código con el prefijo de otra lista",
+   "clave": "menu_platos",
+   "mensaje": "El código \"AR10\" no sirve para la lista sopa: debe ser SP seguido de 2 o 3 números.",
+   "mod": {
+    "0": {
+     "codigo": "AR10"
+    }
+   }
+  },
+  {
+   "id": "platos: código con espacio al principio",
+   "clave": "menu_platos",
+   "mensaje": "El código \" SP10\" no sirve para la lista sopa: debe ser SP seguido de 2 o 3 números.",
+   "mod": {
+    "0": {
+     "codigo": " SP10"
+    }
+   }
+  },
+  {
+   "id": "platos: código con espacio al final",
+   "clave": "menu_platos",
+   "mensaje": "El código \"SP10 \" no sirve para la lista sopa: debe ser SP seguido de 2 o 3 números.",
+   "mod": {
+    "0": {
+     "codigo": "SP10 "
+    }
+   }
+  },
+  {
+   "id": "platos: código con una letra al final",
+   "clave": "menu_platos",
+   "mensaje": "El código \"SP1a\" no sirve para la lista sopa: debe ser SP seguido de 2 o 3 números.",
+   "mod": {
+    "0": {
+     "codigo": "SP1a"
+    }
+   }
+  },
+  {
+   "id": "platos: código vacío",
+   "clave": "menu_platos",
+   "mensaje": "El código \"\" no sirve para la lista sopa: debe ser SP seguido de 2 o 3 números.",
+   "mod": {
+    "0": {
+     "codigo": ""
+    }
+   }
+  },
+  {
+   "id": "platos: código de proteína en una sopa",
+   "clave": "menu_platos",
+   "mensaje": "El código \"PT10\" no sirve para la lista sopa: debe ser SP seguido de 2 o 3 números.",
+   "mod": {
+    "0": {
+     "codigo": "PT10"
+    }
+   }
+  },
+  {
+   "id": "platos: código repetido",
+   "clave": "menu_platos",
+   "mensaje": "El código \"SP01\" está repetido.",
+   "agregar": [
+    {
+     "codigo": "SP01",
+     "lista": "sopa",
+     "nombre": "Sopa nueva",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: código repetido entre dos nuevos",
+   "clave": "menu_platos",
+   "mensaje": "El código \"SP10\" está repetido.",
+   "agregar": [
+    {
+     "codigo": "SP10",
+     "lista": "sopa",
+     "nombre": "Sopa A",
+     "activo": true
+    },
+    {
+     "codigo": "SP10",
+     "lista": "sopa",
+     "nombre": "Sopa B",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: nombre repetido en la misma lista",
+   "clave": "menu_platos",
+   "mensaje": "El plato \"Sopa de Hueso\" está repetido en su lista.",
+   "agregar": [
+    {
+     "codigo": "SP10",
+     "lista": "sopa",
+     "nombre": "Sopa de Hueso",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: nombre repetido con otras mayúsculas",
+   "clave": "menu_platos",
+   "mensaje": "El plato \"SOPA DE hueso\" está repetido en su lista.",
+   "agregar": [
+    {
+     "codigo": "SP10",
+     "lista": "sopa",
+     "nombre": "SOPA DE hueso",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: una proteína con el nombre de un asado",
+   "clave": "menu_platos",
+   "mensaje": "El plato \"Asado de Res\" está repetido en su lista.",
+   "agregar": [
+    {
+     "codigo": "PT28",
+     "lista": "proteina",
+     "nombre": "Asado de Res",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: un asado con el nombre de una proteína",
+   "clave": "menu_platos",
+   "mensaje": "El plato \"Pollo Frito\" está repetido en su lista.",
+   "agregar": [
+    {
+     "codigo": "AS04",
+     "lista": "asado",
+     "nombre": "Pollo Frito",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "platos: un renombrado que choca con otro de su lista",
+   "clave": "menu_platos",
+   "mensaje": "El plato \"Sopa de Queso\" está repetido en su lista.",
+   "mod": {
+    "0": {
+     "nombre": "Sopa de Queso"
+    }
+   }
+  },
+  {
+   "id": "platos: activo como texto",
+   "clave": "menu_platos",
+   "mensaje": "\"Sopa de Hueso\" debe estar activo o retirado (verdadero o falso).",
+   "mod": {
+    "0": {
+     "activo": "true"
+    }
+   }
+  },
+  {
+   "id": "platos: activo como número",
+   "clave": "menu_platos",
+   "mensaje": "\"Sopa de Hueso\" debe estar activo o retirado (verdadero o falso).",
+   "mod": {
+    "0": {
+     "activo": 1
+    }
+   }
+  },
+  {
+   "id": "platos: activo nulo",
+   "clave": "menu_platos",
+   "mensaje": "\"Sopa de Hueso\" debe estar activo o retirado (verdadero o falso).",
+   "mod": {
+    "0": {
+     "activo": null
+    }
+   }
+  },
+  {
+   "id": "platos: nombre mal y código mal: avisa del nombre",
+   "clave": "menu_platos",
+   "mensaje": "El nombre de cada plato debe tener entre 1 y 50 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "",
+     "codigo": "x"
+    }
+   }
+  },
+  {
+   "id": "platos: lista mal y código mal: avisa de la lista",
+   "clave": "menu_platos",
+   "mensaje": "La lista de \"Sopa de Hueso\" no es válida (sopa, arroz, proteina, acomp o asado).",
+   "mod": {
+    "0": {
+     "lista": "x",
+     "codigo": "x"
+    }
+   }
+  },
+  {
+   "id": "platos: código repetido y nombre repetido: avisa del código",
+   "clave": "menu_platos",
+   "mensaje": "El código \"SP01\" está repetido.",
+   "agregar": [
+    {
+     "codigo": "SP01",
+     "lista": "sopa",
+     "nombre": "Sopa de Hueso",
+     "activo": true
+    }
+   ]
+  }
+ ]
+}

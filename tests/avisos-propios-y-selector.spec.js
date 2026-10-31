@@ -500,36 +500,34 @@ test.describe('4) Generador del menú', () => {
     expect(nativos).toEqual([]);
   });
 
-  test('eliminar un plato: «Volver» y Esc no lo borran; «Sí, eliminar» sí', async ({ page }) => {
+  test('la ventana de pregunta del Menú: «Volver», Esc y un clic fuera no aceptan; solo el botón de aceptar', async ({ page }) => {
+    // (Desde la etapa 3 el generador ya no borra platos —la lista se cambia en Configuración—, pero la ventana de pregunta sigue
+    // siendo la misma pieza: se prueba directo.)
     const nativos = vigilarNativos(page);
     await abrirMenu(page);
-    await page.evaluate(() => buildAdmin());                                             // la lista de administración se arma al abrir esa pestaña
-    const total = () => page.evaluate(() => catalogo.sopas.length);
-    const antes = await total();
-    const nombre = await page.evaluate(() => catalogo.sopas[0]);
     const ventana = page.locator('#aviso-menu');
+    const preguntar = () => page.evaluate(() => avisoMenu({ titulo: '¿Seguro?', cuerpo: 'Una pregunta', aceptar: 'Sí, seguir', cancelar: 'Volver' }));
 
-    const a = page.evaluate(() => eliminarPlato('sopas', 0));
+    const a = preguntar();
     await expect(ventana).toBeVisible();
-    await expect(page.locator('#aviso-menu-titulo')).toHaveText(`¿Eliminar "${nombre}"?`);
+    await expect(page.locator('#aviso-menu-titulo')).toHaveText('¿Seguro?');
+    await expect(page.locator('#aviso-menu-botones button')).toHaveCount(2);
     await ventana.locator('button[data-eleccion="no"]').click();
-    await a;
-    expect(await total()).toBe(antes);
+    expect(await a).toBe(false);
 
-    const b = page.evaluate(() => eliminarPlato('sopas', 0));
+    const b = preguntar();
     await expect(ventana).toBeVisible();
     await ventana.click({ position: { x: 4, y: 4 } });                                   // clic fuera: no decide nada
     await expect(ventana).toBeVisible();
     await page.keyboard.press('Escape');
-    await b;
-    expect(await total()).toBe(antes);
+    expect(await b).toBe(false);
+    await expect(ventana).toBeHidden();
 
-    const c = page.evaluate(() => eliminarPlato('sopas', 0));
+    const c = preguntar();
     await expect(ventana).toBeVisible();
     await ventana.locator('button[data-eleccion="si"]').click();
-    await c;
-    expect(await total()).toBe(antes - 1);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('elLobo_catalogo')).sopas.length)).toBe(antes - 1);   // y queda guardado
+    expect(await c).toBe(true);
+    await expect(ventana).toBeHidden();
     expect(nativos).toEqual([]);
   });
 });
