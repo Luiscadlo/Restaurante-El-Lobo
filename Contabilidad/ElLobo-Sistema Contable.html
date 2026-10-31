@@ -1591,7 +1591,7 @@
         </div>
         <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th title="Abonos de fiado recibidos en ese turno — ya están dentro de Efectivo/Transf.">Abonos fiado</th><th>Gastos</th><th title="Almuerzos que comió la familia sin pagar (solo cierres de almuerzo)">Familia</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th title="Abonos de fiado recibidos en ese turno — ya están dentro de Efectivo/Transf.">Abonos fiado</th><th>Gastos</th><th id="dd-th-familia" title="Almuerzos que comió la familia sin pagar (solo cierres de almuerzo)">Familia</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
     </div>
   </div>
 </section>
@@ -2559,7 +2559,8 @@ const CFG_DEFECTOS = Object.freeze({
   negocio_nombre: 'El Lobo', negocio_emoji: '🐺',
   catalogo_almuerzos: CATALOGO_ALMUERZOS_BASE, catalogo_rapidas: CATALOGO_RAPIDAS_BASE, catalogo_extras: CATALOGO_EXTRAS_BASE,
   categorias_egresos: CATEGORIAS_EGRESOS_BASE, nombres_cuentas: NOMBRES_CUENTAS_BASE,
-  menu_platos: PLATOS_BASE
+  menu_platos: PLATOS_BASE,
+  cierre_comidas_familia: true
 });
 // Reglas de cada valor. ESPEJO de seguridad.validar_configuracion (sql/configuracion.sql): si cambia una, cambia la otra
 // (una prueba automática compara los rangos de los dos lados).
@@ -2576,7 +2577,8 @@ const CFG_REGLAS = Object.freeze({
   catalogo_extras:     { tipo: 'catalogo' },
   categorias_egresos:  { tipo: 'categorias' },
   nombres_cuentas:     { tipo: 'cuentas' },
-  menu_platos:         { tipo: 'platos' }
+  menu_platos:         { tipo: 'platos' },
+  cierre_comidas_familia: { tipo: 'booleano', nombre: 'La opción «comidas de la familia en el cierre»' }
 });
 // null = el valor sirve; si no, el texto que se le muestra a la persona.
 function cfgValidar(clave, valor) {
@@ -2586,6 +2588,7 @@ function cfgValidar(clave, valor) {
   if (r.tipo === 'categorias') return cfgValidarCategorias(valor);
   if (r.tipo === 'cuentas') return cfgValidarCuentas(valor);
   if (r.tipo === 'platos') return cfgValidarPlatos(valor);
+  if (r.tipo === 'booleano') return typeof valor === 'boolean' ? null : `${r.nombre} debe ser sí o no (verdadero o falso).`;
   if (r.tipo === 'entero') {
     if (typeof valor !== 'number' || !Number.isFinite(valor)) return `${r.nombre} debe ser un número.`;
     if (!Number.isInteger(valor) || valor < r.min || valor > r.max) return `${r.nombre} debe ser un número entero entre ${r.min.toLocaleString('es-CO')} y ${r.max.toLocaleString('es-CO')}.`;
@@ -2632,6 +2635,9 @@ const recargoParaLlevar = instante => (instante === undefined ? CFG.v('recargo_p
 const valorEmpaque = instante => (instante === undefined ? CFG.v('empaque_domicilio') : CFG.en('empaque_domicilio', instante));
 const nombreNegocio = () => CFG.v('negocio_nombre');
 const emojiNegocio = () => CFG.v('negocio_emoji');
+// ¿El cierre del almuerzo pide las «comidas de la familia»? Sin nada guardado, sí (como siempre en El Lobo). Es un interruptor de
+// pantalla: lo ya guardado en cierres_dia.platos_familia no se borra ni se cambia nunca.
+const pedirComidasFamilia = () => CFG.v('cierre_comidas_familia') !== false;
 
 // ── Catálogos de productos y precios (etapa 2) ─────────────────────────────
 // Los almuerzos, las comidas rápidas / bebidas / adicionales y los productos extra salen de la configuración (claves
@@ -5638,7 +5644,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   // almuerzo — ver aplicarReglaGratisPorTurno()). En almuerzo la familia se
   // anota por cantidad al cerrar el turno, no como pedido.
   if (selectedUbicacion === 'gratis' && turno === 'almuerzo') {
-    showToast('⚠ "Gratis" no existe en almuerzo — anota los almuerzos de la familia en el cierre del turno', 'warning');
+    showToast(pedirComidasFamilia() ? '⚠ "Gratis" no existe en almuerzo — anota los almuerzos de la familia en el cierre del turno' : '⚠ "Gratis" no existe en almuerzo', 'warning');
     return;
   }
 
@@ -8381,7 +8387,7 @@ function pintarTurnoCierreManual() {
   // El campo de almuerzos de la familia solo existe en el turno de almuerzo
   // (en comida rápida el consumo gratis va en pesos, con el pedido "Gratis").
   const platosWrap = document.getElementById('cm-platos-familia-wrap');
-  if (platosWrap) platosWrap.style.display = cierreManualTurno === 'almuerzo' ? '' : 'none';
+  if (platosWrap) platosWrap.style.display = cierreManualTurno === 'almuerzo' && pedirComidasFamilia() ? '' : 'none';
 }
 
 // Gastos que YA están registrados en el sistema para la fecha/turno que muestra el formulario.
@@ -8608,7 +8614,10 @@ async function guardarCierreManual() {
   // vacío = NULL = "no registrado" — distinto de 0, que significa "no comieron".
   // En comida rápida no aplica y siempre se guarda NULL.
   let platosFamilia = null;
-  if (turno === 'almuerzo') {
+  if (turno === 'almuerzo' && !pedirComidasFamilia()) {
+    // Opción apagada en Configuración: no se pide; si el cierre ya traía el dato, se conserva tal cual.
+    platosFamilia = existing && existing.platos_familia != null ? existing.platos_familia : null;
+  } else if (turno === 'almuerzo') {
     const platosEl  = document.getElementById('cm-platos-familia');
     const platosRaw = platosEl.value.trim();
     if (platosRaw !== '') {
@@ -10866,7 +10875,7 @@ function actualizarCamposFamiliaCierre() {
   const fecha = document.getElementById('dd-fecha').value || today();
 
   const wrap = document.getElementById('dd-platos-familia-wrap');
-  if (wrap) wrap.style.display = esAlmuerzo ? '' : 'none';
+  if (wrap) wrap.style.display = esAlmuerzo && pedirComidasFamilia() ? '' : 'none';
   const req = document.getElementById('dd-platos-familia-req');
   if (req) {
     const existente = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
@@ -11079,7 +11088,10 @@ async function guardarCierre() {
   // el pedido "Gratis").
   const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
   let platosFamilia = null;
-  if (ddTurno === 'almuerzo') {
+  if (ddTurno === 'almuerzo' && !pedirComidasFamilia()) {
+    // Opción apagada en Configuración: no se pide ni se escribe; si el cierre ya traía el dato, se conserva tal cual.
+    platosFamilia = existing && existing.platos_familia != null ? existing.platos_familia : null;
+  } else if (ddTurno === 'almuerzo') {
     const platosEl  = document.getElementById('dd-platos-familia');
     const platosRaw = platosEl.value.trim();
     if (platosRaw === '') {
@@ -11316,6 +11328,9 @@ function renderHistorialCierres() {
   const histData = ST.cierresDia.filter(c => inP(c.fecha, fDD)).sort((a,b) => b.fecha.localeCompare(a.fecha) || a.turno.localeCompare(b.turno));
   const histBody = document.getElementById('dd-historial-body');
   if (!histBody) return;
+  const verFamilia = pedirComidasFamilia();
+  const thFamilia = document.getElementById('dd-th-familia');
+  if (thFamilia) thFamilia.style.display = verFamilia ? '' : 'none';
   histBody.innerHTML = histData.length
     ? histData.map(c => `<tr>
         <td>${c.fecha}</td>
@@ -11324,7 +11339,7 @@ function renderHistorialCierres() {
         <td class="amount-pos">${fmt(c.transferencia)}</td>
         <td title="Ya incluidos en Efectivo/Transf.">${abonosDeCierre(c) ? fmt(abonosDeCierre(c)) : '—'}</td>
         <td class="amount-neg">${fmt(c.gastos)}</td>
-        <td>${c.turno === 'almuerzo' && c.platos_familia != null ? c.platos_familia : '—'}</td>
+        ${verFamilia ? `<td>${c.turno === 'almuerzo' && c.platos_familia != null ? c.platos_familia : '—'}</td>` : ''}
         <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}${ajustesDeCierre(c).total ? ` <span title="${textoAjusteCierre(c)}">*</span>` : ''}</td>
         <td style="display:flex;gap:4px;">
           <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="${c.manual ? `editarCierreManual('${c.fecha}','${c.turno}')` : `irADiaADia('${c.fecha}','${c.turno}')`}">${c.manual ? '✏️ Editar' : 'Ver'}</button>
@@ -12210,7 +12225,10 @@ const CFG_PANTALLA = [
     { clave: 'respaldo_dia_semana', titulo: 'Día del respaldo semanal', entrada: 'dia',
       ayuda: 'El aviso aparece desde ese día y sigue hasta que haya un respaldo completo hecho desde entonces.' },
     { clave: 'respaldo_rojo_dias', titulo: 'Días sin respaldo para el aviso rojo', entrada: 'numero', unidad: 'días',
-      ayuda: 'Si pasan estos días sin un respaldo completo, el aviso se pone rojo.' } ] }
+      ayuda: 'Si pasan estos días sin un respaldo completo, el aviso se pone rojo.' } ] },
+  { titulo: '🍽️ Cierre del día', campos: [
+    { clave: 'cierre_comidas_familia', titulo: 'Comidas de la familia al cerrar el almuerzo', entrada: 'si_no',
+      ayuda: 'Sí: el cierre del almuerzo pide cuántas comidas comió la familia sin pagar (en el cierre manual es opcional) y el historial muestra la columna «Familia». No: ese campo y esa columna dejan de aparecer y los cierres nuevos quedan sin ese dato. Lo que ya está guardado no se borra ni se cambia.' } ] }
 ];
 const CFG_CAMPOS = CFG_PANTALLA.flatMap(p => p.campos);
 const cfgCampo = clave => CFG_CAMPOS.find(c => c.clave === clave);
@@ -12221,6 +12239,7 @@ function cfgTexto(clave, valor) {
   if (!c) return String(valor);
   if (c.entrada === 'dinero') return fmt(valor);
   if (c.entrada === 'dia') return DIAS_SEMANA[valor] || String(valor);
+  if (c.entrada === 'si_no') return valor === true ? 'Sí' : valor === false ? 'No' : String(valor);
   if (c.entrada === 'simbolo') return valor === '' ? '(sin símbolo)' : String(valor);
   if (c.entrada === 'numero') return `${Number(valor).toLocaleString('es-CO')}${c.unidad ? ' ' + c.unidad : ''}`;
   return String(valor);
@@ -12245,6 +12264,7 @@ function cfgHtmlCampo(c) {
   const enter = `onkeydown="if(event.key==='Enter'){event.preventDefault();cfgGuardar('${c.clave}')}"`;
   let entrada;
   if (c.entrada === 'dia') entrada = `<select id="${id}" onchange="${marcar}">${DIAS_SEMANA.map((d, i) => `<option value="${i}">${d}</option>`).join('')}</select>`;
+  else if (c.entrada === 'si_no') entrada = `<select id="${id}" onchange="${marcar}"><option value="true">Sí</option><option value="false">No</option></select>`;
   else if (c.entrada === 'dinero') entrada = `<input type="text" inputmode="numeric" id="${id}" autocomplete="off" oninput="formatMilesInput(this);${marcar}" ${enter}>`;
   else if (c.entrada === 'numero') entrada = `<input type="text" inputmode="numeric" id="${id}" autocomplete="off" maxlength="4" oninput="this.value=this.value.replace(/[^0-9]/g,'');${marcar}" ${enter}>`;
   else entrada = `<input type="text" id="${id}" autocomplete="off" spellcheck="false" maxlength="${c.entrada === 'simbolo' ? 16 : 60}" oninput="${marcar}" ${enter}>`;
@@ -12265,6 +12285,7 @@ function cfgLeer(clave) {
   const c = cfgCampo(clave), el = document.getElementById('cfg-' + clave);
   if (!c || !el) return undefined;
   if (c.entrada === 'dia') return parseInt(el.value, 10);
+  if (c.entrada === 'si_no') return el.value === 'true';
   if (c.entrada === 'dinero') return el.value.trim() === '' ? NaN : parseMiles(el.value);
   if (c.entrada === 'numero') return el.value.trim() === '' ? NaN : parseInt(el.value, 10);
   return el.value.trim();

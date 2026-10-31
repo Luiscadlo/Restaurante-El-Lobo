@@ -78,6 +78,7 @@ function validarConfiguracion(clave, valor) {
   if (clave === 'categorias_egresos') { const m = validarCategorias(valor); return m ? mal(m) : null; }
   if (clave === 'nombres_cuentas') { const m = validarCuentas(valor); return m ? mal(m) : null; }
   if (clave === 'menu_platos') { const m = validarPlatos(valor); return m ? mal(m) : null; }
+  if (clave === 'cierre_comidas_familia') return typeof valor === 'boolean' ? null : mal('La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso).');
   return { code: '22023', message: `La configuración "${clave}" no existe.`, details: 'configuracion_clave_desconocida', hint: null };
 }
 
