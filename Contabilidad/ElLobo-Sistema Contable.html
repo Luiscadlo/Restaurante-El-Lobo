@@ -1895,7 +1895,7 @@
     </div>
 
     <div id="cierremanual-contenido" style="display:none;">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Úsalo solo si el sistema no se pudo usar ese día y las cuentas se llevaron aparte — escribe las ventas y los gastos directamente, sin depender de pedidos registrados. Estos valores mandan sobre cualquier pedido suelto que exista para ese día: en Ingresos, Tablero y Caja siempre se usa lo que escribas aquí, no lo que sumen los pedidos.</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Úsalo cuando el turno no quedó completo en el sistema (por ejemplo, te fuiste a mitad del turno, o el sistema no se pudo usar ese día): abajo ves lo que el sistema YA tiene de ese turno y escribes los totales reales de efectivo y transferencia. Los gastos son los mismos del turno: los que ya registraste aparecen en la lista y no hace falta volver a escribirlos. Estos valores mandan sobre cualquier pedido suelto de ese día: en Ingresos, Tablero y Caja siempre se usa lo que dejes aquí.</div>
 
       <div class="alert ok" id="cm-modo-edicion" style="display:none;margin-bottom:14px;">
         <div style="flex:1;">✏️ Corrigiendo el cierre manual guardado — cambia lo que haga falta y guarda.</div>
@@ -1904,7 +1904,7 @@
 
       <div class="form-group mb">
         <label>Fecha a cerrar</label>
-        <input type="date" id="cm-fecha">
+        <input type="date" id="cm-fecha" oninput="cambioFechaTurnoCierreManual()">
       </div>
 
       <div class="form-group mb">
@@ -1915,14 +1915,20 @@
         </div>
       </div>
 
+      <!-- Ya hay un cierre guardado para esa fecha/turno (lo pinta renderPanelSistemaCierreManual) -->
+      <div id="cm-aviso-existente" style="display:none;"></div>
+      <!-- Solo lectura: lo que el sistema YA tiene de ese turno (pedidos, desayuno, abonos, fiados, gastos) -->
+      <div id="cm-sistema" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;"></div>
+
       <div class="form-group mb">
-        <label>Efectivo ($)</label>
-        <input type="text" inputmode="numeric" id="cm-efectivo" placeholder="0" oninput="formatMilesInput(this)">
+        <label>Efectivo ($) <span style="color:var(--text3);font-weight:400;">— total real del turno (incluye lo que ya tiene el sistema)</span></label>
+        <input type="text" inputmode="numeric" id="cm-efectivo" placeholder="0" oninput="formatMilesInput(this); marcarTocadoCierreManual('ef'); actualizarComparativoCierreManual()">
       </div>
       <div class="form-group mb">
-        <label>Transferencia ($)</label>
-        <input type="text" inputmode="numeric" id="cm-transferencia" placeholder="0" oninput="formatMilesInput(this)">
+        <label>Transferencia ($) <span style="color:var(--text3);font-weight:400;">— total real del turno (incluye lo que ya tiene el sistema)</span></label>
+        <input type="text" inputmode="numeric" id="cm-transferencia" placeholder="0" oninput="formatMilesInput(this); marcarTocadoCierreManual('tr'); actualizarComparativoCierreManual()">
       </div>
+      <div id="cm-comparativo" style="font-size:11px;margin:-6px 0 14px;"></div>
       <!-- Solo turno ALMUERZO (ver seleccionarTurnoCierreManual). Opcional: vacío = "no registrado" (NULL). -->
       <div class="form-group mb" id="cm-platos-familia-wrap">
         <label>🍽 Comidas de la familia (una por persona, aunque haya sido en porciones) <span style="color:var(--text3);font-weight:400;">(opcional)</span></label>
@@ -1931,6 +1937,7 @@
       </div>
       <div class="divider"></div>
 
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px;"><strong>Gastos del turno</strong> — son los mismos de la pestaña Cierre. Los que ya estaban registrados salen abajo (marcados «registrado»): no los vuelvas a escribir. Aquí solo agrega los que falten o quita los que sobren.</div>
       <div class="form-group mb">
         <label>Categoría del gasto</label>
         <select id="cm-gasto-cat" data-categorias="cierre:form"></select>
@@ -8146,10 +8153,19 @@ function avisarSiNoEsAdmin(que) {
 // ── Cierre manual: respaldo por si el sistema no se pudo usar ese día y las
 // cuentas se llevaron aparte. Solo administrador. ──
 let cierreManualTurno = 'almuerzo';
-// Gastos categorizados en cola, en memoria, hasta que se pulse "Guardar cierre
-// manual" — ahí se insertan como filas reales en gastos_dia (igual que
-// agregarGastoDia()), para que sumen correctamente en Egresos y el Tablero.
+// Los gastos de un cierre manual son LOS MISMOS gastos_dia del turno (los de
+// la pestaña Cierre y Egresos): el formulario muestra los que ya están
+// registrados y trabaja solo con la DIFERENCIA, así nada se duplica ni se pisa.
+//  · cierreManualGastos: gastos NUEVOS en cola, en memoria, hasta pulsar
+//    "Guardar" — ahí se insertan como filas reales en gastos_dia (igual que
+//    agregarGastoDia()), para que sumen correctamente en Egresos y el Tablero.
+//  · cierreManualGastosQuitar: ids de gastos ya registrados que se marcaron
+//    para quitar al guardar.
 let cierreManualGastos = [];
+let cierreManualGastosQuitar = new Set();
+// ¿Ya se escribió a mano el efectivo / la transferencia? Si no, al cambiar de
+// fecha o turno se vuelven a precargar con lo que ya tiene el sistema.
+let cierreManualTocado = { ef: false, tr: false };
 // Cierre que se está corrigiendo ({fecha,turno}) o null si es uno nuevo desde
 // cero. Se usa en guardarCierreManual() para saber si hay que reemplazar los
 // gastos_dia viejos de ese turno en vez de sumar encima de ellos.
@@ -8202,31 +8218,37 @@ function cancelarEdicionCierreManual() {
 }
 
 // cierreExistente: si se está corrigiendo un cierre manual ya guardado, sus
-// valores (y sus gastos_dia reales) se precargan aquí; si es null, el
-// formulario queda en blanco para uno nuevo.
+// valores se precargan aquí; si es null, es un cierre nuevo: el formulario
+// arranca con lo que el sistema YA tiene de ese turno (para completarlo, no
+// para empezar de cero). Los gastos NO se copian a ninguna cola: se muestran
+// directamente los gastos_dia reales del turno (ver renderGastosCierreManual).
 function prepararFormCierreManual(cierreExistente = null) {
   cierreManualEditando = cierreExistente ? { fecha: cierreExistente.fecha, turno: cierreExistente.turno } : null;
 
-  document.getElementById('cm-fecha').value = cierreExistente ? cierreExistente.fecha : today();
+  // Día de negocio (no el del calendario): después de la medianoche, pero antes de las 9:00, el turno que se cierra
+  // todavía es el de ayer.
+  document.getElementById('cm-fecha').value = cierreExistente ? cierreExistente.fecha : diaNegocio();
   // La fecha y el turno de un cierre ya guardado no se pueden cambiar desde
   // acá — cambiarlos equivaldría a corregir OTRO cierre distinto. Para eso
   // está "➕ Nuevo en vez de esto".
   document.getElementById('cm-fecha').disabled = !!cierreExistente;
-  document.getElementById('cm-efectivo').value = cierreExistente ? Number(cierreExistente.efectivo || 0).toLocaleString('es-CO') : '';
-  document.getElementById('cm-transferencia').value = cierreExistente ? Number(cierreExistente.transferencia || 0).toLocaleString('es-CO') : '';
   // Vacío si es un cierre nuevo o si el cierre guardado tiene NULL ("no registrado").
   document.getElementById('cm-platos-familia').value = (cierreExistente && cierreExistente.platos_familia != null) ? cierreExistente.platos_familia : '';
   document.getElementById('cm-gasto-monto').value = '';
   document.getElementById('cm-gasto-nombre').value = '';
   document.getElementById('cm-gasto-cat').selectedIndex = 0;
-  cierreManualTurno = cierreExistente ? cierreExistente.turno : 'almuerzo';
-  // Los gastos reales de ese turno (insertados la vez que se guardó) se
-  // precargan en la cola para poder editarlos/quitarlos — al guardar se
-  // reemplazan por completo con lo que quede en la cola (ver guardarCierreManual).
-  cierreManualGastos = cierreExistente
-    ? ST.gastosDia.filter(g => g.fecha === cierreExistente.fecha && g.turno === cierreExistente.turno)
-        .map(g => ({ categoria: g.categoria, monto: g.monto, nombre: g.nombre }))
-    : [];
+  cierreManualTurno = cierreExistente ? cierreExistente.turno : (turnoManual === 'cena' ? 'cena' : 'almuerzo');
+  cierreManualGastos = [];
+  cierreManualGastosQuitar = new Set();
+  cierreManualTocado = { ef: !!cierreExistente, tr: !!cierreExistente };
+  if (cierreExistente) {
+    document.getElementById('cm-efectivo').value = Number(cierreExistente.efectivo || 0).toLocaleString('es-CO');
+    document.getElementById('cm-transferencia').value = Number(cierreExistente.transferencia || 0).toLocaleString('es-CO');
+  } else {
+    document.getElementById('cm-efectivo').value = '';
+    document.getElementById('cm-transferencia').value = '';
+    precargarTotalesCierreManual();
+  }
   pintarTurnoCierreManual();
   const btnAlm = document.getElementById('cm-btn-almuerzo');
   const btnCena = document.getElementById('cm-btn-cena');
@@ -8237,6 +8259,8 @@ function prepararFormCierreManual(cierreExistente = null) {
     b.style.cursor = cierreExistente ? 'not-allowed' : '';
   });
   renderGastosCierreManual();
+  renderPanelSistemaCierreManual();
+  actualizarComparativoCierreManual();
 
   const modoEl = document.getElementById('cm-modo-edicion');
   if (modoEl) modoEl.style.display = cierreExistente ? 'flex' : 'none';
@@ -8247,6 +8271,44 @@ function prepararFormCierreManual(cierreExistente = null) {
 function seleccionarTurnoCierreManual(t) {
   cierreManualTurno = t;
   pintarTurnoCierreManual();
+  cambioFechaTurnoCierreManual();
+}
+
+// Al cambiar la fecha o el turno (cierre nuevo): se vuelve a leer todo lo que el
+// sistema tiene de ESE turno — panel, gastos registrados y, si aún no se escribió
+// nada, los totales. Los gastos nuevos en cola se conservan.
+function cambioFechaTurnoCierreManual() {
+  cierreManualGastosQuitar = new Set();       // los ids son de la fecha/turno anterior
+  precargarTotalesCierreManual();
+  renderGastosCierreManual();
+  renderPanelSistemaCierreManual();
+  actualizarComparativoCierreManual();
+}
+
+function marcarTocadoCierreManual(cual) {
+  cierreManualTocado[cual] = true;
+}
+
+// Pone en efectivo/transferencia lo que el sistema ya suma de ese turno
+// (pedidos pagados + desayuno + abonos de fiado). Sin `forzar`, respeta lo que
+// ya se haya escrito a mano; con `forzar` (botón «Usar lo del sistema») lo reemplaza.
+function precargarTotalesCierreManual(forzar = false) {
+  if (cierreManualEditando && !forzar) return;     // corrigiendo: mandan los valores guardados
+  const fecha = document.getElementById('cm-fecha').value;
+  if (!fecha) return;
+  const v = calcularVentasFijas(fecha, cierreManualTurno);
+  const poner = (id, valor, clave) => {
+    if (!forzar && cierreManualTocado[clave]) return;
+    document.getElementById(id).value = valor ? Number(valor).toLocaleString('es-CO') : '';
+    if (forzar) cierreManualTocado[clave] = false;
+  };
+  poner('cm-efectivo', v.efectivo, 'ef');
+  poner('cm-transferencia', v.transferencia, 'tr');
+}
+
+function usarSistemaCierreManual() {
+  precargarTotalesCierreManual(true);
+  actualizarComparativoCierreManual();
 }
 
 function pintarTurnoCierreManual() {
@@ -8256,6 +8318,116 @@ function pintarTurnoCierreManual() {
   // (en comida rápida el consumo gratis va en pesos, con el pedido "Gratis").
   const platosWrap = document.getElementById('cm-platos-familia-wrap');
   if (platosWrap) platosWrap.style.display = cierreManualTurno === 'almuerzo' ? '' : 'none';
+}
+
+// Gastos que YA están registrados en el sistema para la fecha/turno que muestra el formulario.
+function gastosRegistradosCierreManual() {
+  const fecha = document.getElementById('cm-fecha').value;
+  return fecha ? ST.gastosDia.filter(g => g.fecha === fecha && g.turno === cierreManualTurno) : [];
+}
+
+// Todo lo que el sistema ya tiene de una fecha/turno, para mostrarlo (solo lectura) en el cierre manual:
+// lo mismo que suma el cierre normal (calcularVentasFijas) más los fiados del turno, que NO son plata recibida.
+function resumenSistemaTurno(fecha, turno) {
+  const v = calcularVentasFijas(fecha, turno);
+  const delTurno = lista => lista.filter(p => p.fecha === fecha && p.turno === turno);
+  const contar = filas => ({
+    pedidos: new Set(filas.map(p => p.grupo_pedido || `legacy-${p.id}`)).size,
+    monto: filas.reduce((a, p) => a + (p.monto_total || 0), 0),
+  });
+  return {
+    ...v,
+    pedidosEfectivo:      v.efectivo      - v.ventaDesayunoEfectivo      - v.abonosEfectivo,
+    pedidosTransferencia: v.transferencia - v.ventaDesayunoTransferencia - v.abonosTransferencia,
+    fiadosPendientes: contar(delTurno(ST.pendientes).filter(p => p.es_fiar === true)),
+    fiadosCobrados:   contar(delTurno(ST.ingresos).filter(cobradoViaAbonos)),
+    sinCobrar:        contar(delTurno(ST.pendientes).filter(p => p.es_fiar !== true && !p.es_gratis)),
+  };
+}
+
+// Panel de solo lectura: lo que el sistema ya tiene del turno que se está cerrando + aviso si ya existe un cierre guardado.
+function renderPanelSistemaCierreManual() {
+  const cont = document.getElementById('cm-sistema');
+  const aviso = document.getElementById('cm-aviso-existente');
+  if (!cont) return;
+  const fecha = document.getElementById('cm-fecha').value;
+  const turno = cierreManualTurno;
+  if (aviso) { aviso.style.display = 'none'; aviso.innerHTML = ''; }
+  if (!fecha) {
+    cont.innerHTML = '<div style="font-size:12px;color:var(--text3);">Elige la fecha para ver lo que el sistema ya tiene de ese turno.</div>';
+    return;
+  }
+
+  // ¿Ya hay un cierre guardado para esa fecha/turno (y no es el que se está corrigiendo)?
+  const guardado = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
+  const esElQueSeCorrige = !!(cierreManualEditando && cierreManualEditando.fecha === fecha && cierreManualEditando.turno === turno);
+  if (aviso && guardado && !esElQueSeCorrige) {
+    aviso.innerHTML = guardado.manual
+      ? `<div class="alert info" style="margin-bottom:14px;"><div style="flex:1;">✍️ Ya hay un <strong>cierre manual</strong> guardado para este turno. Si guardas, lo reemplazas.</div><button type="button" class="btn btn-outline" style="font-size:11px;" onclick="abrirCierreManualExistente()">✏️ Corregir ese cierre</button></div>`
+      : `<div class="alert info" style="margin-bottom:14px;"><div style="flex:1;">🧾 Ya hay un <strong>cierre normal</strong> guardado para este turno (${fmt((guardado.efectivo || 0) + (guardado.transferencia || 0))}). Si guardas, lo reemplazas por este cierre manual.</div></div>`;
+    aviso.style.display = 'block';
+  }
+
+  const r = resumenSistemaTurno(fecha, turno);
+  const nombreCliente = id => escaparHtml((ST.clientesFiado.find(c => c.id === id) || {}).nombre || 'Cliente');
+  const linea = (txt, val, extra = '') => `<div class="report-line"${extra}><span>${txt}</span><strong>${val}</strong></div>`;
+  const efTr = (e, t) => `💵 ${fmt(e)} · 📲 ${fmt(t)}`;
+  const gastosReg = gastosRegistradosCierreManual();
+  const gastosRegTotal = gastosReg.filter(g => !esCatExcluida(g.categoria)).reduce((a, g) => a + g.monto, 0);
+  const nada = !r.tieneApertura && !r.efectivo && !r.transferencia && !r.fiadosPendientes.pedidos && !r.fiadosCobrados.pedidos && !r.sinCobrar.pedidos && !gastosReg.length;
+
+  const partes = [`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">📋 Lo que el sistema ya tiene de este turno <span style="text-transform:none;letter-spacing:0;">(solo lectura)</span></div>`];
+  if (nada) {
+    partes.push(`<div style="font-size:12px;color:var(--text2);">El sistema no tiene nada registrado de este turno: lo que escribas abajo es el total completo.</div>`);
+  } else {
+    partes.push(linea('Caja inicial', r.tieneApertura ? fmt(r.cajaInicial) : '$0 <span style="color:var(--text3);font-weight:400;">(sin abrir turno)</span>'));
+    partes.push(linea('Ventas de pedidos pagados', efTr(r.pedidosEfectivo, r.pedidosTransferencia)));
+    if (turno === 'almuerzo') partes.push(linea('Venta de desayuno', efTr(r.ventaDesayunoEfectivo, r.ventaDesayunoTransferencia)));
+    partes.push(linea('Abonos de fiado recibidos', efTr(r.abonosEfectivo, r.abonosTransferencia)));
+    if (r.abonos.length) {
+      partes.push(`<div style="font-size:11px;color:var(--text2);margin:2px 0 6px;">${r.abonos.map(a =>
+        `📒 ${nombreCliente(a.cliente_fiado_id)} · ${a.cuenta === 'efectivo' ? '💵' : '📲'} ${fmt(a.monto)}${a.nota ? ` · ${escaparHtml(a.nota)}` : ''}`).join('<br>')}</div>`);
+    }
+    partes.push(linea('<strong>Total que el sistema suma</strong>', efTr(r.efectivo, r.transferencia), ' style="border-top:1px solid var(--border2);margin-top:4px;padding-top:6px;"'));
+    const fiados = [];
+    if (r.fiadosPendientes.pedidos) fiados.push(`${r.fiadosPendientes.pedidos} pedido(s) por ${fmt(r.fiadosPendientes.monto)} <strong>sin cobrar todavía</strong>`);
+    if (r.fiadosCobrados.pedidos)   fiados.push(`${r.fiadosCobrados.pedidos} pedido(s) por ${fmt(r.fiadosCobrados.monto)} ya cobrados con abonos`);
+    partes.push(linea('Fiados de este turno <span style="color:var(--text3);font-weight:400;">(no es plata recibida)</span>', fiados.length ? '' : 'Ninguno'));
+    if (fiados.length) partes.push(`<div style="font-size:11px;color:var(--text2);margin:-2px 0 6px;">${fiados.join('<br>')}</div>`);
+    if (r.sinCobrar.pedidos) partes.push(linea('Pedidos sin cobrar <span style="color:var(--text3);font-weight:400;">(no es plata recibida)</span>', `${r.sinCobrar.pedidos} por ${fmt(r.sinCobrar.monto)}`));
+    partes.push(linea('Gastos ya registrados <span style="color:var(--text3);font-weight:400;">(sin préstamos)</span>', gastosReg.length ? `${gastosReg.length} por ${fmt(gastosRegTotal)}` : 'Ninguno'));
+  }
+  if (r.efectivo || r.transferencia) {
+    partes.push(`<button type="button" class="btn btn-outline" style="width:100%;margin-top:10px;font-size:11px;" onclick="usarSistemaCierreManual()">⬇ Usar lo del sistema como punto de partida</button>`);
+  }
+  cont.innerHTML = partes.join('');
+}
+
+// Botón «Corregir ese cierre» del aviso: abre en modo corrección el cierre manual que ya existe para la fecha/turno elegidos.
+function abrirCierreManualExistente() {
+  const fecha = document.getElementById('cm-fecha').value;
+  const c = ST.cierresDia.find(x => x.fecha === fecha && x.turno === cierreManualTurno && x.manual);
+  if (!c) return;
+  cierreManualPendiente = c;
+  prepararFormCierreManual(c);
+}
+
+// Línea bajo los totales: cuánto se aparta lo escrito de lo que el sistema ya tiene (lo normal: más, porque se
+// vendió algo que no se alcanzó a registrar). Si es MENOS, avisa en rojo: casi seguro falta sumar algo (un abono, el desayuno…).
+function actualizarComparativoCierreManual() {
+  const el = document.getElementById('cm-comparativo');
+  if (!el) return;
+  const fecha = document.getElementById('cm-fecha').value;
+  if (!fecha) { el.innerHTML = ''; return; }
+  const v = calcularVentasFijas(fecha, cierreManualTurno);
+  if (!v.efectivo && !v.transferencia) { el.innerHTML = ''; return; }
+  const dif = (nombre, escrito, sistema) => {
+    const d = escrito - sistema;
+    if (d > 0) return `<div style="color:var(--text2);">${nombre}: ${fmt(d)} más de lo que tiene el sistema (ventas que no se registraron).</div>`;
+    if (d < 0) return `<div style="color:var(--red);">⚠ ${nombre}: ${fmt(-d)} MENOS de lo que el sistema ya tiene registrado. Revisa que no falte sumar algo.</div>`;
+    return `<div style="color:var(--text3);">${nombre}: igual a lo que tiene el sistema.</div>`;
+  };
+  el.innerHTML = dif('Efectivo', valMiles('cm-efectivo'), v.efectivo) + dif('Transferencia', valMiles('cm-transferencia'), v.transferencia);
 }
 
 // Igual que agregarGastoDia(), pero se queda en cola local (cierreManualGastos)
@@ -8271,49 +8443,72 @@ function agregarGastoCierreManual() {
   renderGastosCierreManual();
 }
 
+// Quita un gasto NUEVO (todavía en cola, aún no guardado).
 function quitarGastoCierreManual(idx) {
   cierreManualGastos.splice(idx, 1);
   renderGastosCierreManual();
 }
 
+// Marca un gasto YA REGISTRADO para quitarlo al guardar (no se borra hasta entonces); «Dejar» lo recupera.
+function quitarGastoRegistradoCierreManual(id) {
+  cierreManualGastosQuitar.add(id);
+  renderGastosCierreManual();
+}
+function dejarGastoRegistradoCierreManual(id) {
+  cierreManualGastosQuitar.delete(id);
+  renderGastosCierreManual();
+}
+
 function renderGastosCierreManual() {
   const cont = document.getElementById('cm-gastos-lista');
-  cont.innerHTML = cierreManualGastos.length
-    ? cierreManualGastos.map((g, i) => `
-        <div class="report-line">
-          <span><span class="badge ${catC(g.categoria)}">${catNombreHtml(g.categoria)}</span> ${g.nombre ? ' ' + g.nombre : ''}</span>
+  const registrados = gastosRegistradosCierreManual();
+  const insignia = g => g.categoria
+    ? `<span class="badge ${catC(g.categoria)}">${catNombreHtml(g.categoria)}</span>`
+    : '<span style="color:var(--text3);font-size:11px;">sin categoría</span>';
+  const fila = (g, nota, estilo, boton) => `
+        <div class="report-line"${estilo ? ` style="${estilo}"` : ''}>
+          <span>${insignia(g)} ${g.nombre ? ' ' + escaparHtml(g.nombre) : ''} <span style="font-size:10px;color:var(--text3);">${nota}</span></span>
           <span style="display:flex;align-items:center;gap:8px;">
             <strong class="amount-neg">${fmt(g.monto)}</strong>
-            <button class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="quitarGastoCierreManual(${i})">✕</button>
+            ${boton}
           </span>
-        </div>`).join('')
-    : '';
-  const total = cierreManualGastos.filter(g => !esCatExcluida(g.categoria)).reduce((a,b) => a + b.monto, 0);
+        </div>`;
+  const btnQuitar = onclick => `<button type="button" class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="${onclick}" title="Quitar este gasto">✕</button>`;
+  const btnDejar  = onclick => `<button type="button" class="btn btn-outline" style="padding:3px 8px;font-size:10px;" onclick="${onclick}" title="Dejar este gasto como estaba">↩ Dejar</button>`;
+  cont.innerHTML = [
+    ...registrados.map(g => cierreManualGastosQuitar.has(g.id)
+      ? fila(g, '· se quitará al guardar', 'text-decoration:line-through;opacity:0.6;', btnDejar(`dejarGastoRegistradoCierreManual(${Number(g.id)})`))
+      : fila(g, '· registrado', '', btnQuitar(`quitarGastoRegistradoCierreManual(${Number(g.id)})`))),
+    ...cierreManualGastos.map((g, i) => fila(g, '· nuevo', '', btnQuitar(`quitarGastoCierreManual(${i})`))),
+  ].join('');
+  const total = [...registrados.filter(g => !cierreManualGastosQuitar.has(g.id)), ...cierreManualGastos]
+    .filter(g => !esCatExcluida(g.categoria)).reduce((a, b) => a + b.monto, 0);
   document.getElementById('cm-gastos-total').textContent = fmt(total);
 }
 
 // Mismo shape que guardarCierre() (efectivo/transferencia/gastos/resultado),
-// pero con los valores escritos a mano en vez de calculados de los pedidos.
-// Los gastos en cola se insertan como filas reales en gastos_dia (con su
-// categoría) para que sumen en Egresos y el Tablero igual que un gasto
-// cargado desde el cierre normal. Se marca manual:true para distinguirlo
-// en el historial. Sirve tanto para crear un cierre manual nuevo como para
-// corregir uno ya guardado (ver prepararFormCierreManual/cierreManualEditando).
+// pero con los totales escritos a mano en vez de calculados de los pedidos.
+// Los gastos se guardan POR DIFERENCIA sobre los gastos_dia reales del turno
+// (se quitan los marcados, se agregan los nuevos): lo que ya estaba registrado
+// no se toca ni se duplica, y `gastos` del cierre sale SIEMPRE de la suma real
+// de esas filas. Los abonos de fiado que el sistema ya recibió en el turno se
+// guardan en abonos_efectivo/abonos_transferencia (igual que el cierre normal).
+// Se marca manual:true para distinguirlo en el historial. Sirve tanto para crear
+// un cierre manual nuevo como para corregir uno ya guardado.
 async function guardarCierreManual() {
+  const btnGuardar = document.getElementById('cm-btn-guardar');
+  if (btnGuardar && btnGuardar.disabled) return;      // ya hay un guardado en curso: un segundo clic no repite nada
   const fecha = document.getElementById('cm-fecha').value;
   const turno = cierreManualTurno;
   if (!fecha) { showToast('⚠ Selecciona una fecha', 'warning'); return; }
 
   const efectivo      = valMiles('cm-efectivo');
   const transferencia = valMiles('cm-transferencia');
-  const gastos = cierreManualGastos.filter(g => !esCatExcluida(g.categoria)).reduce((a,b) => a + b.monto, 0);
-  const resultado = efectivo + transferencia - gastos;
 
   // "editando" = se abrió este formulario desde "Editar"/"Corregir cierre"
   // sobre ESTE mismo cierre manual (fecha y turno bloqueados, así que no
   // pueden haber cambiado). Si es así, no hace falta confirmar sobrescritura
-  // (es la corrección que se pidió) y hay que limpiar sus gastos_dia viejos
-  // antes de insertar los de la cola actual, para no duplicarlos.
+  // (es la corrección que se pidió).
   const editando = !!(cierreManualEditando && cierreManualEditando.fecha === fecha && cierreManualEditando.turno === turno);
   const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
   if (existing && !editando && !(await confirmarSistema({ titulo: 'Ya existe un cierre guardado para esa fecha/turno', cuerpo: '¿Sobrescribirlo con estos datos manuales?', aceptar: 'Sí, sobrescribir', peligro: true }))) return;
@@ -8336,27 +8531,31 @@ async function guardarCierreManual() {
     }
   }
 
-  const datosGuardar = { efectivo, transferencia, gastos, resultado, manual: true, platos_familia: platosFamilia };
-  const btnGuardar = document.getElementById('cm-btn-guardar');
-
   try {
     if (btnGuardar) btnGuardar.disabled = true;
 
-    // 0) Si se está corrigiendo, los gastos_dia que quedaron de la vez
-    //    anterior se borran primero — la cola de abajo (con lo que se haya
-    //    editado/quitado/agregado) es la que manda de ahora en adelante.
-    if (editando) {
-      const gastosViejos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno);
-      for (const g of gastosViejos) {
-        try { await sbDelete('gastos_dia', `id=eq.${g.id}`); }
-        catch (e) { console.error(e); showToast(`⚠ No se pudo quitar un gasto viejo ("${g.nombre || g.categoria}")`, 'warning'); }
+    // 1) Quitar los gastos ya registrados que se marcaron. Si alguno falla se
+    //    para aquí (sin guardar el cierre): lo ya quitado no se vuelve a intentar.
+    for (const id of [...cierreManualGastosQuitar]) {
+      const g = ST.gastosDia.find(x => x.id === id && x.fecha === fecha && x.turno === turno);
+      if (g) {
+        try { await sbDelete('gastos_dia', `id=eq.${id}`); }
+        catch (e) {
+          console.error(e);
+          showToast(`⚠ No se pudo quitar el gasto "${g.nombre || catNombre(g.categoria)}" — el cierre NO se guardó, intenta de nuevo`, 'warning');
+          renderGastosCierreManual();
+          return;
+        }
+        ST.gastosDia = ST.gastosDia.filter(x => x.id !== id);
       }
-      ST.gastosDia = ST.gastosDia.filter(g => !(g.fecha === fecha && g.turno === turno));
+      cierreManualGastosQuitar.delete(id);
     }
 
-    // 1) Insertar cada gasto de la cola como fila real en gastos_dia, igual
-    //    que agregarGastoDia(), para que Egresos/Tablero los sumen.
-    for (const g of cierreManualGastos) {
+    // 2) Insertar cada gasto NUEVO como fila real en gastos_dia, igual que
+    //    agregarGastoDia(), para que Egresos/Tablero lo sumen. Los ya insertados salen de la cola, así un reintento
+    //    después de un fallo no los duplica.
+    while (cierreManualGastos.length) {
+      const g = cierreManualGastos[0];
       try {
         let row;
         try {
@@ -8368,16 +8567,33 @@ async function guardarCierreManual() {
           } else { throw e; }
         }
         ST.gastosDia.push(row);
+        cierreManualGastos.shift();
       } catch (e) {
         console.error(e);
-        showToast(`⚠ No se pudo guardar el gasto "${g.nombre || catNombre(g.categoria)}"`, 'warning');
+        showToast(`⚠ No se pudo guardar el gasto "${g.nombre || catNombre(g.categoria)}" — el cierre NO se guardó, intenta de nuevo`, 'warning');
+        renderGastosCierreManual();
+        return;
       }
     }
 
-    // 2) Upsert del cierre en sí (mismo patrón que guardarCierre()). Si las
-    //    columnas opcionales "manual" o "platos_familia" aún no existen en
-    //    Supabase (migración sin correr), reintenta sin la que falte — el
-    //    cierre nunca debe quedar bloqueado por eso.
+    // 3) Totales del cierre. Los gastos salen de las filas REALES del turno (sin préstamos), no de lo que había en pantalla.
+    const gastos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno && !esCatExcluida(g.categoria)).reduce((a, g) => a + g.monto, 0);
+    const resultado = efectivo + transferencia - gastos;
+    const { abonosEfectivo, abonosTransferencia } = calcularVentasFijas(fecha, turno);
+    const datosGuardar = {
+      efectivo, transferencia, gastos, resultado, manual: true, platos_familia: platosFamilia,
+      // Parte de efectivo/transferencia que vino de abonos de fiado (ya está DENTRO de esos dos totales).
+      abonos_efectivo: abonosEfectivo, abonos_transferencia: abonosTransferencia
+    };
+    // Si se reemplaza un cierre NORMAL que traía ajuste, el ajuste se limpia: los totales escritos ya son los reales.
+    if (existing) {
+      const aj = ajustesDeCierre(existing);
+      if (aj.efectivo || aj.transferencia) Object.assign(datosGuardar, { ajuste_efectivo: 0, ajuste_transferencia: 0, ajuste_manual_nota: '' });
+    }
+
+    // 4) Upsert del cierre en sí (mismo patrón que guardarCierre()). Si alguna
+    //    columna opcional aún no existe en Supabase (migración sin correr),
+    //    reintenta sin la que falte — el cierre nunca debe quedar bloqueado por eso.
     let payload = { ...datosGuardar };
     for (;;) {
       try {
@@ -8391,15 +8607,18 @@ async function guardarCierreManual() {
         break;
       } catch (e) {
         const msg = e.message || '';
-        const columnaFaltante = ['manual', 'platos_familia'].find(c => c in payload && msg.includes(c));
+        const columnaFaltante = ['manual', 'platos_familia', 'abonos_efectivo', 'abonos_transferencia', 'ajuste_efectivo', 'ajuste_transferencia', 'ajuste_manual_nota'].find(c => c in payload && msg.includes(c));
         if (!columnaFaltante) throw e;
         const valorOmitido = payload[columnaFaltante];
         const { [columnaFaltante]: _omit, ...resto } = payload;
         payload = resto;
         if (columnaFaltante === 'manual') {
           showToast('⚠ El cierre se guardó, pero falta agregar la columna "manual" en Supabase (ver migracion_supabase_6.sql)', 'warning');
-        } else if (valorOmitido != null) {
-          showToast('⚠ Los almuerzos de la familia no se guardaron — falta agregar la columna platos_familia en Supabase (ver script SQL)', 'warning');
+        } else if (columnaFaltante === 'platos_familia') {
+          if (valorOmitido != null) showToast('⚠ Los almuerzos de la familia no se guardaron — falta agregar la columna platos_familia en Supabase (ver script SQL)', 'warning');
+        } else if (!(columnaFaltante.startsWith('abonos_') && !valorOmitido)) {
+          // Abonos en 0 no se pierden al omitirlos; lo demás sí merece aviso.
+          showToast(`⚠ "${columnaFaltante}" no se guardó — falta agregar esa columna en Supabase (ver script SQL)`, 'warning');
         }
       }
     }
@@ -10816,11 +11035,28 @@ async function agregarGastoDia() {
 
 async function eliminarGastoDia(id) {
   try {
+    const quitado = ST.gastosDia.find(g => g.id === id);
     await sbDelete('gastos_dia', `id=eq.${id}`);
     ST.gastosDia = ST.gastosDia.filter(g => g.id !== id);
     if (ddEditId === id) ddEditId = null;
+    // Si ese turno ya tiene un cierre MANUAL, su «gastos» y su resultado se vuelven a calcular con los gastos que
+    // quedan: así el cierre nunca queda descuadrado de la lista real (el ✕ de Egresos llega hasta aquí).
+    if (quitado) await sincronizarGastosCierreManual(quitado.fecha, quitado.turno);
     renderDiaADia();
   } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
+}
+
+// Deja `gastos` y `resultado` de un cierre MANUAL iguales a la suma real de los gastos_dia de su turno (sin préstamos).
+// Si el turno no tiene cierre, o es un cierre normal (que se re-guarda al corregirlo), no hace nada.
+async function sincronizarGastosCierreManual(fecha, turno) {
+  const c = ST.cierresDia.find(x => x.fecha === fecha && x.turno === turno);
+  if (!c || !c.manual) return;
+  const gastos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno && !esCatExcluida(g.categoria)).reduce((a, g) => a + g.monto, 0);
+  const resultado = (c.efectivo || 0) + (c.transferencia || 0) - gastos;
+  if (gastos === c.gastos && resultado === c.resultado) return;
+  await sbPatch('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`, { gastos, resultado });
+  c.gastos = gastos;
+  c.resultado = resultado;
 }
 
 function editarGastoDia(id) {
@@ -10855,20 +11091,33 @@ async function guardarEdicionGastoDia(id) {
 }
 
 async function eliminarCierre(fecha, turno) {
-  if (!(await confirmarSistema({ titulo: `¿Eliminar el cierre del ${fecha} (${turno})?`, aceptar: 'Sí, eliminar el cierre', peligro: true }))) return;
+  const cierre = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
+  const gastosDelTurno = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno);
+  // Los gastos de un turno son UNA sola lista, la misma que ven la pestaña Cierre y Egresos (y la que se llenó al
+  // abrir el turno). Por eso borrar un cierre MANUAL ya no se lleva los gastos por delante sin preguntar: se elige.
+  // Un cierre normal siempre deja sus gastos: el turno vuelve a quedar abierto para re-cerrarlo con los mismos.
+  let borrarGastos = false;
+  if (cierre && cierre.manual && gastosDelTurno.length) {
+    const total = gastosDelTurno.reduce((a, g) => a + (g.monto || 0), 0);
+    const eleccion = await ventanaSistema({
+      titulo: `¿Eliminar el cierre manual del ${fecha} (${turno})?`,
+      cuerpo: `Ese turno tiene ${gastosDelTurno.length} gasto(s) registrado(s) por ${fmt(total)} — son los mismos que se ven en Cierre y en Egresos.`,
+      tono: 'peligro', alEscape: 'no', foco: 'no',
+      opciones: [
+        { valor: 'solo', texto: 'Eliminar solo el cierre', clase: 'btn-danger', detalle: 'Los gastos se quedan registrados (siguen sumando en Egresos).' },
+        { valor: 'todo', texto: 'Eliminar el cierre y también sus gastos', clase: 'btn-danger', detalle: 'Se borran los gastos de ese turno. Úsalo si el día se cargó solo a mano y vas a volver a cargarlo.' },
+        { valor: 'no', texto: 'Volver' },
+      ],
+    });
+    if (eleccion !== 'solo' && eleccion !== 'todo') return;
+    borrarGastos = eleccion === 'todo';
+  } else if (!(await confirmarSistema({ titulo: `¿Eliminar el cierre del ${fecha} (${turno})?`, aceptar: 'Sí, eliminar el cierre', peligro: true }))) return;
   try {
-    const cierre = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
     await sbDelete('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`);
     ST.cierresDia = ST.cierresDia.filter(c => !(c.fecha === fecha && c.turno === turno));
 
-    // Un cierre manual trae sus propios gastos_dia (los que se cargaron a
-    // mano al guardarlo) — si se borra el cierre, esos gastos quedan sueltos
-    // y duplicados si se vuelve a cargar el día a mano, así que se borran
-    // también. Un cierre normal, en cambio, deja sus gastos intactos: el
-    // turno vuelve a quedar abierto para re-cerrarlo con los mismos gastos.
-    if (cierre && cierre.manual) {
-      const gastosDelCierre = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno);
-      for (const g of gastosDelCierre) {
+    if (borrarGastos) {
+      for (const g of gastosDelTurno) {
         try { await sbDelete('gastos_dia', `id=eq.${g.id}`); } catch (e) { console.error(e); }
       }
       ST.gastosDia = ST.gastosDia.filter(g => !(g.fecha === fecha && g.turno === turno));
@@ -10926,7 +11175,9 @@ function renderDiaADia() {
   // Caja solo trabaja el día de negocio en curso (hoy, o ayer mientras no pasen las 9:00 a. m.): un día anterior se
   // muestra bloqueado —haya cierre o no— y para verlo o corregirlo hay que ingresar como administrador.
   const diaAnteriorParaCaja = !adminAutenticado && fecha < diaNegocio();
-  const mostrarCerrado  = (!!cierreExistente && !viendoHistorialCierre) || diaAnteriorParaCaja;
+  // Un cierre MANUAL siempre se muestra cerrado aquí (aunque se llegue con «Ver»): esta pantalla recalcula desde los
+  // pedidos y no debe ofrecer guardar encima de totales escritos a mano — se corrige en su propio formulario.
+  const mostrarCerrado  = (!!cierreExistente && (!viendoHistorialCierre || !!cierreExistente.manual)) || diaAnteriorParaCaja;
 
   const banner     = document.getElementById('dd-cerrado-banner');
   const formActivo = document.getElementById('dd-form-activo');
@@ -11016,6 +11267,14 @@ function renderDiaADia() {
 }
 
 function irADiaADia(fecha, turno) {
+  // Un cierre MANUAL no se corrige en la pantalla Cierre: ahí los totales se recalculan desde los pedidos y con el
+  // botón de guardar activo se podrían pisar los totales escritos a mano. Se abre su propio formulario, que además
+  // muestra lo que el sistema tiene y trabaja con los mismos gastos del turno. (Así también funcionan los lápices
+  // ✏️ de Ingresos y de Egresos.)
+  if (ST.cierresDia.some(c => c.fecha === fecha && c.turno === turno && c.manual)) {
+    editarCierreManual(fecha, turno);
+    return;
+  }
   document.getElementById('dd-fecha').value = fecha;
   ddTurno = turno;
   ddEditId = null;
