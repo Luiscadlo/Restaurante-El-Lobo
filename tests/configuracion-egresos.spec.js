@@ -443,6 +443,22 @@ test.describe('pantalla «Categorías de egresos»', () => {
     await expect(page.locator(`${FILA(7)} select[aria-label^="Dónde"]`)).toBeEnabled();
   });
 
+  test('una categoría «no cuenta como egreso» se guarda con «solo en el cierre» aunque antes tuviera «ambos» (lo que ve es lo que se guarda)', async ({ page }) => {
+    const { reg } = await abrirAdmin(page);
+    await noAceptarAvisos(page);
+    await page.click('#cfgegr-agregar');
+    await nombreEgr(page, 7).fill('Retiro del dueño');
+    await page.locator(`${FILA(7)} select[aria-label^="Grupo"]`).selectOption('excluido');
+    await page.click('#cfgegr-guardar');
+    await expect(page.locator('#modal-sistema')).toBeVisible();
+    await confirmar(page);
+    await expect(page.locator('#cfgegr-hoy')).toContainText('8 activas de 8');
+    expect(escrituras(reg).length).toBe(1);                                                                // la base/pantalla no la rechazaron
+    expect(escrituras(reg)[0].cuerpo.valor.slice(7)).toEqual([nueva('cat1', 'Retiro del dueño', 'excluido', 'cierre')]);
+    expect((await opciones(page, 'egr-cat')).map(o => o.split('|')[0])).not.toContain('cat1');            // no aparece en Egresos
+    expect((await opciones(page, 'dd-gasto-cat')).map(o => o.split('|')[0])).toContain('cat1');           // sí en el cierre del día
+  });
+
   test('retirar y reactivar: la fila se marca, se cuenta con palabras y las listas dejan de ofrecerla', async ({ page }) => {
     const { reg } = await abrirAdmin(page);
     await noAceptarAvisos(page);
