@@ -419,6 +419,20 @@
   .cfg-control { display: flex; gap: 8px; align-items: center; flex: 0 1 300px; }
   .cfg-control input, .cfg-control select { flex: 1 1 auto; min-width: 0; }
   .cfg-control .btn { flex: 0 0 auto; }
+  .cfgcat-tabla { width: 100%; }
+  .cfgcat-largo { max-height: 560px; overflow-y: auto; }
+  .cfgcat-largo thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  .cfgcat-tabla th, .cfgcat-tabla td { padding: 6px 8px; vertical-align: middle; }
+  .cfgcat-tabla input[type=text] { width: 100%; min-width: 120px; }
+  .cfgcat-tabla .btn { padding: 4px 10px; font-size: 11px; }
+  .cfgcat-cod { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); white-space: nowrap; }
+  .cfgcat-estado { white-space: nowrap; }
+  .cfgcat-retirado td { opacity: .6; }
+  .cfgcat-cambio td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .cfgcat-nuevo td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+  .cfgcat-barra { display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: space-between; align-items: center; margin-top: 12px; }
+  .cfgcat-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .cfgcat-contador { font-size: 12px; color: var(--accent); }
 </style>
 </head>
 <body>
@@ -1763,6 +1777,8 @@
       <div style="flex:1;line-height:1.5;">⚙️ <b>Cada cambio rige desde el momento en que lo guardas.</b> Lo que ya se vendió o se cerró <b>no se recalcula</b>: los pedidos y los cierres conservan sus montos. Los demás equipos (por ejemplo el celular de caja) toman el cambio al recargar la página.</div>
     </div>
     <div id="config-paneles"></div>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin:22px 0 8px;">🍽️ Productos y precios</div>
+    <div id="config-catalogos"></div>
     <div class="panel">
       <div class="panel-header"><div class="panel-title">🕘 Historial de cambios</div></div>
       <div class="panel-body" id="config-historial"></div>
@@ -2229,96 +2245,104 @@ const PL = {
     {c:'PT21',n:'Mondongo Guisado'},{c:'PT22',n:'Trifasico de carne y cerdo'},
     {c:'PT23',n:'Sobrebarriga guisada'},{c:'PT24',n:'Lengua en salsa'},{c:'PT25',n:'Fricache de Pescado'}
   ],
-  comidaRapida: [
-    {c:'PE01',n:'Perro Sencillo',              precio:5000,  cat:'PERROS'},
-    {c:'PE02',n:'Perro Doble',                 precio:7000,  cat:'PERROS'},
-    {c:'PE03',n:'Perro Doble con Chorizo',     precio:8500,  cat:'PERROS'},
-    {c:'PE04',n:'Perro Choriperro Doble',      precio:9000,  cat:'PERROS'},
-    {c:'PE05',n:'Perro Suizo',                 precio:10000, cat:'PERROS'},
-    {c:'PE06',n:'Perro Especial',              precio:15000, cat:'PERROS'},
-    {c:'HB01',n:'Hamburguesa Sencillo',        precio:14000, cat:'HAMBURGUESAS'},
-    {c:'HB02',n:'Hamburguesa Lobo',            precio:20000, cat:'HAMBURGUESAS'},
-    {c:'CRA01',n:'Asado de Carne',             precio:16000, cat:'ASADOS'},
-    {c:'CRA02',n:'Asado de Pechuga',           precio:16000, cat:'ASADOS'},
-    {c:'CRA03',n:'Asado de Cerdo',             precio:16000, cat:'ASADOS'},
-    {c:'PI01',n:'Picada de Pollo',             precio:16000, cat:'PICADAS'},
-    {c:'PI02',n:'Picada de Carne',             precio:16000, cat:'PICADAS'},
-    {c:'PI03',n:'Picada de Cerdo',             precio:16000, cat:'PICADAS'},
-    {c:'PI04',n:'Picada Mixta',                precio:20000, cat:'PICADAS'},
-    {c:'PI05',n:'Picada Trifásica',            precio:30000, cat:'PICADAS'},
-    {c:'SL01',n:'Salchipapa Sencilla',         precio:12000, cat:'SALCHIPAPAS'},
-    {c:'SL02',n:'Salchipapa Especial',         precio:16000, cat:'SALCHIPAPAS'},
-    {c:'SL03',n:'Salchipapa Especial Extra',   precio:22000, cat:'SALCHIPAPAS'},
-    {c:'SL04',n:'Choripapa',                   precio:14000, cat:'SALCHIPAPAS'},
-    {c:'CU01',n:'Cubano de Pollo',             precio:6000,  cat:'SANDWICH CUBANO'},
-    {c:'CU02',n:'Cubano de Suizo',             precio:8500,  cat:'SANDWICH CUBANO'},
-    {c:'CU03',n:'Cubano de Jamón y Queso',     precio:7000,  cat:'SANDWICH CUBANO'},
-    {c:'CU04',n:'Cubano de Chorizo',           precio:7500,  cat:'SANDWICH CUBANO'},
-    {c:'ARP01',n:'Arepa de Pollo',             precio:7000,  cat:'AREPAS'},
-    {c:'ARP02',n:'Arepa de Chorizo',           precio:8000,  cat:'AREPAS'},
-    {c:'ARP03',n:'Arepa de Jamón',             precio:6500,  cat:'AREPAS'},
-    {c:'ARP04',n:'Arepa de Queso',             precio:6000,  cat:'AREPAS'},
-    {c:'ARP05',n:'Arepa de Pollo-Chorizo',     precio:9500,  cat:'AREPAS'},
-    {c:'ARP06',n:'Arepa de Suiza',             precio:8500,  cat:'AREPAS'},
-    {c:'ARP07',n:'Arepa de Hamburguesa',       precio:9000,  cat:'AREPAS'},
-    {c:'ARP08',n:'Arepa Especial',             precio:13000, cat:'AREPAS'},
-    {c:'ARP09',n:'Arepa Trifásica',            precio:14000, cat:'AREPAS'},
-    {c:'ARP10',n:'Arepa Mixta',                precio:12000, cat:'AREPAS'},
-    {c:'ARP11',n:'Arepa Pollo-Suiza',          precio:10000, cat:'AREPAS'},
-    {c:'SZ01',n:'Suizo Mini Sencillo',         precio:12000, cat:'SUIZOS'},
-    {c:'SZ02',n:'Suizo Mini Especial',         precio:17000, cat:'SUIZOS'},
-    {c:'SZ03',n:'Suizo Sencillo',              precio:16000, cat:'SUIZOS'},
-    {c:'SZ04',n:'Suizo Especial',              precio:21000, cat:'SUIZOS'},
-    {c:'SZ05',n:'Suizo Especial Extra',        precio:28000, cat:'SUIZOS'},
-    {c:'ADI01',n:'Papa Francesa',              precio:5000,  cat:'ADICIONALES'},
-    {c:'ADI02',n:'Ensalada',                   precio:3000,  cat:'ADICIONALES'},
-    {c:'ADI03',n:'Gratinado',                  precio:5000,  cat:'ADICIONALES'},
-    {c:'BEB01',n:'Gaseosa Coca-Cola 400ml',    precio:4000,  cat:'BEBIDAS'},
-    {c:'BEB02',n:'Jugo Hit 500ml',             precio:4000,  cat:'BEBIDAS'},
-    {c:'BEB03',n:'Coca-Cola 1.5 Lt',           precio:8000,  cat:'BEBIDAS'},
-    {c:'BEB04',n:'Agua en botella',            precio:2000,  cat:'BEBIDAS'},
-    {c:'BEB05',n:'Coca-Cola 237ml',            precio:2000,  cat:'BEBIDAS'},
-    {c:'BEB06',n:'Avena y Agua de Arroz Costa Azul', precio:3000, cat:'BEBIDAS'},
-  ],
+  comidaRapida: [],   // se llena con reconstruirCatalogo() desde el catálogo de Configuración (por defecto, CATALOGO_RAPIDAS_BASE)
 };
 
-const LABELS = {
-  completo:'Almuerzo Completo', seco:'Almuerzo Seco',
-  asado130:'Asado 130g', asado200:'Asado 200g',
-  'porcion-sopa':'Porción de Sopa', 'porcion-arroz':'Porción de Arroz',
-  'porcion-proteina':'Porción de Proteína',
-  'sopa-y-arroz':'Sopa y Arroz',
-  extra: 'Producto adicional',
-  ...Object.fromEntries(PL.comidaRapida.map(p => [p.c, p.n]))
-};
+// ── Catálogos de productos: los valores de El Lobo (lo que rige mientras el administrador no cambie nada) ──
+// Se editan desde ⚙️ Configuración → Productos y precios (etapa 2). Escritos como JSON a propósito: una prueba automática
+// compara estos catálogos con lo que exige sql/configuracion_etapa_2.sql. Los códigos NUNCA cambian ni se borran
+// (un producto se «retira» con activo: false), porque los pedidos viejos los guardan.
+const CATALOGO_ALMUERZOS_BASE = Object.freeze([
+  {"codigo": "completo", "nombre": "Almuerzo Completo", "precio": 14000, "activo": true},
+  {"codigo": "seco", "nombre": "Almuerzo Seco", "precio": 12000, "activo": true},
+  {"codigo": "asado130", "nombre": "Asado 130g", "precio": 17000, "activo": true},
+  {"codigo": "asado200", "nombre": "Asado 200g", "precio": 20000, "activo": true},
+  {"codigo": "porcion-sopa", "nombre": "Porción de Sopa", "precio": 6000, "activo": true},
+  {"codigo": "porcion-arroz", "nombre": "Porción de Arroz", "precio": 4000, "activo": true},
+  {"codigo": "porcion-proteina", "nombre": "Porción de Proteína", "precio": 8000, "activo": true},
+  {"codigo": "sopa-y-arroz", "nombre": "Sopa y Arroz", "precio": 11000, "activo": true}
+].map(Object.freeze));
+const CATALOGO_RAPIDAS_BASE = Object.freeze([
+  {"codigo": "PE01", "nombre": "Perro Sencillo", "precio": 5000, "categoria": "PERROS", "activo": true},
+  {"codigo": "PE02", "nombre": "Perro Doble", "precio": 7000, "categoria": "PERROS", "activo": true},
+  {"codigo": "PE03", "nombre": "Perro Doble con Chorizo", "precio": 8500, "categoria": "PERROS", "activo": true},
+  {"codigo": "PE04", "nombre": "Perro Choriperro Doble", "precio": 9000, "categoria": "PERROS", "activo": true},
+  {"codigo": "PE05", "nombre": "Perro Suizo", "precio": 10000, "categoria": "PERROS", "activo": true},
+  {"codigo": "PE06", "nombre": "Perro Especial", "precio": 15000, "categoria": "PERROS", "activo": true},
+  {"codigo": "HB01", "nombre": "Hamburguesa Sencillo", "precio": 14000, "categoria": "HAMBURGUESAS", "activo": true},
+  {"codigo": "HB02", "nombre": "Hamburguesa Lobo", "precio": 20000, "categoria": "HAMBURGUESAS", "activo": true},
+  {"codigo": "CRA01", "nombre": "Asado de Carne", "precio": 16000, "categoria": "ASADOS", "activo": true},
+  {"codigo": "CRA02", "nombre": "Asado de Pechuga", "precio": 16000, "categoria": "ASADOS", "activo": true},
+  {"codigo": "CRA03", "nombre": "Asado de Cerdo", "precio": 16000, "categoria": "ASADOS", "activo": true},
+  {"codigo": "PI01", "nombre": "Picada de Pollo", "precio": 16000, "categoria": "PICADAS", "activo": true},
+  {"codigo": "PI02", "nombre": "Picada de Carne", "precio": 16000, "categoria": "PICADAS", "activo": true},
+  {"codigo": "PI03", "nombre": "Picada de Cerdo", "precio": 16000, "categoria": "PICADAS", "activo": true},
+  {"codigo": "PI04", "nombre": "Picada Mixta", "precio": 20000, "categoria": "PICADAS", "activo": true},
+  {"codigo": "PI05", "nombre": "Picada Trifásica", "precio": 30000, "categoria": "PICADAS", "activo": true},
+  {"codigo": "SL01", "nombre": "Salchipapa Sencilla", "precio": 12000, "categoria": "SALCHIPAPAS", "activo": true},
+  {"codigo": "SL02", "nombre": "Salchipapa Especial", "precio": 16000, "categoria": "SALCHIPAPAS", "activo": true},
+  {"codigo": "SL03", "nombre": "Salchipapa Especial Extra", "precio": 22000, "categoria": "SALCHIPAPAS", "activo": true},
+  {"codigo": "SL04", "nombre": "Choripapa", "precio": 14000, "categoria": "SALCHIPAPAS", "activo": true},
+  {"codigo": "CU01", "nombre": "Cubano de Pollo", "precio": 6000, "categoria": "SANDWICH CUBANO", "activo": true},
+  {"codigo": "CU02", "nombre": "Cubano de Suizo", "precio": 8500, "categoria": "SANDWICH CUBANO", "activo": true},
+  {"codigo": "CU03", "nombre": "Cubano de Jamón y Queso", "precio": 7000, "categoria": "SANDWICH CUBANO", "activo": true},
+  {"codigo": "CU04", "nombre": "Cubano de Chorizo", "precio": 7500, "categoria": "SANDWICH CUBANO", "activo": true},
+  {"codigo": "ARP01", "nombre": "Arepa de Pollo", "precio": 7000, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP02", "nombre": "Arepa de Chorizo", "precio": 8000, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP03", "nombre": "Arepa de Jamón", "precio": 6500, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP04", "nombre": "Arepa de Queso", "precio": 6000, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP05", "nombre": "Arepa de Pollo-Chorizo", "precio": 9500, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP06", "nombre": "Arepa de Suiza", "precio": 8500, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP07", "nombre": "Arepa de Hamburguesa", "precio": 9000, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP08", "nombre": "Arepa Especial", "precio": 13000, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP09", "nombre": "Arepa Trifásica", "precio": 14000, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP10", "nombre": "Arepa Mixta", "precio": 12000, "categoria": "AREPAS", "activo": true},
+  {"codigo": "ARP11", "nombre": "Arepa Pollo-Suiza", "precio": 10000, "categoria": "AREPAS", "activo": true},
+  {"codigo": "SZ01", "nombre": "Suizo Mini Sencillo", "precio": 12000, "categoria": "SUIZOS", "activo": true},
+  {"codigo": "SZ02", "nombre": "Suizo Mini Especial", "precio": 17000, "categoria": "SUIZOS", "activo": true},
+  {"codigo": "SZ03", "nombre": "Suizo Sencillo", "precio": 16000, "categoria": "SUIZOS", "activo": true},
+  {"codigo": "SZ04", "nombre": "Suizo Especial", "precio": 21000, "categoria": "SUIZOS", "activo": true},
+  {"codigo": "SZ05", "nombre": "Suizo Especial Extra", "precio": 28000, "categoria": "SUIZOS", "activo": true},
+  {"codigo": "ADI01", "nombre": "Papa Francesa", "precio": 5000, "categoria": "ADICIONALES", "activo": true},
+  {"codigo": "ADI02", "nombre": "Ensalada", "precio": 3000, "categoria": "ADICIONALES", "activo": true},
+  {"codigo": "ADI03", "nombre": "Gratinado", "precio": 5000, "categoria": "ADICIONALES", "activo": true},
+  {"codigo": "BEB01", "nombre": "Gaseosa Coca-Cola 400ml", "precio": 4000, "categoria": "BEBIDAS", "activo": true},
+  {"codigo": "BEB02", "nombre": "Jugo Hit 500ml", "precio": 4000, "categoria": "BEBIDAS", "activo": true},
+  {"codigo": "BEB03", "nombre": "Coca-Cola 1.5 Lt", "precio": 8000, "categoria": "BEBIDAS", "activo": true},
+  {"codigo": "BEB04", "nombre": "Agua en botella", "precio": 2000, "categoria": "BEBIDAS", "activo": true},
+  {"codigo": "BEB05", "nombre": "Coca-Cola 237ml", "precio": 2000, "categoria": "BEBIDAS", "activo": true},
+  {"codigo": "BEB06", "nombre": "Avena y Agua de Arroz Costa Azul", "precio": 3000, "categoria": "BEBIDAS", "activo": true}
+].map(Object.freeze));
+const CATALOGO_EXTRAS_BASE = Object.freeze([
+  {"nombre": "Botella de agua", "precio": 1000, "activo": true},
+  {"nombre": "Avena", "precio": 4000, "activo": true},
+  {"nombre": "Papa Francesa", "precio": 5000, "activo": true},
+  {"nombre": "Ensalada", "precio": 3000, "activo": true},
+  {"nombre": "Gratinado", "precio": 5000, "activo": true},
+  {"nombre": "Jugo Hit 500ml", "precio": 4000, "activo": true},
+  {"nombre": "Caraqueña", "precio": 4000, "activo": true},
+  {"nombre": "Agua de arroz", "precio": 4000, "activo": true},
+  {"nombre": "Bretaña", "precio": 4000, "activo": true},
+  {"nombre": "Pony Malta", "precio": 4000, "activo": true},
+  {"nombre": "Coca-Cola 400ml", "precio": 4000, "activo": true},
+  {"nombre": "Gaseosa pequeña", "precio": 2000, "activo": true},
+  {"nombre": "Botella de agua grande", "precio": 2000, "activo": true},
+  {"nombre": "Coca-Cola 1.5 Lt", "precio": 8000, "activo": true}
+].map(Object.freeze));
 
-const PRECIOS = {completo:14000,seco:12000,asado130:17000,asado200:20000,'porcion-sopa':6000,'porcion-arroz':4000,'porcion-proteina':8000,'sopa-y-arroz':11000};
+// Etiquetas y precios EN USO: se rellenan con reconstruirCatalogo() (ver «Configuración del negocio») a partir de lo que rige hoy.
+const LABELS = { extra: 'Producto adicional' };
+const PRECIOS = {};
 
-// Catálogo de productos extra con precio conocido — se irá ampliando.
-// Autocompleta descripción + valor unitario en el pop-up "Agregar producto";
-// igual se puede escribir cualquier otra cosa a mano que no esté aquí.
-const PRODUCTOS_EXTRA = [
-  { n: 'Botella de agua', precio: 1000 },
-  { n: 'Avena',           precio: 4000 },
-  { n: 'Papa Francesa',         precio: 5000 },
-  { n: 'Ensalada',              precio: 3000 },
-  { n: 'Gratinado',              precio: 5000 },
-  { n: 'Jugo Hit 500ml',        precio: 4000 },
-  { n: 'Caraqueña',              precio: 4000 },
-  { n: 'Agua de arroz',         precio: 4000 },
-  { n: 'Bretaña',                precio: 4000 },
-  { n: 'Pony Malta',            precio: 4000 },
-  { n: 'Coca-Cola 400ml',       precio: 4000 },
-  { n: 'Gaseosa pequeña',       precio: 2000 },
-  { n: 'Botella de agua grande', precio: 2000 },
-  { n: 'Coca-Cola 1.5 Lt',      precio: 8000 },
-];
+// Productos adicionales (ventana «Agregar producto»): autocompleta descripción y valor. Se rellena con reconstruirCatalogo();
+// igual se puede escribir cualquier otra cosa a mano.
+const PRODUCTOS_EXTRA = [];
 
 function poblarCatalogoExtra() {
   const sel = document.getElementById('extra-producto-catalogo');
   if (!sel) return;
   sel.innerHTML = `<option value="">— Escribir manualmente —</option>` +
-    PRODUCTOS_EXTRA.map((p, i) => `<option value="${i}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`).join('');
+    PRODUCTOS_EXTRA.map((p, i) => `<option value="${i}">${escaparHtml(p.n)} · $${p.precio.toLocaleString('es-CO')}</option>`).join('');
 }
 
 function aplicarCatalogoExtra() {
@@ -2448,7 +2472,8 @@ function fiadosConAntiguedad(minDias, hoy = today()) {
 const CFG_DEFECTOS = Object.freeze({
   mesas: 8, recargo_para_llevar: 1000, empaque_domicilio: 1000,
   respaldo_dia_semana: 0, respaldo_rojo_dias: 10,
-  negocio_nombre: 'El Lobo', negocio_emoji: '🐺'
+  negocio_nombre: 'El Lobo', negocio_emoji: '🐺',
+  catalogo_almuerzos: CATALOGO_ALMUERZOS_BASE, catalogo_rapidas: CATALOGO_RAPIDAS_BASE, catalogo_extras: CATALOGO_EXTRAS_BASE
 });
 // Reglas de cada valor. ESPEJO de seguridad.validar_configuracion (sql/configuracion.sql): si cambia una, cambia la otra
 // (una prueba automática compara los rangos de los dos lados).
@@ -2459,12 +2484,16 @@ const CFG_REGLAS = Object.freeze({
   respaldo_dia_semana: { tipo: 'entero', min: 0, max: 6,     nombre: 'El día del respaldo semanal' },
   respaldo_rojo_dias:  { tipo: 'entero', min: 7, max: 60,    nombre: 'Los días para el aviso rojo del respaldo' },
   negocio_nombre:      { tipo: 'nombre' },
-  negocio_emoji:       { tipo: 'simbolo' }
+  negocio_emoji:       { tipo: 'simbolo' },
+  catalogo_almuerzos:  { tipo: 'catalogo' },
+  catalogo_rapidas:    { tipo: 'catalogo' },
+  catalogo_extras:     { tipo: 'catalogo' }
 });
 // null = el valor sirve; si no, el texto que se le muestra a la persona.
 function cfgValidar(clave, valor) {
   const r = CFG_REGLAS[clave];
   if (!r) return `La configuración «${clave}» no existe.`;
+  if (r.tipo === 'catalogo') return cfgValidarCatalogo(clave, valor);
   if (r.tipo === 'entero') {
     if (typeof valor !== 'number' || !Number.isFinite(valor)) return `${r.nombre} debe ser un número.`;
     if (!Number.isInteger(valor) || valor < r.min || valor > r.max) return `${r.nombre} debe ser un número entero entre ${r.min.toLocaleString('es-CO')} y ${r.max.toLocaleString('es-CO')}.`;
@@ -2511,6 +2540,143 @@ const recargoParaLlevar = instante => (instante === undefined ? CFG.v('recargo_p
 const valorEmpaque = instante => (instante === undefined ? CFG.v('empaque_domicilio') : CFG.en('empaque_domicilio', instante));
 const nombreNegocio = () => CFG.v('negocio_nombre');
 const emojiNegocio = () => CFG.v('negocio_emoji');
+
+// ── Catálogos de productos y precios (etapa 2) ─────────────────────────────
+// Los almuerzos, las comidas rápidas / bebidas / adicionales y los productos extra salen de la configuración (claves
+// catalogo_almuerzos, catalogo_rapidas y catalogo_extras: cada guardado es una versión completa, con «vigente desde»).
+// `PRECIOS`, `LABELS`, `PL.comidaRapida` y `PRODUCTOS_EXTRA` son la vista «de hoy»: se rehacen solos cuando cambia la
+// configuración (catalogoAlDia). Un producto NUNCA se borra: se retira (activo: false) y los pedidos viejos lo siguen mostrando.
+// REGLA DE ORO: el monto de un pedido ya hecho no cambia (cada pedido guarda el suyo); lo único que mira la historia es
+// editar un pedido pendiente viejo, que usa los precios de cuando se tomó (precioProducto con su created_at).
+const CAT_ESPECIALES = ['BEBIDAS', 'ADICIONALES'];   // BEBIDAS alimenta el desplegable de bebida · ADICIONALES se vende con el precio escrito a mano
+const SUFIJO_ALMUERZO = { completo: ' (con sopa)', seco: ' (sin sopa)' };   // lo que trae cada tipo: no depende del nombre que se le ponga
+const CAT_PRECIO_MIN = 100, CAT_PRECIO_MAX = 500000;
+const CAT_PROHIBIDOS = /[<>&"'`\\\u0000-\u001f\u007f]/;   // los nombres se pintan en muchas pantallas: nada que parezca código
+const precioTexto = n => '$' + Number(n).toLocaleString('es-CO');
+
+// ESPEJO de seguridad.validar_catalogo (sql/configuracion_etapa_2.sql): null = sirve; si no, el texto para la persona.
+function cfgValidarCatalogo(clave, valor) {
+  const que = clave === 'catalogo_almuerzos' ? 'El catálogo de almuerzos' : clave === 'catalogo_rapidas' ? 'El catálogo de comidas rápidas' : 'La lista de productos adicionales';
+  if (!Array.isArray(valor)) return `${que} debe ser una lista.`;
+  const n = valor.length;
+  if ((clave === 'catalogo_almuerzos' && n !== 8) || (clave === 'catalogo_rapidas' && (n < 1 || n > 300)) || (clave === 'catalogo_extras' && n > 100)) return `${que} trae ${n} productos y esa cantidad no es válida.`;
+  const esperadas = clave === 'catalogo_rapidas' ? 'activo,categoria,codigo,nombre,precio' : clave === 'catalogo_almuerzos' ? 'activo,codigo,nombre,precio' : 'activo,nombre,precio';
+  const codigos = new Set(), nombres = new Set();
+  const largo = s => [...s].length;
+  const sinEspaciosBorde = s => s.replace(/^ +| +$/g, '');         // como btrim() de la base: solo espacios (no tabuladores ni otros blancos)
+  for (const it of valor) {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return `${que} trae un producto mal formado.`;
+    if (Object.keys(it).sort().join(',') !== esperadas) return `${que} trae un producto con campos que no corresponden.`;
+    if (typeof it.nombre !== 'string') return 'El nombre de cada producto debe ser un texto.';
+    const nom = it.nombre;
+    if (largo(nom) < 1 || largo(nom) > 60 || nom !== sinEspaciosBorde(nom)) return 'El nombre de cada producto debe tener entre 1 y 60 caracteres, sin espacios al principio ni al final.';
+    if (CAT_PROHIBIDOS.test(nom)) return 'Los nombres no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    if (typeof it.precio !== 'number' || !Number.isFinite(it.precio)) return `El precio de "${nom}" debe ser un número.`;
+    if (!Number.isInteger(it.precio) || it.precio < CAT_PRECIO_MIN || it.precio > CAT_PRECIO_MAX) return `El precio de "${nom}" debe ser un número entero entre ${CAT_PRECIO_MIN} y ${CAT_PRECIO_MAX}.`;
+    if (typeof it.activo !== 'boolean') return `"${nom}" debe estar activo o retirado (verdadero o falso).`;
+    if (clave === 'catalogo_extras') {
+      if (nombres.has(nom.toLowerCase())) return `El producto adicional "${nom}" está repetido.`;
+      nombres.add(nom.toLowerCase());
+    } else {
+      if (typeof it.codigo !== 'string') return `El código de "${nom}" debe ser un texto.`;
+      const cod = it.codigo;
+      if (clave === 'catalogo_almuerzos') {
+        if (!CATALOGO_ALMUERZOS_BASE.some(a => a.codigo === cod)) return `El código "${cod}" no es un tipo de almuerzo de El Lobo.`;
+      } else if (!/^[A-Z][A-Z0-9]{1,7}$/.test(cod)) return `El código "${cod}" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.`;
+      if (codigos.has(cod)) return `El código "${cod}" está repetido.`;
+      codigos.add(cod);
+    }
+    if (clave === 'catalogo_rapidas') {
+      if (typeof it.categoria !== 'string') return `La categoría de "${nom}" debe ser un texto.`;
+      const cat = it.categoria;
+      if (largo(cat) < 1 || largo(cat) > 30 || cat !== sinEspaciosBorde(cat) || cat !== cat.toUpperCase()) return `La categoría de "${nom}" debe tener entre 1 y 30 caracteres, en MAYÚSCULAS y sin espacios al principio ni al final.`;
+      if (CAT_PROHIBIDOS.test(cat)) return 'Las categorías no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    }
+  }
+  if (clave !== 'catalogo_extras') {
+    const base = clave === 'catalogo_almuerzos' ? CATALOGO_ALMUERZOS_BASE : CATALOGO_RAPIDAS_BASE;
+    if (base.some(b => !codigos.has(b.codigo))) return `${que} no puede quitar productos de El Lobo: se retiran, no se borran.`;
+  }
+  return null;
+}
+
+// Forma de uso: {c: código, n: nombre, precio, cat (solo rápidas), activo}. Sin instante = lo de hoy.
+function catalogoEn(instante) {
+  return {
+    almuerzos: CFG.en('catalogo_almuerzos', instante).map(a => ({ c: a.codigo, n: a.nombre, precio: a.precio, activo: a.activo })),
+    rapidas: CFG.en('catalogo_rapidas', instante).map(p => ({ c: p.codigo, n: p.nombre, precio: p.precio, cat: p.categoria, activo: p.activo }))
+  };
+}
+// Lo que se ofrece HOY (nombres y quién está activo, de hoy), con los precios que regían en `instante` (los productos que
+// todavía no existían en ese momento conservan su precio de hoy). Sin instante, todo es de hoy.
+function catalogoParaOpciones(instante) {
+  const hoy = catalogoEn();
+  if (instante === undefined || instante === null || instante === '') return hoy;
+  const antes = catalogoEn(instante);
+  const pa = new Map(antes.almuerzos.map(a => [a.c, a])), pr = new Map(antes.rapidas.map(p => [p.c, p]));
+  return {
+    almuerzos: hoy.almuerzos.map(a => ({ ...a, precio: (pa.get(a.c) || a).precio })),
+    rapidas: hoy.rapidas.map(p => ({ ...p, precio: (pr.get(p.c) || p).precio }))
+  };
+}
+// Precio de un producto (almuerzo o comida rápida/bebida) en `instante`; 0 si no existe.
+function precioProducto(codigo, instante) {
+  const c = catalogoParaOpciones(instante);
+  const x = c.rapidas.find(p => p.c === codigo) || c.almuerzos.find(a => a.c === codigo);
+  return x ? x.precio : 0;
+}
+
+// Rehace las vistas «de hoy» (PRECIOS, LABELS, PL.comidaRapida, PRODUCTOS_EXTRA) en el mismo lugar, para que todo el código que
+// ya las lee siga igual. Incluye los productos retirados: hacen falta para mostrar pedidos viejos; las listas para ELEGIR
+// (opcionesAlmuerzoHtml, gruposRapidasHtml…) los dejan fuera.
+function reconstruirCatalogo() {
+  const c = catalogoEn();
+  Object.keys(PRECIOS).forEach(k => { delete PRECIOS[k]; });
+  Object.keys(LABELS).forEach(k => { delete LABELS[k]; });
+  LABELS.extra = 'Producto adicional';
+  c.almuerzos.forEach(a => { PRECIOS[a.c] = a.precio; LABELS[a.c] = a.n; });
+  c.rapidas.forEach(p => { LABELS[p.c] = p.n; });
+  PL.comidaRapida.length = 0;
+  c.rapidas.forEach(p => PL.comidaRapida.push(p));
+  PRODUCTOS_EXTRA.length = 0;
+  CFG.v('catalogo_extras').filter(e => e.activo).forEach(e => PRODUCTOS_EXTRA.push({ n: e.nombre, precio: e.precio }));
+  poblarCatalogoExtra();
+}
+// Si la configuración trae un catálogo distinto al que está en uso, lo rehace (y vuelve a armar las listas del formulario de
+// Pedidos). Barato: compara una firma de las versiones guardadas. Devuelve true si cambió algo.
+let firmaCatalogo = null;
+function catalogoAlDia() {
+  const firma = Array.isArray(ST.configuracion)
+    ? ST.configuracion.filter(f => f && /^catalogo_/.test(f.clave)).map(f => `${f.id}@${f.vigente_desde}`).join('|') : '';
+  if (firma === firmaCatalogo) return false;
+  const primera = firmaCatalogo === null;
+  firmaCatalogo = firma;
+  reconstruirCatalogo();
+  if (!primera && document.getElementById('ing-pedido')) rebuildPedidoSelect();
+  return true;
+}
+
+// Listas para ELEGIR (solo lo activo; `incluir` = códigos que deben aparecer aunque estén retirados, p. ej. el de un pedido que se está editando).
+const _opcionHtml = (p, sufijo = '') => `<option value="${escaparHtml(p.c)}" data-monto="${p.precio}">${escaparHtml(p.n)}${sufijo} · ${precioTexto(p.precio)}${p.activo ? '' : ' (retirado)'}</option>`;
+function opcionesAlmuerzoHtml(instante, incluir = []) {
+  return catalogoParaOpciones(instante).almuerzos.filter(a => a.activo || incluir.includes(a.c)).map(a => _opcionHtml(a, SUFIJO_ALMUERZO[a.c] || '')).join('');
+}
+function gruposRapidasHtml(instante, incluir = []) {
+  const todas = catalogoParaOpciones(instante).rapidas;
+  const cats = [];
+  todas.forEach(p => {
+    const especial = CAT_ESPECIALES.includes(p.cat);
+    if ((!especial || incluir.includes(p.c)) && !cats.includes(p.cat)) cats.push(p.cat);
+  });
+  return cats.map(cat => {
+    const items = todas.filter(p => p.cat === cat && (p.activo || incluir.includes(p.c)) && (!CAT_ESPECIALES.includes(cat) || incluir.includes(p.c)));
+    return items.length ? `<optgroup label="🌙 ${escaparHtml(cat)}">${items.map(p => _opcionHtml(p)).join('')}</optgroup>` : '';
+  }).join('');
+}
+function opcionesBebidaHtml(instante) {
+  return `<option value="" data-monto="0">— Sin bebida —</option>` +
+    catalogoParaOpciones(instante).rapidas.filter(p => p.cat === 'BEBIDAS' && p.activo).map(p => _opcionHtml(p)).join('');
+}
 
 // "Para llevar" aplica a mesas y a "sin mesa" (cliente esperando de pie), no a domicilio/fiado
 function puedeParaLlevar(ubicacion) {
@@ -4640,40 +4806,18 @@ function rebuildPedidoSelect() {
   if (turno === 'almuerzo') {
     sel.innerHTML = `
       <option value="">— Selecciona para habilitar los campos —</option>
-      <optgroup label="☀️ ALMUERZOS (9am – 4pm)">
-        <option value="completo"      data-monto="14000">Almuerzo Completo (con sopa) · $14.000</option>
-        <option value="seco"          data-monto="12000">Almuerzo Seco (sin sopa) · $12.000</option>
-        <option value="asado130"      data-monto="17000">Asado 130g · $17.000</option>
-        <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
-        <option value="porcion-sopa"  data-monto="6000">Porción de Sopa · $6.000</option>
-        <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
-        <option value="porcion-proteina" data-monto="8000">Porción de Proteína · $8.000</option>
-        <option value="sopa-y-arroz"  data-monto="11000">Sopa y Arroz · $11.000</option>
-      </optgroup>`;
+      <optgroup label="☀️ ALMUERZOS (9am – 4pm)">${opcionesAlmuerzoHtml()}</optgroup>`;
   } else {
     // 'ADICIONALES' (Papa Francesa/Ensalada/Gratinado) ya no se ofrece como
     // tipo de pedido principal — pasaron a la lista de productos extra. Se
     // deja el registro completo en PL.comidaRapida para no romper reportes
-    // ni la edición de pedidos históricos que ya los tengan.
-    const cats = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS','SANDWICH CUBANO','AREPAS','SUIZOS'];
-    const groups = cats.map(cat => {
-      const items = PL.comidaRapida.filter(p => p.cat === cat);
-      const opts  = items.map(p =>
-        `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`
-      ).join('');
-      return `<optgroup label="🌙 ${cat}">${opts}</optgroup>`;
-    }).join('');
-    sel.innerHTML = `<option value="">— Selecciona un producto —</option>${groups}`;
+    // ni la edición de pedidos históricos que ya los tengan. Las categorías y
+    // los productos salen del catálogo de Configuración (lo retirado no se ofrece).
+    sel.innerHTML = `<option value="">— Selecciona un producto —</option>${gruposRapidasHtml()}`;
 
     // Poblar selector de bebidas desde el catálogo
     const bebidaSel = document.getElementById('ing-bebida');
-    if (bebidaSel) {
-      const bebidas = PL.comidaRapida.filter(p => p.cat === 'BEBIDAS');
-      bebidaSel.innerHTML = `<option value="" data-monto="0">— Sin bebida —</option>` +
-        bebidas.map(p =>
-          `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`
-        ).join('');
-    }
+    if (bebidaSel) bebidaSel.innerHTML = opcionesBebidaHtml();
   }
   onPedidoChange();
 }
@@ -4752,8 +4896,8 @@ function onHoraChange() {
 }
 
 pintarTurnoManual();
+catalogoAlDia();          // arma PRECIOS / LABELS / catálogo desde la configuración (por ahora, los valores de El Lobo)
 rebuildPedidoSelect();
-poblarCatalogoExtra();
 // Reloj del header en tiempo real (solo visual, no toca el formulario)
 setInterval(actualizarReloj, 1000);
 
@@ -8699,24 +8843,8 @@ let agregarComidaContexto = null;
 // Devuelve el HTML de <optgroup> de tipos de pedido para un turno — igual
 // catálogo que usa el registro normal y la edición de un pedido.
 function construirOpcionesTipoPedido(turno) {
-  if (turno === 'almuerzo') {
-    return `<optgroup label="☀️ ALMUERZOS">
-        <option value="completo"      data-monto="14000">Almuerzo Completo (con sopa) · $14.000</option>
-        <option value="seco"          data-monto="12000">Almuerzo Seco (sin sopa) · $12.000</option>
-        <option value="asado130"      data-monto="17000">Asado 130g · $17.000</option>
-        <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
-        <option value="porcion-sopa"  data-monto="6000">Porción de Sopa · $6.000</option>
-        <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
-        <option value="porcion-proteina" data-monto="8000">Porción de Proteína · $8.000</option>
-        <option value="sopa-y-arroz"  data-monto="11000">Sopa y Arroz · $11.000</option>
-      </optgroup>`;
-  }
-  const cats = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS','SANDWICH CUBANO','AREPAS','SUIZOS'];
-  return cats.map(cat => {
-    const items = PL.comidaRapida.filter(p => p.cat === cat);
-    const opts  = items.map(p => `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`).join('');
-    return `<optgroup label="🌙 ${cat}">${opts}</optgroup>`;
-  }).join('');
+  if (turno === 'almuerzo') return `<optgroup label="☀️ ALMUERZOS">${opcionesAlmuerzoHtml()}</optgroup>`;
+  return gruposRapidasHtml();
 }
 
 function abrirModalAgregarComida(idsGrupo, grupoPedido) {
@@ -8735,10 +8863,7 @@ function abrirModalAgregarComida(idsGrupo, grupoPedido) {
   document.getElementById('agregar-comida-turno-label').textContent = ref.turno === 'cena' ? '🌙 Comidas rápidas' : '☀️ Almuerzo';
   document.getElementById('agregar-comida-tipo').innerHTML = construirOpcionesTipoPedido(ref.turno);
   if (ref.turno !== 'almuerzo') {
-    const bebidaSel = document.getElementById('agregar-comida-bebida');
-    const bebidas = PL.comidaRapida.filter(p => p.cat === 'BEBIDAS');
-    bebidaSel.innerHTML = `<option value="" data-monto="0">— Sin bebida —</option>` +
-      bebidas.map(p => `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`).join('');
+    document.getElementById('agregar-comida-bebida').innerHTML = opcionesBebidaHtml();
   }
   document.getElementById('agregar-comida-cantidad').value = '1';
   document.getElementById('agregar-comida-nota').value = '';
@@ -8907,7 +9032,7 @@ function abrirModalEditarPedido(id) {
   if (grupoTieneDescuento) { showToast('⚠ Quita primero el descuento (🏷) y luego edita', 'warning'); return; }
   editarPedidoId = id;
   document.getElementById('editar-ped-actual').textContent = `${LABELS[p.pedido] || p.pedido} · ${p.detalle || 'sin detalle'} · ${fmt(p.monto_total || 0)}`;
-  rebuildEditarPedidoSelect(p.turno);
+  rebuildEditarPedidoSelect(p.turno, p.created_at, [p.pedido]);
   document.getElementById('editar-ped-tipo').value = p.pedido;
   document.getElementById('editar-ped-sopa').value = p.sopa || '';
   document.getElementById('editar-ped-arroz').value = p.arroz || '';
@@ -8930,39 +9055,15 @@ function cerrarModalEditarPedidoClick(e) {
 
 // Reconstruye el <select> de tipos con el mismo catálogo del formulario de
 // Ingresos, pero fijado al turno DEL PEDIDO que se está editando (no cambia).
-function rebuildEditarPedidoSelect(turno) {
+function rebuildEditarPedidoSelect(turno, instante, incluir = []) {
   const sel = document.getElementById('editar-ped-tipo');
   if (turno === 'almuerzo') {
-    sel.innerHTML = `
-      <optgroup label="☀️ ALMUERZOS">
-        <option value="completo"      data-monto="14000">Almuerzo Completo (con sopa) · $14.000</option>
-        <option value="seco"          data-monto="12000">Almuerzo Seco (sin sopa) · $12.000</option>
-        <option value="asado130"      data-monto="17000">Asado 130g · $17.000</option>
-        <option value="asado200"      data-monto="20000">Asado 200g · $20.000</option>
-        <option value="porcion-sopa"  data-monto="6000">Porción de Sopa · $6.000</option>
-        <option value="porcion-arroz" data-monto="4000">Porción de Arroz · $4.000</option>
-        <option value="porcion-proteina" data-monto="8000">Porción de Proteína · $8.000</option>
-        <option value="sopa-y-arroz"  data-monto="11000">Sopa y Arroz · $11.000</option>
-      </optgroup>`;
+    sel.innerHTML = `<optgroup label="☀️ ALMUERZOS">${opcionesAlmuerzoHtml(instante, incluir)}</optgroup>`;
   } else {
-    // 'ADICIONALES' (Papa Francesa/Ensalada/Gratinado) ya no se ofrece como
-    // tipo de pedido principal — pasaron a la lista de productos extra. Se
-    // deja el registro completo en PL.comidaRapida para no romper reportes
-    // ni la edición de pedidos históricos que ya los tengan.
-    const cats = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS','SANDWICH CUBANO','AREPAS','SUIZOS'];
-    const groups = cats.map(cat => {
-      const items = PL.comidaRapida.filter(p => p.cat === cat);
-      const opts  = items.map(p =>
-        `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`
-      ).join('');
-      return `<optgroup label="🌙 ${cat}">${opts}</optgroup>`;
-    }).join('');
-    sel.innerHTML = groups;
-
-    const bebidaSel = document.getElementById('editar-ped-bebida');
-    const bebidas = PL.comidaRapida.filter(p => p.cat === 'BEBIDAS');
-    bebidaSel.innerHTML = `<option value="" data-monto="0">— Sin bebida —</option>` +
-      bebidas.map(p => `<option value="${p.c}" data-monto="${p.precio}">${p.n} · $${p.precio.toLocaleString('es-CO')}</option>`).join('');
+    // Los precios que se muestran son los de cuando se tomó el pedido (instante); el producto del pedido siempre aparece
+    // en la lista, aunque ya esté retirado, para no cambiarlo sin querer al guardar.
+    sel.innerHTML = gruposRapidasHtml(instante, incluir);
+    document.getElementById('editar-ped-bebida').innerHTML = opcionesBebidaHtml(instante);
   }
 }
 
@@ -8990,21 +9091,19 @@ function recalcularEditarPedidoMonto() {
   const val = document.getElementById('editar-ped-tipo').value;
   const cantidad = parseInt(document.getElementById('editar-ped-cantidad').value) || 1;
   const crItem = PL.comidaRapida.find(p => p.c === val);
+  const p = ST.pendientes.find(x => x.id === editarPedidoId);
+  const instante = p ? p.created_at : undefined;       // precios de cuando se tomó el pedido, no los de hoy
   let montoUnit = 0;
 
   if (crItem) {
     const esEditable = crItem.cat === 'ADICIONALES';
-    montoUnit = esEditable ? valMiles('editar-ped-precio') : crItem.precio;
+    montoUnit = esEditable ? valMiles('editar-ped-precio') : precioProducto(val, instante);
     const bebidaSel = document.getElementById('editar-ped-bebida');
-    const montoBebida = (bebidaSel && bebidaSel.value)
-      ? (parseFloat(bebidaSel.options[bebidaSel.selectedIndex]?.getAttribute('data-monto')) || 0)
-      : 0;
-    montoUnit += montoBebida;
+    montoUnit += (bebidaSel && bebidaSel.value) ? precioProducto(bebidaSel.value, instante) : 0;
   } else {
-    montoUnit = PRECIOS[val] || 0;
+    montoUnit = precioProducto(val, instante);
   }
 
-  const p = ST.pendientes.find(x => x.id === editarPedidoId);
   const paraLlevarBonus = (p && p.para_llevar) ? recargoParaLlevar(p.created_at) : 0;
   const total = (montoUnit + paraLlevarBonus) * cantidad;
   document.getElementById('editar-ped-monto-display').textContent = fmt(total);
@@ -9025,13 +9124,13 @@ async function guardarEdicionPedido() {
 
   if (crItem) {
     const esEditable = crItem.cat === 'ADICIONALES';
-    montoUnit = esEditable ? valMiles('editar-ped-precio') : crItem.precio;
+    montoUnit = esEditable ? valMiles('editar-ped-precio') : precioProducto(val, p.created_at);
     const bebidaSel  = document.getElementById('editar-ped-bebida');
     const bebidaItem = (bebidaSel && bebidaSel.value) ? PL.comidaRapida.find(x => x.c === bebidaSel.value) : null;
-    montoUnit += bebidaItem ? bebidaItem.precio : 0;
+    montoUnit += bebidaItem ? precioProducto(bebidaItem.c, p.created_at) : 0;
     detalleBase = [crItem.n, bebidaItem?.n, direccionValue ? '📍 ' + direccionValue : ''].filter(Boolean).join(' · ');
   } else {
-    montoUnit = PRECIOS[val] || 0;
+    montoUnit = precioProducto(val, p.created_at);
     sopa     = document.getElementById('editar-ped-sopa').value.trim();
     arroz    = document.getElementById('editar-ped-arroz').value.trim();
     proteina = document.getElementById('editar-ped-proteina').value.trim();
@@ -9638,8 +9737,7 @@ function renderTablero() {
 
   // Desglose comidas rápidas por categoría
   const crIng = ings.filter(i => i.turno === 'cena');
-  const CR_CATS = ['PERROS','HAMBURGUESAS','ASADOS','PICADAS','SALCHIPAPAS',
-                   'SANDWICH CUBANO','AREPAS','SUIZOS','ADICIONALES','BEBIDAS'];
+  const CR_CATS = [...new Set(PL.comidaRapida.map(p => p.cat))];     // las del catálogo (incluye las que cree el administrador)
   const crPorCat = {};
   crIng.forEach(pedido => {
     const item = PL.comidaRapida.find(p => p.c === pedido.pedido);
@@ -11504,6 +11602,7 @@ function renderConfiguracion() {
       : `Hoy: <b>${escaparHtml(cfgTexto(c.clave, actual))}</b> · el valor de siempre (nunca se ha cambiado)`;
     cfgActualizarBoton(c.clave);
   }
+  cfgCatRender();
   cfgRenderHistorial();
 }
 
@@ -11515,14 +11614,16 @@ function cfgRenderHistorial() {
     cont.innerHTML = '<div style="font-size:12px;color:var(--text3);">Todavía no se ha cambiado nada: el sistema usa los valores de siempre de El Lobo. Cada cambio que guardes aparecerá aquí, con la fecha, la hora y quién lo hizo.</div>';
     return;
   }
-  const vigentes = new Set(CFG_CAMPOS.map(c => CFG.fila(c.clave)).filter(Boolean));
+  const vigentes = new Set([...CFG_CAMPOS.map(c => c.clave), ...CFGCAT_CLAVES.map(k => CFGCAT[k].clave)].map(clave => CFG.fila(clave)).filter(Boolean));
   const t = f => { const x = Date.parse(f.vigente_desde); return Number.isNaN(x) ? 0 : x; };
   const ordenadas = [...filas].sort((a, b) => (t(b) - t(a)) || ((b.id || 0) - (a.id || 0)));
   cont.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Desde</th><th>Qué</th><th>Valor</th><th>Quién</th><th></th></tr></thead>
-    <tbody>${ordenadas.map(f => {
-      const c = cfgCampo(f.clave);
-      return `<tr><td>${escaparHtml(fechaHoraLegible(f.vigente_desde))}</td><td>${escaparHtml(c ? c.titulo : f.clave)}</td><td>${escaparHtml(cfgTexto(f.clave, f.valor))}</td><td>${escaparHtml(f.creado_por || '—')}</td><td>${vigentes.has(f) ? '<span class="badge badge-green">rige hoy</span>' : ''}</td></tr>`;
+    <tbody>${ordenadas.map((f, j) => {
+      const c = cfgCampo(f.clave), cat = cfgCatDe(f.clave);
+      const previo = cat ? ordenadas.slice(j + 1).find(x => x.clave === f.clave) : null;      // la versión anterior del catálogo
+      const valor = cat ? cfgResumenCatalogo(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave]) : cfgTexto(f.clave, f.valor);
+      return `<tr><td>${escaparHtml(fechaHoraLegible(f.vigente_desde))}</td><td>${escaparHtml(c ? c.titulo : cat ? 'Productos: ' + cat.titulo : f.clave)}</td><td>${escaparHtml(valor)}</td><td>${escaparHtml(f.creado_por || '—')}</td><td>${vigentes.has(f) ? '<span class="badge badge-green">rige hoy</span>' : ''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 
@@ -11609,6 +11710,268 @@ async function cfgGuardar(clave) {
   }
 }
 
+// ── Pantalla: Productos y precios (etapa 2) ─────────────────────────────────
+// Tres tablas editables (almuerzos, comidas rápidas/bebidas/adicionales, productos extra). Lo que la persona va cambiando
+// vive en una copia de trabajo (cfgCat); «Guardar cambios» manda el catálogo COMPLETO como una versión nueva. Nada se
+// borra: «Retirar» solo lo deja de ofrecer. Los productos nuevos reciben un código que no cambia nunca.
+const CFGCAT = {
+  almuerzos: { clave: 'catalogo_almuerzos', icono: '☀️', titulo: 'Almuerzos', crear: false, buscar: false,
+    ayuda: 'Los 8 tipos de almuerzo. Puedes cambiar el nombre y el precio, o retirar uno (deja de ofrecerse, pero los pedidos viejos lo siguen mostrando). Aquí no se crean tipos nuevos.' },
+  rapidas: { clave: 'catalogo_rapidas', icono: '🌙', titulo: 'Comidas rápidas, bebidas y adicionales', crear: true, buscar: true,
+    ayuda: 'Cambia nombre, precio o categoría; retira o reactiva; o agrega productos nuevos. Una categoría nueva se crea escribiendo su nombre. «BEBIDAS» alimenta el desplegable de bebida y «ADICIONALES» se vende con el precio escrito a mano.' },
+  extras: { clave: 'catalogo_extras', icono: '➕', titulo: 'Productos adicionales', crear: true, buscar: false,
+    ayuda: 'La lista que autocompleta nombre y valor en la ventana «Agregar producto» de un pedido. Igual se puede escribir cualquier otro a mano.' }
+};
+const CFGCAT_CLAVES = Object.keys(CFGCAT);
+const cfgCatDe = clave => CFGCAT_CLAVES.map(k => CFGCAT[k]).find(d => d.clave === clave) || null;
+const cfgCat = { almuerzos: null, rapidas: null, extras: null };           // copia de trabajo (null = nada cambiado)
+const cfgCatFiltro = { almuerzos: '', rapidas: '', extras: '' };
+const cfgCatFirma = { almuerzos: null, rapidas: null, extras: null };
+let cfgCatConstruido = false;
+
+const cfgCatVigente = k => CFG.v(CFGCAT[k].clave);
+const cfgCatFilas = k => cfgCat[k] || cfgCatVigente(k);
+function cfgCatBorrador(k) {
+  if (!cfgCat[k]) cfgCat[k] = JSON.parse(JSON.stringify(cfgCatVigente(k)));
+  return cfgCat[k];
+}
+// Lo que se manda a la base (sin marcas internas, con el nombre limpio).
+function cfgCatPayload(k, filas) {
+  const limpio = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  return filas.map(f => {
+    if (k === 'rapidas') return { codigo: f.codigo, nombre: limpio(f.nombre), precio: f.precio, categoria: limpio(f.categoria).toUpperCase(), activo: !!f.activo };
+    if (k === 'almuerzos') return { codigo: f.codigo, nombre: limpio(f.nombre), precio: f.precio, activo: !!f.activo };
+    return { nombre: limpio(f.nombre), precio: f.precio, activo: !!f.activo };
+  });
+}
+const cfgCatBaseDe = (k, f, i) => { const v = cfgCatVigente(k); return k === 'extras' ? v[i] : v.find(x => x.codigo === f.codigo); };
+function cfgCatCambios(k) {
+  if (!cfgCat[k]) return 0;
+  const ahora = cfgCatPayload(k, cfgCat[k]), vigente = cfgCatPayload(k, cfgCatVigente(k));
+  return ahora.reduce((n, f, i) => n + ((i >= vigente.length || JSON.stringify(f) !== JSON.stringify(vigente[i])) ? 1 : 0), 0);
+}
+// Qué cambió entre dos versiones (en palabras): sirve para la confirmación y para el historial.
+function cfgCatDiff(k, antes, despues) {
+  const lineas = [];
+  if (!Array.isArray(antes) || !Array.isArray(despues)) return lineas;
+  const idDe = (f, i) => (k === 'extras' ? 'pos' + i : f.codigo);
+  const previos = new Map(antes.map((f, i) => [idDe(f, i), f]));
+  despues.forEach((f, i) => {
+    const a = previos.get(idDe(f, i));
+    if (!a) { lineas.push(`➕ Nuevo: ${f.nombre} · ${precioTexto(f.precio)}${f.categoria ? ' · ' + f.categoria : ''}`); return; }
+    if (a.nombre !== f.nombre) lineas.push(`Nombre: «${a.nombre}» → «${f.nombre}»`);
+    if (a.precio !== f.precio) lineas.push(`${f.nombre}: ${precioTexto(a.precio)} → ${precioTexto(f.precio)}`);
+    if ((a.categoria || '') !== (f.categoria || '')) lineas.push(`${f.nombre}: categoría ${a.categoria} → ${f.categoria}`);
+    if (!!a.activo !== !!f.activo) lineas.push(f.activo ? `✅ Se reactiva: ${f.nombre}` : `🚫 Se retira: ${f.nombre}`);
+  });
+  return lineas;
+}
+function cfgResumenCatalogo(clave, valor, previo) {
+  const k = CFGCAT_CLAVES.find(x => CFGCAT[x].clave === clave);
+  const l = cfgCatDiff(k, previo, valor);
+  if (!l.length) return 'sin diferencias';
+  return `${l.length} cambio${l.length === 1 ? '' : 's'}: ${l.slice(0, 3).join(' · ')}${l.length > 3 ? ` · …y ${l.length - 3} más` : ''}`;
+}
+
+function cfgCatConstruir() {
+  const zona = document.getElementById('config-catalogos');
+  if (!zona) return;
+  zona.innerHTML = CFGCAT_CLAVES.map(k => {
+    const d = CFGCAT[k];
+    const buscador = d.buscar ? `<input type="text" id="cfgcat-buscar-${k}" placeholder="Buscar por nombre, código o categoría…" autocomplete="off" oninput="cfgCatFiltrar('${k}', this.value)" style="max-width:340px;margin:8px 0;">` : '';
+    return `<div class="panel cfg-panel" id="cfgcat-${k}">
+      <div class="panel-header"><div class="panel-title">${d.icono} ${d.titulo}</div></div>
+      <div class="panel-body">
+        <div class="cfg-ayuda">${d.ayuda}</div>
+        <div class="cfg-hoy" id="cfgcat-hoy-${k}"></div>
+        ${buscador}
+        <div class="table-wrap${k === 'rapidas' ? ' cfgcat-largo' : ''}"><table class="cfgcat-tabla"><thead><tr>${k === 'extras' ? '' : '<th>Código</th>'}<th>Nombre</th>${k === 'rapidas' ? '<th>Categoría</th>' : ''}<th>Precio</th><th>Estado</th></tr></thead><tbody id="cfgcat-cuerpo-${k}"></tbody></table></div>
+        <div class="cfgcat-barra">
+          <div>${d.crear ? `<button type="button" class="btn btn-outline" id="cfgcat-agregar-${k}" onclick="cfgCatAgregar('${k}')">＋ Agregar producto</button>` : ''}</div>
+          <div class="cfgcat-acciones">
+            <span class="cfgcat-contador" id="cfgcat-contador-${k}"></span>
+            <button type="button" class="btn btn-outline" id="cfgcat-descartar-${k}" onclick="cfgCatDescartar('${k}')" disabled>Descartar</button>
+            <button type="button" class="btn btn-primary" id="cfgcat-guardar-${k}" onclick="cfgCatGuardar('${k}')" disabled>Guardar cambios</button>
+          </div>
+        </div>
+      </div></div>`;
+  }).join('') + '<datalist id="cfgcat-categorias"></datalist>';
+  cfgCatConstruido = true;
+}
+
+function cfgCatClasesFila(k, f, i) {
+  const base = f._nuevo ? null : cfgCatBaseDe(k, f, i);
+  const cambio = !f._nuevo && base && JSON.stringify(cfgCatPayload(k, [f])[0]) !== JSON.stringify(cfgCatPayload(k, [base])[0]);
+  return [f.activo ? '' : 'cfgcat-retirado', f._nuevo ? 'cfgcat-nuevo' : cambio ? 'cfgcat-cambio' : ''].filter(Boolean).join(' ');
+}
+function cfgCatHtmlFila(k, f, i, habilitado) {
+  const dis = habilitado ? '' : ' disabled';
+  const precio = f.precio == null ? '' : Number(f.precio).toLocaleString('es-CO');
+  const cod = k === 'extras' ? '' : `<td class="cfgcat-cod">${escaparHtml(f.codigo)}</td>`;
+  const cat = k === 'rapidas'
+    ? `<td><input type="text" list="cfgcat-categorias" maxlength="30" autocomplete="off" aria-label="Categoría de ${escaparHtml(f.nombre || 'producto nuevo')}" value="${escaparHtml(f.categoria || '')}" oninput="this.value=this.value.toUpperCase();cfgCatEditar('${k}',${i},'categoria',this.value)"${dis}></td>` : '';
+  const estado = f._nuevo
+    ? `<span class="badge badge-gray">nuevo</span> <button type="button" class="btn btn-outline" onclick="cfgCatQuitar('${k}',${i})"${dis}>Quitar</button>`
+    : f.activo
+      ? `<span class="badge badge-green">activo</span> <button type="button" class="btn btn-outline" onclick="cfgCatAlternar('${k}',${i})"${dis}>Retirar</button>`
+      : `<span class="badge badge-gray">retirado</span> <button type="button" class="btn btn-outline" onclick="cfgCatAlternar('${k}',${i})"${dis}>Reactivar</button>`;
+  return `<tr id="cfgcat-fila-${k}-${i}" class="${cfgCatClasesFila(k, f, i)}">${cod}
+    <td><input type="text" maxlength="60" autocomplete="off" spellcheck="false" aria-label="Nombre" value="${escaparHtml(f.nombre || '')}" oninput="cfgCatEditar('${k}',${i},'nombre',this.value)"${dis}></td>${cat}
+    <td><input type="text" inputmode="numeric" autocomplete="off" aria-label="Precio" style="max-width:110px;" value="${precio}" oninput="formatMilesInput(this);cfgCatEditar('${k}',${i},'precio',this.value.trim()===''?null:parseMiles(this.value))"${dis}></td>
+    <td class="cfgcat-estado">${estado}</td></tr>`;
+}
+function cfgCatRenderCuerpo(k) {
+  const cuerpo = document.getElementById('cfgcat-cuerpo-' + k);
+  if (!cuerpo) return;
+  const q = (cfgCatFiltro[k] || '').trim().toLowerCase();
+  const filas = cfgCatFilas(k), ok = CFG.disponible();
+  cuerpo.innerHTML = filas.map((f, i) => ({ f, i }))
+    .filter(({ f }) => !q || `${f.nombre || ''} ${f.codigo || ''} ${f.categoria || ''}`.toLowerCase().includes(q))
+    .map(({ f, i }) => cfgCatHtmlFila(k, f, i, ok)).join('') || `<tr><td colspan="5" style="color:var(--text3);font-size:12px;">${q ? 'Nada coincide con la búsqueda.' : 'No hay productos.'}</td></tr>`;
+}
+function cfgCatActualizarCategorias() {
+  const dl = document.getElementById('cfgcat-categorias');
+  if (!dl) return;
+  dl.innerHTML = [...new Set(cfgCatFilas('rapidas').map(f => f.categoria).filter(Boolean))].map(c => `<option value="${escaparHtml(c)}"></option>`).join('');
+}
+function cfgCatActualizarHoy(k) {
+  const el = document.getElementById('cfgcat-hoy-' + k);
+  if (!el) return;
+  const def = CFGCAT[k], filas = cfgCatVigente(k), fila = CFG.fila(def.clave);
+  const activos = filas.filter(f => f.activo).length;
+  el.innerHTML = `Hoy: <b>${activos} activo${activos === 1 ? '' : 's'}</b> de ${filas.length} · ` + (fila
+    ? `desde ${escaparHtml(fechaHoraLegible(fila.vigente_desde))} · por ${escaparHtml(fila.creado_por || '—')}`
+    : 'el catálogo de siempre (nunca se ha cambiado)');
+}
+function cfgCatActualizarBarra(k) {
+  const n = cfgCatCambios(k), ok = CFG.disponible();
+  const cont = document.getElementById('cfgcat-contador-' + k), g = document.getElementById('cfgcat-guardar-' + k), d = document.getElementById('cfgcat-descartar-' + k), a = document.getElementById('cfgcat-agregar-' + k);
+  if (cont) cont.textContent = n ? `${n} cambio${n === 1 ? '' : 's'} sin guardar` : '';
+  if (g) g.disabled = !ok || n === 0;
+  if (d) d.disabled = !cfgCat[k];
+  if (a) a.disabled = !ok;
+}
+function cfgCatRender() {
+  if (!document.getElementById('config-catalogos')) return;
+  if (!cfgCatConstruido) cfgCatConstruir();
+  for (const k of CFGCAT_CLAVES) {
+    cfgCatActualizarHoy(k);
+    if (!cfgCat[k]) {                                   // mientras se edita no se pisa lo escrito
+      const firma = JSON.stringify(cfgCatVigente(k)) + '|' + CFG.disponible();
+      if (firma !== cfgCatFirma[k]) { cfgCatFirma[k] = firma; cfgCatRenderCuerpo(k); }
+    }
+    cfgCatActualizarBarra(k);
+  }
+  cfgCatActualizarCategorias();
+}
+
+function cfgCatEditar(k, i, campo, valor) {
+  const filas = cfgCatBorrador(k);
+  if (!filas[i]) return;
+  filas[i][campo] = valor;
+  const tr = document.getElementById(`cfgcat-fila-${k}-${i}`);
+  if (tr) tr.className = cfgCatClasesFila(k, filas[i], i);
+  cfgCatActualizarBarra(k);
+  if (k === 'rapidas' && campo === 'categoria') cfgCatActualizarCategorias();
+}
+function cfgCatAlternar(k, i) {
+  const filas = cfgCatBorrador(k);
+  if (!filas[i]) return;
+  filas[i].activo = !filas[i].activo;
+  cfgCatRenderCuerpo(k);
+  cfgCatActualizarBarra(k);
+}
+function cfgCatSiguienteCodigo(filas) {
+  const usados = new Set(filas.map(f => f.codigo));
+  for (let n = 1; ; n++) { const c = 'X' + String(n).padStart(3, '0'); if (!usados.has(c)) return c; }
+}
+function cfgCatAgregar(k) {
+  const filas = cfgCatBorrador(k);
+  cfgCatFiltro[k] = '';
+  const b = document.getElementById('cfgcat-buscar-' + k); if (b) b.value = '';
+  const nuevo = { nombre: '', precio: null, activo: true, _nuevo: true };
+  if (k === 'rapidas') { nuevo.codigo = cfgCatSiguienteCodigo(filas); nuevo.categoria = ''; }
+  filas.push(nuevo);
+  cfgCatRenderCuerpo(k);
+  cfgCatActualizarBarra(k);
+  const el = document.querySelector(`#cfgcat-fila-${k}-${filas.length - 1} input`);
+  if (el) { el.focus(); if (el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }
+}
+function cfgCatQuitar(k, i) {
+  const filas = cfgCatBorrador(k);
+  if (!filas[i] || !filas[i]._nuevo) return;            // solo se quita lo que todavía no se ha guardado
+  filas.splice(i, 1);
+  cfgCatRenderCuerpo(k);
+  cfgCatActualizarBarra(k);
+  cfgCatActualizarCategorias();
+}
+function cfgCatDescartar(k) {
+  cfgCat[k] = null; cfgCatFirma[k] = null;
+  cfgCatRenderCuerpo(k);
+  cfgCatActualizarBarra(k);
+  cfgCatActualizarCategorias();
+}
+function cfgCatFiltrar(k, q) {
+  cfgCatFiltro[k] = q || '';
+  cfgCatRenderCuerpo(k);
+}
+
+async function cfgCatGuardar(k) {
+  if (cfgGuardando) return;
+  const def = CFGCAT[k];
+  if (!def) return;
+  if (!adminAutenticado) { showToast('⚠ Solo el administrador puede cambiar la configuración', 'warning'); return; }
+  if (!CFG.disponible()) { showToast('⚠ Falta instalar la configuración en Supabase (sql/configuracion.sql y sql/configuracion_etapa_2.sql)', 'warning'); return; }
+  const filas = cfgCat[k];
+  if (!filas) return;
+  for (let i = 0; i < filas.length; i++) {              // lo que falta, dicho con claridad (la base y cfgValidar lo vuelven a exigir)
+    const f = filas[i], cual = f._nuevo ? 'el producto nuevo' : `«${f.nombre}»`;
+    if (!String(f.nombre || '').trim()) { showToast('⚠ Falta el nombre de un producto' + (f._nuevo ? ' nuevo' : ''), 'warning'); return; }
+    if (f.precio == null) { showToast(`⚠ Falta el precio de ${cual} («${f.nombre}»)`.replace('«»', ''), 'warning'); return; }
+    if (k === 'rapidas' && !String(f.categoria || '').trim()) { showToast(`⚠ Falta la categoría de «${f.nombre}»`, 'warning'); return; }
+  }
+  const payload = cfgCatPayload(k, filas);
+  const mal = cfgValidar(def.clave, payload);
+  if (mal) { showToast('⚠ ' + mal, 'warning'); return; }
+  if (k === 'almuerzos' && !payload.some(p => p.activo)) { showToast('⚠ Debe quedar al menos un tipo de almuerzo activo', 'warning'); return; }
+  if (k === 'rapidas' && !payload.some(p => p.activo && !CAT_ESPECIALES.includes(p.categoria))) { showToast('⚠ Debe quedar al menos una comida rápida activa', 'warning'); return; }
+  const lineas = cfgCatDiff(k, cfgCatVigente(k), payload);
+  if (!lineas.length) { showToast('ℹ️ Ya está así: no hay nada que guardar', 'info'); cfgCatActualizarBarra(k); return; }
+
+  // ¿Alguien más (otro administrador, otro equipo) cambió este catálogo mientras tanto? Entonces no se pisa su cambio.
+  try {
+    const frescas = await sbGetAll('configuracion', 'order=id.asc');
+    const ultimo = (lista) => lista.reduce((m, f) => (f && f.clave === def.clave && (f.id || 0) > m ? f.id : m), 0);
+    if (ultimo(frescas) !== ultimo(ST.configuracion)) {
+      ST.configuracion = frescas;
+      cfgCat[k] = null; cfgCatFirma[k] = null;
+      renderAll();
+      showToast('⚠ Alguien más acaba de cambiar este catálogo. Se actualizó la pantalla: revisa y vuelve a hacer tus cambios.', 'warning');
+      return;
+    }
+  } catch (e) { /* sin conexión: el guardado de abajo fallará con su propio aviso */ }
+
+  const ok = await confirmarSistema({
+    titulo: `¿Guardar los cambios en «${def.titulo}»?`,
+    cuerpo: `${lineas.slice(0, 12).join('\n')}${lineas.length > 12 ? `\n…y ${lineas.length - 12} cambios más` : ''}\n\nRigen desde ahora. Lo que ya se vendió o se cerró no cambia; un pedido pendiente que ya estaba tomado conserva los precios de cuando se tomó.`,
+    aceptar: 'Sí, guardar'
+  });
+  if (!ok) return;
+  cfgGuardando = true;
+  try {
+    const guardadas = await sbInsert('configuracion', { clave: def.clave, valor: payload });
+    ST.configuracion = (guardadas && guardadas.length) ? ST.configuracion.concat(guardadas) : await sbGetAll('configuracion', 'order=id.asc');
+    cfgCat[k] = null; cfgCatFirma[k] = null;
+    showToast(`✅ Guardado: ${def.titulo} (${lineas.length} cambio${lineas.length === 1 ? '' : 's'}, rige desde ahora)`, 'ok');
+    renderAll();
+  } catch (e) {
+    console.error('No se pudo guardar el catálogo:', e);
+    showToast('⚠ No se pudo guardar: ' + cfgMensajeError(e), 'warning');
+  } finally {
+    cfgGuardando = false;
+  }
+}
+
 // ── TABS ──────────────────────────────────────────────────────────────
 function showTab(id, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -11621,6 +11984,7 @@ function showTab(id, el) {
 
 // ── RENDER ALL ────────────────────────────────────────────────────────
 function renderAll() {
+  catalogoAlDia();
   // Operativas — sin contraseña
   renderIngresos();
   renderPendientes();

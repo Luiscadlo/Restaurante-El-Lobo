@@ -1,0 +1,920 @@
+{
+ "comentario": "Casos compartidos por las pruebas de Python (Postgres real), de la pantalla y del servidor falso: las tres reglas deben dar el MISMO veredicto y el MISMO mensaje. «mensaje» null = válido. Cada caso parte del catálogo base de El Lobo y le aplica: quitar (posiciones), mod (posición → campos), sin (posición → campos que se borran), agregar (productos al final), relleno (n productos válidos al final); o trae su «valor» completo.",
+ "casos": [
+  {
+   "id": "rapidas: los 49 de El Lobo",
+   "clave": "catalogo_rapidas",
+   "mensaje": null
+  },
+  {
+   "id": "almuerzos: los 8 de El Lobo",
+   "clave": "catalogo_almuerzos",
+   "mensaje": null
+  },
+  {
+   "id": "extras: los 14 de siempre",
+   "clave": "catalogo_extras",
+   "mensaje": null
+  },
+  {
+   "id": "extras: vacía",
+   "clave": "catalogo_extras",
+   "mensaje": null,
+   "valor": []
+  },
+  {
+   "id": "rapidas: precio mínimo 100",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "precio": 100
+    }
+   }
+  },
+  {
+   "id": "rapidas: precio máximo 500000",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "precio": 500000
+    }
+   }
+  },
+  {
+   "id": "almuerzos: precio mínimo y máximo",
+   "clave": "catalogo_almuerzos",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "precio": 100
+    },
+    "1": {
+     "precio": 500000
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre de 60 letras",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "nombre": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con tildes, paréntesis, ñ y emoji",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "nombre": "Ñandú (grande) 1,5 L — 😀"
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría de 30 letras",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "categoria": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría con espacio y número",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "categoria": "SANDWICH CUBANO 2"
+    }
+   }
+  },
+  {
+   "id": "rapidas: producto nuevo X001 en categoría nueva",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "X001",
+     "nombre": "Producto de prueba",
+     "precio": 5000,
+     "categoria": "POSTRES",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "rapidas: códigos nuevos de 2 y de 8 caracteres",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "agregar": [
+    {
+     "codigo": "A1",
+     "nombre": "Producto de prueba",
+     "precio": 5000,
+     "categoria": "NUEVA",
+     "activo": true
+    },
+    {
+     "codigo": "ABCDEFGH",
+     "nombre": "Producto de prueba",
+     "precio": 5000,
+     "categoria": "NUEVA",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "rapidas: producto retirado",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "activo": false
+    }
+   }
+  },
+  {
+   "id": "almuerzos: un tipo retirado",
+   "clave": "catalogo_almuerzos",
+   "mensaje": null,
+   "mod": {
+    "3": {
+     "activo": false
+    }
+   }
+  },
+  {
+   "id": "extras: producto retirado",
+   "clave": "catalogo_extras",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "activo": false
+    }
+   }
+  },
+  {
+   "id": "extras: 100 productos",
+   "clave": "catalogo_extras",
+   "mensaje": null,
+   "relleno": 86
+  },
+  {
+   "id": "rapidas: 300 productos",
+   "clave": "catalogo_rapidas",
+   "mensaje": null,
+   "relleno": 251
+  },
+  {
+   "id": "extras: nombre de 60 letras",
+   "clave": "catalogo_extras",
+   "mensaje": null,
+   "mod": {
+    "0": {
+     "nombre": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
+    }
+   }
+  },
+  {
+   "id": "rapidas: no es lista (objeto)",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas debe ser una lista.",
+   "valor": {}
+  },
+  {
+   "id": "almuerzos: no es lista (texto)",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "El catálogo de almuerzos debe ser una lista.",
+   "valor": "x"
+  },
+  {
+   "id": "extras: no es lista (nulo)",
+   "clave": "catalogo_extras",
+   "mensaje": "La lista de productos adicionales debe ser una lista.",
+   "valor": null
+  },
+  {
+   "id": "extras: no es lista (número)",
+   "clave": "catalogo_extras",
+   "mensaje": "La lista de productos adicionales debe ser una lista.",
+   "valor": 5
+  },
+  {
+   "id": "almuerzos: 7 tipos",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "El catálogo de almuerzos trae 7 productos y esa cantidad no es válida.",
+   "quitar": [
+    0
+   ]
+  },
+  {
+   "id": "almuerzos: 9 tipos",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "El catálogo de almuerzos trae 9 productos y esa cantidad no es válida.",
+   "agregar": [
+    {
+     "codigo": "nuevo",
+     "nombre": "Otro",
+     "precio": 5000,
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "almuerzos: vacío",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "El catálogo de almuerzos trae 0 productos y esa cantidad no es válida.",
+   "valor": []
+  },
+  {
+   "id": "rapidas: vacío",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas trae 0 productos y esa cantidad no es válida.",
+   "valor": []
+  },
+  {
+   "id": "rapidas: 301 productos",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas trae 301 productos y esa cantidad no es válida.",
+   "relleno": 252
+  },
+  {
+   "id": "extras: 101 productos",
+   "clave": "catalogo_extras",
+   "mensaje": "La lista de productos adicionales trae 101 productos y esa cantidad no es válida.",
+   "relleno": 87
+  },
+  {
+   "id": "rapidas: un producto que es texto",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas trae un producto mal formado.",
+   "agregar": [
+    "texto"
+   ]
+  },
+  {
+   "id": "rapidas: un producto nulo",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas trae un producto mal formado.",
+   "agregar": [
+    null
+   ]
+  },
+  {
+   "id": "rapidas: un producto que es lista",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas trae un producto mal formado.",
+   "agregar": [
+    [
+     1
+    ]
+   ]
+  },
+  {
+   "id": "rapidas: sin precio",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas trae un producto con campos que no corresponden.",
+   "sin": {
+    "0": [
+     "precio"
+    ]
+   }
+  },
+  {
+   "id": "rapidas: campo de más",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas trae un producto con campos que no corresponden.",
+   "mod": {
+    "0": {
+     "extra": 1
+    }
+   }
+  },
+  {
+   "id": "almuerzos: con categoría (no le corresponde)",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "El catálogo de almuerzos trae un producto con campos que no corresponden.",
+   "mod": {
+    "0": {
+     "categoria": "X"
+    }
+   }
+  },
+  {
+   "id": "extras: con código (no le corresponde)",
+   "clave": "catalogo_extras",
+   "mensaje": "La lista de productos adicionales trae un producto con campos que no corresponden.",
+   "mod": {
+    "0": {
+     "codigo": "X001"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre que no es texto",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El nombre de cada producto debe ser un texto.",
+   "mod": {
+    "0": {
+     "nombre": 5
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre vacío",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El nombre de cada producto debe tener entre 1 y 60 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": ""
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre solo espacios",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El nombre de cada producto debe tener entre 1 y 60 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "   "
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre de 61 letras",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El nombre de cada producto debe tener entre 1 y 60 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con espacio al principio",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El nombre de cada producto debe tener entre 1 y 60 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": " Perro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con espacio al final",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El nombre de cada producto debe tener entre 1 y 60 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "Perro "
+    }
+   }
+  },
+  {
+   "id": "extras: nombre de 61 letras",
+   "clave": "catalogo_extras",
+   "mensaje": "El nombre de cada producto debe tener entre 1 y 60 caracteres, sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "nombre": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con <",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Pe<rro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con >",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Pe>rro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con &",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Pe&rro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con comilla doble",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Pe\"rro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con comilla simple",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Pe'rro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con tilde invertida",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Pe`rro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con barra invertida",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Pe\\rro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con salto de línea",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Pe\nrro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con tabulador en medio",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Pe\trro"
+    }
+   }
+  },
+  {
+   "id": "rapidas: nombre con tabulador al final",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Perro\t"
+    }
+   }
+  },
+  {
+   "id": "almuerzos: nombre con <",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "<b>Almuerzo</b>"
+    }
+   }
+  },
+  {
+   "id": "extras: nombre con &",
+   "clave": "catalogo_extras",
+   "mensaje": "Los nombres no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "nombre": "Arroz & frijol"
+    }
+   }
+  },
+  {
+   "id": "rapidas: precio escrito como texto",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El precio de \"Perro Sencillo\" debe ser un número.",
+   "mod": {
+    "0": {
+     "precio": "5000"
+    }
+   }
+  },
+  {
+   "id": "rapidas: precio nulo",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El precio de \"Perro Sencillo\" debe ser un número.",
+   "mod": {
+    "0": {
+     "precio": null
+    }
+   }
+  },
+  {
+   "id": "rapidas: precio verdadero/falso",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El precio de \"Perro Sencillo\" debe ser un número.",
+   "mod": {
+    "0": {
+     "precio": true
+    }
+   }
+  },
+  {
+   "id": "rapidas: precio 99",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El precio de \"Perro Sencillo\" debe ser un número entero entre 100 y 500000.",
+   "mod": {
+    "0": {
+     "precio": 99
+    }
+   }
+  },
+  {
+   "id": "rapidas: precio 0",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El precio de \"Perro Sencillo\" debe ser un número entero entre 100 y 500000.",
+   "mod": {
+    "0": {
+     "precio": 0
+    }
+   }
+  },
+  {
+   "id": "rapidas: precio -5",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El precio de \"Perro Sencillo\" debe ser un número entero entre 100 y 500000.",
+   "mod": {
+    "0": {
+     "precio": -5
+    }
+   }
+  },
+  {
+   "id": "rapidas: precio 500001",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El precio de \"Perro Sencillo\" debe ser un número entero entre 100 y 500000.",
+   "mod": {
+    "0": {
+     "precio": 500001
+    }
+   }
+  },
+  {
+   "id": "rapidas: precio 1000.5",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El precio de \"Perro Sencillo\" debe ser un número entero entre 100 y 500000.",
+   "mod": {
+    "0": {
+     "precio": 1000.5
+    }
+   }
+  },
+  {
+   "id": "almuerzos: precio 99",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "El precio de \"Almuerzo Completo\" debe ser un número entero entre 100 y 500000.",
+   "mod": {
+    "0": {
+     "precio": 99
+    }
+   }
+  },
+  {
+   "id": "extras: precio 500001",
+   "clave": "catalogo_extras",
+   "mensaje": "El precio de \"Botella de agua\" debe ser un número entero entre 100 y 500000.",
+   "mod": {
+    "0": {
+     "precio": 500001
+    }
+   }
+  },
+  {
+   "id": "rapidas: activo como texto",
+   "clave": "catalogo_rapidas",
+   "mensaje": "\"Perro Sencillo\" debe estar activo o retirado (verdadero o falso).",
+   "mod": {
+    "0": {
+     "activo": "true"
+    }
+   }
+  },
+  {
+   "id": "rapidas: activo como número",
+   "clave": "catalogo_rapidas",
+   "mensaje": "\"Perro Sencillo\" debe estar activo o retirado (verdadero o falso).",
+   "mod": {
+    "0": {
+     "activo": 1
+    }
+   }
+  },
+  {
+   "id": "rapidas: activo nulo",
+   "clave": "catalogo_rapidas",
+   "mensaje": "\"Perro Sencillo\" debe estar activo o retirado (verdadero o falso).",
+   "mod": {
+    "0": {
+     "activo": null
+    }
+   }
+  },
+  {
+   "id": "rapidas: código que no es texto",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código de \"Perro Sencillo\" debe ser un texto.",
+   "mod": {
+    "0": {
+     "codigo": 5
+    }
+   }
+  },
+  {
+   "id": "rapidas: código «x1»",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código \"x1\" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.",
+   "mod": {
+    "0": {
+     "codigo": "x1"
+    }
+   }
+  },
+  {
+   "id": "rapidas: código «ABCDEFGHI»",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código \"ABCDEFGHI\" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.",
+   "mod": {
+    "0": {
+     "codigo": "ABCDEFGHI"
+    }
+   }
+  },
+  {
+   "id": "rapidas: código «1ABC»",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código \"1ABC\" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.",
+   "mod": {
+    "0": {
+     "codigo": "1ABC"
+    }
+   }
+  },
+  {
+   "id": "rapidas: código «»",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código \"\" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.",
+   "mod": {
+    "0": {
+     "codigo": ""
+    }
+   }
+  },
+  {
+   "id": "rapidas: código «AB CD»",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código \"AB CD\" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.",
+   "mod": {
+    "0": {
+     "codigo": "AB CD"
+    }
+   }
+  },
+  {
+   "id": "rapidas: código «A»",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código \"A\" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.",
+   "mod": {
+    "0": {
+     "codigo": "A"
+    }
+   }
+  },
+  {
+   "id": "rapidas: código «PE-01»",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código \"PE-01\" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.",
+   "mod": {
+    "0": {
+     "codigo": "PE-01"
+    }
+   }
+  },
+  {
+   "id": "rapidas: código «ÑU01»",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código \"ÑU01\" no sirve: una letra mayúscula seguida de 1 a 7 letras mayúsculas o números.",
+   "mod": {
+    "0": {
+     "codigo": "ÑU01"
+    }
+   }
+  },
+  {
+   "id": "rapidas: código repetido",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El código \"PE01\" está repetido.",
+   "agregar": [
+    {
+     "codigo": "PE01",
+     "nombre": "Producto de prueba",
+     "precio": 5000,
+     "categoria": "NUEVA",
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "almuerzos: código que no es de El Lobo",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "El código \"nuevo\" no es un tipo de almuerzo de El Lobo.",
+   "mod": {
+    "0": {
+     "codigo": "nuevo"
+    }
+   }
+  },
+  {
+   "id": "almuerzos: código repetido",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "El código \"completo\" está repetido.",
+   "mod": {
+    "1": {
+     "codigo": "completo"
+    }
+   }
+  },
+  {
+   "id": "almuerzos: código con mayúscula distinta",
+   "clave": "catalogo_almuerzos",
+   "mensaje": "El código \"Completo\" no es un tipo de almuerzo de El Lobo.",
+   "mod": {
+    "0": {
+     "codigo": "Completo"
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría que no es texto",
+   "clave": "catalogo_rapidas",
+   "mensaje": "La categoría de \"Perro Sencillo\" debe ser un texto.",
+   "mod": {
+    "0": {
+     "categoria": 5
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría vacía",
+   "clave": "catalogo_rapidas",
+   "mensaje": "La categoría de \"Perro Sencillo\" debe tener entre 1 y 30 caracteres, en MAYÚSCULAS y sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "categoria": ""
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría en minúsculas",
+   "clave": "catalogo_rapidas",
+   "mensaje": "La categoría de \"Perro Sencillo\" debe tener entre 1 y 30 caracteres, en MAYÚSCULAS y sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "categoria": "perros"
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría con espacio al principio",
+   "clave": "catalogo_rapidas",
+   "mensaje": "La categoría de \"Perro Sencillo\" debe tener entre 1 y 30 caracteres, en MAYÚSCULAS y sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "categoria": " PERROS"
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría de 31 letras",
+   "clave": "catalogo_rapidas",
+   "mensaje": "La categoría de \"Perro Sencillo\" debe tener entre 1 y 30 caracteres, en MAYÚSCULAS y sin espacios al principio ni al final.",
+   "mod": {
+    "0": {
+     "categoria": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría con <",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Las categorías no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "categoria": "PER<ROS"
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría con comilla doble",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Las categorías no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "categoria": "PER\"ROS"
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría con barra invertida",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Las categorías no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "categoria": "PER\\ROS"
+    }
+   }
+  },
+  {
+   "id": "rapidas: categoría con salto de línea",
+   "clave": "catalogo_rapidas",
+   "mensaje": "Las categorías no pueden llevar los caracteres < > & \" ' ` \\ (ni caracteres de control).",
+   "mod": {
+    "0": {
+     "categoria": "PER\nROS"
+    }
+   }
+  },
+  {
+   "id": "extras: nombre repetido en mayúsculas",
+   "clave": "catalogo_extras",
+   "mensaje": "El producto adicional \"AVENA\" está repetido.",
+   "agregar": [
+    {
+     "nombre": "AVENA",
+     "precio": 4000,
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "extras: nombre repetido con ñ",
+   "clave": "catalogo_extras",
+   "mensaje": "El producto adicional \"ÑANDÚ\" está repetido.",
+   "agregar": [
+    {
+     "nombre": "ñandú",
+     "precio": 4000,
+     "activo": true
+    },
+    {
+     "nombre": "ÑANDÚ",
+     "precio": 4000,
+     "activo": true
+    }
+   ]
+  },
+  {
+   "id": "rapidas: sin el primer producto de El Lobo",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas no puede quitar productos de El Lobo: se retiran, no se borran.",
+   "quitar": [
+    0
+   ]
+  },
+  {
+   "id": "rapidas: sin el último producto de El Lobo",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas no puede quitar productos de El Lobo: se retiran, no se borran.",
+   "quitar": [
+    48
+   ]
+  },
+  {
+   "id": "rapidas: cambiar un código de El Lobo por otro nuevo",
+   "clave": "catalogo_rapidas",
+   "mensaje": "El catálogo de comidas rápidas no puede quitar productos de El Lobo: se retiran, no se borran.",
+   "mod": {
+    "5": {
+     "codigo": "X009"
+    }
+   }
+  }
+ ]
+}
