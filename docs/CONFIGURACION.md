@@ -25,8 +25,9 @@ la misma tabla y la misma pantalla; igual la **etapa 3** (📋 **Platos del men�
 | Número de mesas | Cuántas mesas se dibujan (salón, mapa, «cambiar de mesa») | 1–60 | 8 |
 | Recargo «para llevar» | Pesos que se suman a cada almuerzo para llevar (mesa o sin mesa) | $0–$50.000 | $1.000 |
 | Empaque de domicilio | Pesos por cada almuerzo a domicilio (la comida rápida no lo cobra) | $0–$50.000 | $1.000 |
-| Día del respaldo semanal | El aviso aparece desde ese día y sigue hasta que haya un respaldo completo hecho desde entonces | domingo … sábado | domingo |
-| Días para el aviso rojo | Con tantos días sin respaldo completo, el aviso se pone rojo | 7–60 | 10 |
+| Cada cuánto se hace el respaldo | **Semanal:** el aviso aparece desde el día elegido de cada semana. **Mensual:** desde el último día de cada mes (lo ideal: hacerlo ese día al cerrar la noche, o el primero del mes antes de abrir). **Trimestral:** desde el último día de marzo, junio, septiembre y diciembre. En todos los casos el aviso se apaga solo con un respaldo completo hecho desde ese día | semanal · mensual · trimestral | semanal |
+| Día del respaldo semanal | Solo cuenta si la frecuencia es semanal: el aviso aparece desde ese día y sigue hasta que haya un respaldo completo hecho desde entonces | domingo … sábado | domingo |
+| Días para el aviso rojo | Con tantos días sin respaldo completo, el aviso se pone rojo. Nunca antes de 7 días (semanal), 35 (mensual) o 100 (trimestral), aunque el número escrito sea menor | 7–60 | 10 |
 
 La pantalla de **entrada** (antes de iniciar sesión) siempre dice «El Lobo»: todavía no hay sesión para leer la configuración.
 
@@ -265,6 +266,25 @@ la cantidad). Hasta que se instale, al intentar guardar la base responde «La co
 **Orden de instalación completo:** `configuracion.sql` → `configuracion_etapa_2.sql` → `configuracion_etapa_4.sql` →
 `configuracion_etapa_3.sql` → `configuracion_cierre_familia.sql`.
 
+## Frecuencia del respaldo (aviso de «toca el respaldo»)
+
+La frecuencia se guarda como la clave `respaldo_frecuencia` de la misma tabla `configuracion` (semanal · mensual · trimestral; sin nada guardado rige
+*semanal*, como siempre). Es solo el **aviso** de la pantalla: nada obliga a hacer el respaldo y el respaldo en sí no cambia.
+
+- **Instalación:** `sql/configuracion_respaldo_frecuencia.sql` (**de última**: después de `configuracion_cierre_familia.sql`, porque vuelve a escribir la
+  validación general con todas las claves; una transacción; seguro de repetir; no toca ningún dato). Verificación esperada:
+  `frecuencia_instalada = true · disparador = 1 · anon_con_permisos = false`. Para deshacer: `sql/rollback_configuracion_respaldo_frecuencia.sql`
+  (no borra lo guardado: el sistema anterior ignora esa fila y vuelve al aviso semanal). Hasta que se instale, al guardar la base responde
+  «La configuración "respaldo_frecuencia" no existe» (el sistema lo muestra tal cual) y todo sigue como siempre.
+- **Orden de instalación completo:** `configuracion.sql` → `configuracion_etapa_2.sql` → `configuracion_etapa_4.sql` → `configuracion_etapa_3.sql` →
+  `configuracion_cierre_familia.sql` → `configuracion_respaldo_frecuencia.sql`.
+- **Cuándo se pone ámbar:** semanal, desde el día de la semana elegido; mensual, desde el último día del mes; trimestral, desde el último día de
+  marzo, junio, septiembre o diciembre. Un respaldo hecho **ese mismo día** o después ya lo apaga (por eso, con «mensual», un respaldo del 31 de
+  octubre no vuelve a avisar el 1 de noviembre).
+- **Cuándo se pone rojo:** a los «días para el aviso rojo» sin respaldo, con un mínimo de 7 días (semanal), 35 (mensual) o 100 (trimestral).
+- **Pruebas:** `tests/python/test_configuracion_respaldo_frecuencia.py` (base real: 49 casos), `tests/configuracion-respaldo.spec.js` (pantalla: cada
+  frecuencia, fechas límite, mínimos del rojo, guardar/validar, servidor falso) y `tests/fixtures/casos-respaldo.json` (13 casos compartidos).
+
 ## Respaldos
 
 - El **Respaldo completo** incluye la historia de la configuración (17 tablas).
@@ -291,4 +311,5 @@ la cantidad). Hasta que se instale, al intentar guardar la base responde «La co
 | Foto de cómo se veía todo antes de la etapa 3 | `tests/fixtures/platos-anterior.json` |
 | **Cierre del día · base de datos real:** 11 casos compartidos con su mensaje exacto (solo verdadero/falso), sellos, permisos, lo de las etapas 1–4 sin cambios, instalar sobre la etapa 3, repetir, rollback que deja la etapa 3 tal cual | `tests/python/test_configuracion_cierre_familia.py`, `tests/fixtures/casos-familia.json` |
 | **Cierre del día · pantalla:** sin nada guardado = como siempre; guardar «No» (confirmación, una fila) oculta el campo en el cierre normal y el manual y la columna del historial; apagada se cierra sin la cantidad y corregir un cierre la conserva; caja lo ve; volver a encender | `tests/configuracion-familia.spec.js` |
+| **Frecuencia del respaldo · base de datos real y pantalla:** solo 'semanal', 'mensual' o 'trimestral' (13 casos compartidos con su mensaje exacto); cuándo se pone ámbar y rojo en cada frecuencia (fin de mes, fin de trimestre, todos los días de la semana, mínimos del rojo, el caso del 31-oct → 1-nov); guardar con confirmación; historial; caja | `tests/python/test_configuracion_respaldo_frecuencia.py`, `tests/configuracion-respaldo.spec.js`, `tests/fixtures/casos-respaldo.json` |
 | Modelo financiero: el rubro sale del grupo (categorías nuevas, renombradas, retiradas, excluidas, huérfanas, export viejo) | `tests/python/test_motor_funciones.py` → `TestCategoriasConfigurables` |

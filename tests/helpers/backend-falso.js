@@ -79,6 +79,7 @@ function validarConfiguracion(clave, valor) {
   if (clave === 'nombres_cuentas') { const m = validarCuentas(valor); return m ? mal(m) : null; }
   if (clave === 'menu_platos') { const m = validarPlatos(valor); return m ? mal(m) : null; }
   if (clave === 'cierre_comidas_familia') return typeof valor === 'boolean' ? null : mal('La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso).');
+  if (clave === 'respaldo_frecuencia') return ['semanal', 'mensual', 'trimestral'].includes(valor) ? null : mal('La frecuencia del respaldo debe ser semanal, mensual o trimestral.');
   return { code: '22023', message: `La configuración "${clave}" no existe.`, details: 'configuracion_clave_desconocida', hint: null };
 }
 
@@ -345,15 +346,16 @@ async function abrirSistema(page, opciones = {}) {
   // Estado de las tablas con candado tal como lo dejan las escrituras (el GET sigue devolviendo los datos de la prueba).
   const sombra = {};
   for (const t of TABLAS_CON_CANDADO) sombra[t] = copiaProfunda(datos[t] || []);
-  const filasDe = (tabla, search) => {
+  const filtrarPorBusqueda = (filas, search) => {
     const condiciones = [...new URLSearchParams(search).entries()].filter(([k]) => !['select', 'order', 'limit', 'offset', 'columns'].includes(k));
-    return sombra[tabla].filter(f => condiciones.every(([col, expr]) => {
+    return filas.filter(f => condiciones.every(([col, expr]) => {
       const v = String(f[col]);
       if (expr.startsWith('eq.')) return v === expr.slice(3);
       if (expr.startsWith('in.(')) return expr.slice(4, -1).split(',').includes(v);
       return false;
     }));
   };
+  const filasDe = (tabla, search) => filtrarPorBusqueda(sombra[tabla], search);
 
   // ── Auth falso ────────────────────────────────────────────────────────
   const refrescos = new Map();   // refresh_token → correo
@@ -589,7 +591,10 @@ async function abrirSistema(page, opciones = {}) {
       }
       // Fallas simuladas de escritura (reg.control.fallasEscritura): solo la PRÓXIMA que coincide.
       let perderRespuesta = false;
-      const iFalla = reg.control.fallasEscritura.findIndex(f => f.tabla === tabla && f.metodo === metodo);
+      // Una falla con `saltar: n` deja pasar las primeras n peticiones que coinciden y falla la siguiente (sirve para romper el
+      // PASO DOS de un flujo sin romper el uno).
+      let iFalla = reg.control.fallasEscritura.findIndex(f => f.tabla === tabla && f.metodo === metodo);
+      if (iFalla >= 0 && reg.control.fallasEscritura[iFalla].saltar > 0) { reg.control.fallasEscritura[iFalla].saltar -= 1; iFalla = -1; }
       if (iFalla >= 0) {
         const falla = reg.control.fallasEscritura.splice(iFalla, 1)[0];
         if (falla.tipo === 'red') return route.abort('failed');
@@ -608,6 +613,12 @@ async function abrirSistema(page, opciones = {}) {
       }
       if (metodo === 'DELETE') {
         if (conCandado) { const borrar = new Set(filasDe(tabla, url.search)); sombra[tabla] = sombra[tabla].filter(f => !borrar.has(f)); }
+        if (perderRespuesta) {
+          // Respuesta perdida: el servidor SÍ borró (otra lectura de la tabla ya no ve esas filas), pero la página nunca se entera.
+          const borrar = new Set(filtrarPorBusqueda(datos[tabla] || [], url.search));
+          datos[tabla] = (datos[tabla] || []).filter(f => !borrar.has(f));
+          return route.abort('failed');
+        }
         return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       }
       const devolver = Array.isArray(cuerpo) ? cuerpo : [cuerpo || {}];

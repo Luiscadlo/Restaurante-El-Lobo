@@ -380,4 +380,7 @@ def test_los_valores_de_siempre_de_la_pantalla_son_validos_y_cada_clave_tiene_su
     # «negocio_*» son texto y «cierre_comidas_familia» es sí/no: no tienen rango numérico en la base. El valor de siempre de El Lobo
     # para las comidas de la familia es «sí» (como se cerraba antes de existir la opción).
     assert defectos["cierre_comidas_familia"] == "true"
-    assert en_pantalla == set(defectos) == set(en_sql) | {"negocio_nombre", "negocio_emoji", "cierre_comidas_familia"}
+    # «respaldo_frecuencia» (semanal / mensual / trimestral) es una lista de opciones, no un número: su regla en la base está en
+    # sql/configuracion_respaldo_frecuencia.sql (se prueba en test_configuracion_respaldo_frecuencia.py). El valor de siempre es «semanal».
+    assert defectos["respaldo_frecuencia"] == "'semanal'"
+    assert en_pantalla == set(defectos) == set(en_sql) | {"negocio_nombre", "negocio_emoji", "cierre_comidas_familia", "respaldo_frecuencia"}

@@ -22,7 +22,7 @@
 5. La base tiene **17 tablas** (la 17.ª, `configuracion`, es de la etapa 1); el sistema habla con ellas por **5 funciones** de acceso (`sbGetAll`, `sbInsert`, `sbInsertConCuenta`, `sbPatch`, `sbDelete`) con 112 llamadas en total.
 6. Las reglas de plata viven repartidas entre `calcularTotalPedido`, `repartirDescuento`, `recalcularResultadoCierre`, `calcularVentasFijas`, `calcularSaldoFiado` y `renderTablero`; de esas, solo algunas tienen prueba que las nombre (sección 7).
 7. Los **domingos no laborables y los festivos de Colombia** solo existen en el motor Python; el sistema web no tiene esa regla.
-8. Dependencias de internet: **una librería** (`xlsx`, para exportar a Excel) y **una hoja de fuentes** de Google, además de Supabase y GitHub Pages. No hay *service worker* ni *manifest*: **no es una PWA instalable y no funciona sin conexión**.
+8. Dependencias de internet: **una hoja de fuentes** de Google (solo estética), además de Supabase y GitHub Pages. La librería de Excel (`xlsx`) ya **viaja dentro del repositorio** (`Contabilidad/librerias/`, con su licencia y huella), así que el botón de Excel no depende de ningún sitio ajeno. No hay *service worker* ni *manifest*: **no es una PWA instalable y no funciona sin conexión**.
 9. Para el producto, la parte más costosa de generalizar es el **catálogo de platos y los turnos**; la menos costosa, nombres y textos.
 10. Riesgos técnicos principales (sección 6): funciones de 330 y 260 líneas, `renderAll()` que redibuja todo en cada acción, y 86 asignaciones a `innerHTML` con escape de textos solo parcial.
 
@@ -210,7 +210,7 @@ Si cambia el nombre de una hoja o columna en el sistema, el motor se rompe en si
 
 | Dependencia | Dónde | Qué pasa sin internet |
 |---|---|---|
-| `xlsx@0.18.5` desde `cdn.jsdelivr.net` (línea 9) | Exportar a Excel (Datos) | El botón de Excel falla (`XLSX` no está definido); el respaldo JSON, no. |
+| `xlsx@0.18.5`, copia propia en `Contabilidad/librerias/xlsx.full.min.js` (se carga desde el mismo sitio; ver `Contabilidad/librerias/LEEME.md`) | Exportar a Excel (Datos) | Funciona sin depender de jsDelivr. Si alguien borrara esa carpeta, el botón de Excel avisa que falta la librería; el respaldo JSON no depende de ella. |
 | Google Fonts (Syne, DM Mono; línea 8) | Tipografía | Cae a la fuente del sistema; solo cambia el aspecto. |
 | Google Fonts (Playfair Display, Nunito) en el generador de menú | Tipografía del menú | Igual. |
 | Supabase (`https://arxyfcquvsmfoxmbifne.supabase.co`) | Datos y usuarios (REST + Auth) | No abre / "Sin conexión con Supabase". Una sesión de caja guardada se intenta usar, pero sin datos no hay pantalla útil. |

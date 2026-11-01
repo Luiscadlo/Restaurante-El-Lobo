@@ -30,6 +30,9 @@ const registrar = (page, estado = 'pagado') => page.evaluate(e => agregarIngreso
 const filasPost = reg => reg.escrituras.filter(e => e.tabla === 'pedidos' && e.metodo === 'POST');
 const colas = page => page.evaluate(() => ({ almuerzos: almuerzosEnCola.length, extras: extrasIngresoPendientes.length }));
 const avisos = page => page.locator('.toast');
+// REVISIÓN FINAL (M6): un pedido que NO se guardó se avisa con una ventana que hay que cerrar, no con un aviso que se va solo.
+const ventana = page => page.locator('#modal-sistema');
+const cerrarVentana = page => page.locator('#sis-opciones button[data-eleccion="entendido"]').click();
 
 test.describe('un pedido se guarda completo o no se guarda', () => {
   test('tres almuerzos viajan en UNA sola petición, todos con el mismo grupo', async ({ page }) => {
@@ -65,7 +68,11 @@ test.describe('un pedido se guarda completo o no se guarda', () => {
     await registrar(page);
     expect(filasPost(reg)).toHaveLength(0);                                    // nada quedó a medias
     expect(await colas(page)).toEqual({ almuerzos: 3, extras: 1 });            // el cajero no pierde lo que había armado
-    await expect(avisos(page).filter({ hasText: 'No se pudo registrar el pedido' })).toBeVisible();
+    await expect(ventana(page)).toBeVisible();
+    await expect(page.locator('#sis-titulo')).toHaveText('El pedido NO se guardó');
+    await expect(page.locator('#sis-cuerpo')).toContainText('No se pudo registrar el pedido');
+    await cerrarVentana(page);
+    await expect(ventana(page)).toBeHidden();
     await registrar(page);                                                     // reintento
     expect(filasPost(reg)).toHaveLength(4);                                    // 3 almuerzos + 1 extra, UNA vez
     expect(await colas(page)).toEqual({ almuerzos: 0, extras: 0 });
@@ -211,7 +218,9 @@ test.describe('un pedido se guarda completo o no se guarda', () => {
     });
     await registrar(page);
     expect(filasPost(reg)).toHaveLength(0);
-    await expect(avisos(page).filter({ hasText: 'NO se guardó' })).toBeVisible();
+    await expect(ventana(page)).toBeVisible();
+    await expect(page.locator('#sis-cuerpo')).toContainText('NO se guardó');      // el motivo técnico (falta el SQL de descuentos) viaja en la ventana
+    await cerrarVentana(page);
     expect(await colas(page)).toEqual({ almuerzos: 2, extras: 0 });
   });
 
@@ -227,5 +236,40 @@ test.describe('un pedido se guarda completo o no se guarda', () => {
     expect(reg.lotes.filter(l => l.tabla === 'pedidos')).toHaveLength(1);
     expect(filas.every(f => f.es_fiar === true && f.cliente_fiado_id === 1 && f.estado === 'pendiente')).toBe(true);
     expect(await page.evaluate(() => registrandoPedido)).toBe(false);
+  });
+});
+
+// ── M6: el fallo al registrar (con productos extra) NO puede pasar desapercibido ─────────────────────────────────────────────
+test.describe('M6 — si el pedido no se guarda, se ve y no se olvida', () => {
+  test('con extras y el servidor caído: ventana que NO se va sola, nada guardado y la cola intacta', async ({ page }) => {
+    const reg = await abrirSistema(page);
+    await armar(page, { items: [almuerzo(), almuerzo()], extras: [extraProducto(), extraProducto({ descripcion: 'Gaseosa', valorUnitario: 3000 })] });
+    reg.control.fallasEscritura.push({ tabla: 'pedidos', metodo: 'POST', tipo: 'servidor' });
+    await registrar(page);
+    expect(filasPost(reg)).toHaveLength(0);                                        // ni los almuerzos ni los extras quedaron a medias
+    expect(await colas(page)).toEqual({ almuerzos: 2, extras: 2 });                // lo armado sigue ahí para reintentar
+    await expect(ventana(page)).toBeVisible();
+    await expect(page.locator('#sis-titulo')).toHaveText('El pedido NO se guardó');
+    // Un aviso corto (toast) desaparece a los pocos segundos; esta ventana no: sigue ahí hasta que alguien la cierre.
+    await page.waitForTimeout(4500);
+    await expect(ventana(page)).toBeVisible();
+    await cerrarVentana(page);
+    await expect(ventana(page)).toBeHidden();
+    await registrar(page);                                                         // reintento: se guarda completo, una sola vez
+    expect(filasPost(reg)).toHaveLength(4);
+    expect(await colas(page)).toEqual({ almuerzos: 0, extras: 0 });
+    await expect(ventana(page)).toBeHidden();                                      // con éxito no sale ninguna ventana de error
+  });
+
+  test('la ventana se puede cerrar con Esc y deja el formulario listo para volver a registrar', async ({ page }) => {
+    const reg = await abrirSistema(page);
+    await armar(page, { items: [almuerzo()] });
+    reg.control.fallasEscritura.push({ tabla: 'pedidos', metodo: 'POST', tipo: 'red' });
+    await registrar(page);
+    await expect(ventana(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(ventana(page)).toBeHidden();
+    expect(await page.evaluate(() => registrandoPedido)).toBe(false);
+    expect(await colas(page)).toEqual({ almuerzos: 1, extras: 0 });
   });
 });
