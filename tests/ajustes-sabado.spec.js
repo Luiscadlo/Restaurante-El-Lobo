@@ -85,6 +85,35 @@ test.describe('Egresos: quitar un gasto del turno con la ✕', () => {
     expect(escritura(reg, 'PATCH', 'cierres_dia')).toHaveLength(1);
     expect(escritura(reg, 'PATCH', 'cierres_dia')[0].cuerpo).toEqual({ gastos: 84000, resultado: 496000 });
   });
+  test('con almuerzo y comidas rápidas cerrados el mismo día, solo se toca el cierre del turno del gasto', async ({ page }) => {
+    const d = datosHoy();
+    d.cierres_dia.push({ id: 93, fecha: '2026-10-18', turno: 'cena', efectivo: 50000, transferencia: 0, gastos: 5000, resultado: 45000, manual: false });
+    d.gastos_dia.push({ id: 60, fecha: '2026-10-18', turno: 'cena', nombre: 'Gaseosas (prueba)', monto: 5000, categoria: 'proveedor' });
+    const reg = await abrirSistema(page, { usuario: 'admin', datos: d });
+    await irA(page, 'egresos');
+    await page.locator('#tab-egresos .filter-btn[data-periodo="todo"]').first().click();
+    await page.locator('#egresos-body tr', { hasText: 'Hielo (prueba)' }).locator('button.btn-danger').click();
+    await page.locator(`${VENTANA} button[data-eleccion="si"]`).click();
+    await expect(page.locator('#egresos-body tr', { hasText: 'Hielo (prueba)' })).toHaveCount(0);
+    const parches = escritura(reg, 'PATCH', 'cierres_dia');
+    expect(parches).toHaveLength(1);
+    expect(parches[0].consulta).toContain('fecha=eq.2026-10-18');
+    expect(parches[0].consulta).toContain('turno=eq.almuerzo');                    // el de comidas rápidas del mismo día no se toca
+    expect(await page.evaluate(() => ST.cierresDia.find(c => c.fecha === '2026-10-18' && c.turno === 'cena').gastos)).toBe(5000);
+  });
+
+  test('si no se pudo actualizar el cierre, el gasto igual se quita y el sistema avisa qué hacer', async ({ page }) => {
+    const reg = await abrirSistema(page, { usuario: 'admin', datos: datosHoy() });
+    await irA(page, 'egresos');
+    await page.locator('#tab-egresos .filter-btn[data-periodo="todo"]').first().click();
+    await page.evaluate(() => { window.sbPatch = async () => { throw new Error('sin conexión (prueba)'); }; });
+    await page.locator('#egresos-body tr', { hasText: 'Hielo (prueba)' }).locator('button.btn-danger').click();
+    await page.locator(`${VENTANA} button[data-eleccion="si"]`).click();
+    await expect(page.locator('.toast').filter({ hasText: 'no se pudo actualizar el cierre de ese turno' }).first()).toBeVisible();
+    await expect(page.locator('#egresos-body tr', { hasText: 'Hielo (prueba)' })).toHaveCount(0);   // el gasto sí se quitó
+    expect(escritura(reg, 'DELETE', 'gastos_dia')).toHaveLength(1);
+    await expect(page.locator('.toast').filter({ hasText: 'Gasto quitado' }).first()).toBeVisible();
+  });
 });
 
 // ───────────────────────────── 2. Cierre manual: resumen ─────────────────────────────
@@ -135,6 +164,27 @@ test.describe('cierre manual: muestra total, utilidad y caja esperada como el ci
     expect(await t(page, 'cm-resultado')).toBe('$9.000');                          // fmt() muestra el valor absoluto…
     expect(await page.locator('#cm-resultado').evaluate(e => e.style.color)).toBe('var(--red)');   // …y el rojo avisa que es negativo
     expect(await t(page, 'cm-caja-detalle')).toBe('Caja inicial $0 (sin abrir turno) + efectivo $0 − gastos $9.000');
+  });
+  test('al escribir SOLO el efectivo (sin tocar la transferencia) el resumen ya se recalcula', async ({ page }) => {
+    await abrirSistema(page, { usuario: 'admin', datos: datosHoy() });
+    await abrirManual(page);
+    await page.locator('#cm-efectivo').fill('100000');                             // la transferencia sigue en lo que sabe el sistema (38.000)
+    expect(await t(page, 'cm-total-turno')).toBe('$138.000');
+    expect(await t(page, 'cm-resultado')).toBe('$118.000');
+    expect(await t(page, 'cm-caja-esperada')).toBe('$120.000');                    // 50.000 + 100.000 − 30.000
+  });
+
+  test('la caja inicial es la del turno que se está cerrando, no la de otro turno del mismo día', async ({ page }) => {
+    const d = datosHoy();
+    d.aperturas_turno.push({ id: 2, fecha: FECHA_HOY, turno: 'cena', caja_inicial: 99000, venta_desayuno: 0, venta_desayuno_transferencia: 0, created_at: `${FECHA_HOY}T17:00:00-05:00` });
+    await abrirSistema(page, { usuario: 'admin', datos: d });
+    await abrirManual(page);
+    await page.locator('#cm-btn-almuerzo').click();
+    expect(await t(page, 'cm-caja-detalle')).toContain('Caja inicial $50.000 +');
+    await page.locator('#cm-btn-cena').click();
+    expect(await t(page, 'cm-caja-detalle')).toContain('Caja inicial $99.000 +');
+    await page.locator('#cm-btn-almuerzo').click();
+    expect(await t(page, 'cm-caja-detalle')).toContain('Caja inicial $50.000 +');
   });
 });
 
@@ -231,6 +281,25 @@ test.describe('Tablero: recuadro «Resumen por día»', () => {
     await abrirSistema(page, { usuario: 'admin', datos: d });
     await verTablero(page);
     expect(await celdas(page, '2026-10-17')).toEqual(['Sáb 17/10', '95.000', '25.000', '10.000', '–', '110.000']);
+  });
+  const pedidoPagado = (id, fecha, turno) => ({ ...copia(DATOS_BASE.pedidos.find(p => p.id === 101)), id, fecha, turno, grupo_pedido: `g-${id}`, created_at: `${fecha}T12:00:00-05:00` });
+
+  test('un turno con ventas Y con cierre guardado no se marca (aunque tenga pedidos pagados)', async ({ page }) => {
+    const d = datosHoy();
+    d.pedidos.push(pedidoPagado(900, '2026-10-18', 'almuerzo'));                   // el almuerzo del 18 tiene cierre (id 2)
+    await abrirSistema(page, { usuario: 'admin', datos: d });
+    await verTablero(page);
+    const marcados = await page.locator('#resumen-dias-body tr.rd-sin-cerrar').evaluateAll(r => r.map(x => x.dataset.fecha));
+    expect(marcados.sort()).toEqual(['2026-10-12', '2026-10-20']);                 // el 18 sigue sin marca
+  });
+
+  test('si el otro turno del día no se cerró (hay ventas de comidas rápidas sin cierre), el día sí se marca', async ({ page }) => {
+    const d = datosHoy();
+    d.pedidos.push(pedidoPagado(901, '2026-10-18', 'cena'));                       // el 18 tiene cierre de almuerzo, no de comidas rápidas
+    await abrirSistema(page, { usuario: 'admin', datos: d });
+    await verTablero(page);
+    const marcados = await page.locator('#resumen-dias-body tr.rd-sin-cerrar').evaluateAll(r => r.map(x => x.dataset.fecha));
+    expect(marcados.sort()).toEqual(['2026-10-12', '2026-10-18', '2026-10-20']);
   });
 });
 

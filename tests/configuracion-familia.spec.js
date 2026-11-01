@@ -99,6 +99,26 @@ test.describe('guardar «No» desde Configuración', () => {
     await expect(campoManual(page)).toBeHidden();
   });
 
+  test('después de guardar «No» el selector se queda en «No» (no vuelve a «Sí»)', async ({ page }) => {
+    await abrir(page, { datos: datosCon(undefined) });
+    await page.evaluate(() => { window.__noAceptarAvisos = true; });
+    await irA(page, 'config');
+    await expect(page.locator('#cfg-cierre_comidas_familia')).toHaveValue('true');
+    await page.locator('#cfg-cierre_comidas_familia').selectOption('false');
+    await page.click('#cfg-guardar-cierre_comidas_familia');
+    await page.click('#sis-opciones button[data-eleccion="si"]');
+    await expect(page.locator('#cfg-hoy-cierre_comidas_familia')).toContainText('Hoy: No');
+    await expect(page.locator('#cfg-cierre_comidas_familia')).toHaveValue('false');
+    await expect(page.locator('#cfg-guardar-cierre_comidas_familia')).toBeDisabled();           // nada pendiente por guardar
+  });
+
+  test('al abrir Configuración con «No» ya guardado, el selector muestra «No»', async ({ page }) => {
+    await abrir(page, { datos: datosCon(false) });
+    await irA(page, 'config');
+    await expect(page.locator('#cfg-cierre_comidas_familia')).toHaveValue('false');
+    await expect(page.locator('#cfg-hoy-cierre_comidas_familia')).toContainText('Hoy: No');
+  });
+
   test('«Volver» en la confirmación no guarda nada', async ({ page }) => {
     const { reg } = await abrir(page, { datos: datosCon(undefined) });
     await page.evaluate(() => { window.__noAceptarAvisos = true; });
@@ -179,6 +199,34 @@ test.describe('con la opción apagada', () => {
     const cambios = [...escrituras(reg, 'cierres_dia', 'PATCH'), ...escrituras(reg, 'cierres_dia', 'POST')];
     expect(cambios).toHaveLength(1);
     expect(cambios[0].cuerpo.platos_familia).toBe(3);
+  });
+
+  test('un cierre manual que REEMPLAZA a un cierre normal con la cantidad (sobrescribir) la conserva', async ({ page }) => {
+    const { reg } = await abrir(page, { datos: datosCon(false, { cierres_dia: [...DATOS_BASE.cierres_dia, cierreConFamilia] }) });
+    await abrirManual(page);
+    await page.locator('#cm-btn-almuerzo').click();
+    await page.evaluate(() => { document.getElementById('cm-fecha').value = '2026-10-14'; cambioFechaTurnoCierreManual(); });
+    await page.locator('#cm-efectivo').fill('60000');
+    await page.locator('#cm-transferencia').fill('0');
+    await page.evaluate(() => guardarCierreManual());                                // «¿Sobrescribirlo?» la contesta aceptarAvisos
+    await page.waitForFunction(() => document.getElementById('modal-cierre-manual').style.display === 'none');
+    const cambios = [...escrituras(reg, 'cierres_dia', 'PATCH'), ...escrituras(reg, 'cierres_dia', 'POST')];
+    expect(cambios).toHaveLength(1);
+    expect(cambios[0].cuerpo.platos_familia).toBe(2);                                // lo que ya traía el cierre no se pierde
+  });
+
+  test('en el cierre manual, aunque el campo tenga algo escrito de antes, no se guarda (la opción manda)', async ({ page }) => {
+    const { reg } = await abrir(page, { datos: datosCon(false) });
+    await abrirManual(page);
+    await page.locator('#cm-btn-almuerzo').click();
+    await page.evaluate(() => { document.getElementById('cm-fecha').value = '2026-10-08'; cambioFechaTurnoCierreManual(); document.getElementById('cm-platos-familia').value = '7'; });
+    await page.locator('#cm-efectivo').fill('50000');
+    await page.locator('#cm-transferencia').fill('10000');
+    await page.evaluate(() => guardarCierreManual());
+    await page.waitForFunction(() => document.getElementById('modal-cierre-manual').style.display === 'none');
+    const subidas = escrituras(reg, 'cierres_dia', 'POST');
+    expect(subidas).toHaveLength(1);
+    expect(subidas[0].cuerpo.platos_familia).toBeNull();
   });
 
   test('el historial del cierre no muestra la columna «Familia» (ni la celda de cada fila), pero el dato sigue guardado', async ({ page }) => {
