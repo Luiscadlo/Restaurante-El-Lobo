@@ -372,7 +372,7 @@ def test_los_valores_de_siempre_de_la_pantalla_son_validos_y_cada_clave_tiene_su
     bloque = re.search(r"const CFG_DEFECTOS = Object\.freeze\(\{(.*?)\}\);", html, re.S).group(1)
     defectos = dict(re.findall(r"(\w+): ('[^']*'|\d+|(?:true|false)\b)", bloque))
     assert defectos["mesas"] == "8" and defectos["recargo_para_llevar"] == "1000" and defectos["empaque_domicilio"] == "1000"
-    assert defectos["respaldo_dia_semana"] == "0" and defectos["respaldo_rojo_dias"] == "10"
+    assert defectos["respaldo_dia_semana"] == "0" and defectos["respaldo_rojo_dias"] == "35"
     assert defectos["negocio_nombre"] == "'El Lobo'" and defectos["negocio_emoji"] == "'🐺'"
     en_sql = {c: (int(a), int(b)) for c, a, b, _ in re.findall(r"\('([a-z_]+)', (\d+), (\d+), '([^']+)'\)", CONFIG.read_text(encoding="utf-8"))}
     for clave, (minimo, maximo) in en_sql.items():
@@ -383,6 +383,6 @@ def test_los_valores_de_siempre_de_la_pantalla_son_validos_y_cada_clave_tiene_su
     # para las comidas de la familia es «sí» (como se cerraba antes de existir la opción).
     assert defectos["cierre_comidas_familia"] == "true"
     # «respaldo_frecuencia» (semanal / mensual / trimestral) es una lista de opciones, no un número: su regla en la base está en
-    # sql/configuracion_respaldo_frecuencia.sql (se prueba en test_configuracion_respaldo_frecuencia.py). El valor de siempre es «semanal».
-    assert defectos["respaldo_frecuencia"] == "'semanal'"
+    # sql/configuracion_respaldo_frecuencia.sql (se prueba en test_configuracion_respaldo_frecuencia.py). El valor por defecto (desde el 1-nov) es «mensual».
+    assert defectos["respaldo_frecuencia"] == "'mensual'"
     assert en_pantalla == set(defectos) == set(en_sql) | {"negocio_nombre", "negocio_emoji", "cierre_comidas_familia", "respaldo_frecuencia"}

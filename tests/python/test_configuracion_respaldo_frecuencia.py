@@ -167,10 +167,10 @@ def test_una_clave_desconocida_sigue_dando_su_codigo_propio(cluster, db):
 
 
 # ── 4. La página y la base dicen lo mismo ──────────────────────────────────────────────────────
-def test_el_valor_de_siempre_de_la_pagina_es_semanal():
-    """Sin nada guardado El Lobo sigue con el aviso semanal: el defecto de la página es 'semanal'."""
+def test_el_valor_por_defecto_de_la_pagina_es_mensual():
+    """Sin nada guardado rige el aviso MENSUAL (decisión del dueño, 1-nov): el defecto de la página es 'mensual' y el rojo, 35 días."""
     html = HTML.read_text(encoding="utf-8")
-    assert "respaldo_frecuencia: 'semanal'," in html, "CFG_DEFECTOS debe traer respaldo_frecuencia: 'semanal'"
+    assert "respaldo_rojo_dias: 35, respaldo_frecuencia: 'mensual'," in html, "CFG_DEFECTOS debe traer respaldo_rojo_dias: 35 y respaldo_frecuencia: 'mensual'"
     assert "respaldo_frecuencia: { tipo: 'frecuencia'" in html
 
 

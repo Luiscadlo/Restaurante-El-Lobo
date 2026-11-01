@@ -26,11 +26,13 @@ async function abrir(page, { hoy = '2026-11-01', ultimo, cfg = [], usuario = 'ad
   aceptarAvisos(page);
   const datos = copia(DATOS_BASE);
   datos.config = ultimo === undefined ? [] : [{ clave: 'ultimo_respaldo', valor: { fecha: ultimo } }];
-  datos.configuracion = cfg;
+  datos.configuracion = copia(cfg);
   const reg = await abrirSistema(page, { datos, usuario, fecha: new Date(`${hoy}T14:00:00-05:00`) });
   return reg;
 }
 const aviso = page => page.locator('#aviso-respaldo');
+// Configuración «semanal / rojo a los 10 días» ya guardada (el valor por defecto desde el 1-nov es mensual, 35).
+const SEMANAL = [fila(901, 'respaldo_frecuencia', 'semanal'), fila(902, 'respaldo_rojo_dias', 10)];
 
 test.describe('las reglas dicen lo mismo en la pantalla, el servidor falso y la base (casos compartidos)', () => {
   for (const caso of CASOS) {
@@ -44,19 +46,29 @@ test.describe('las reglas dicen lo mismo en la pantalla, el servidor falso y la 
   }
 });
 
-test.describe('sin nada guardado: como siempre (semanal)', () => {
-  test('en Configuración se ve «Semanal» y que es el valor de siempre', async ({ page }) => {
+test.describe('sin nada guardado: «Mensual» es el valor por defecto (decisión del dueño, 1-nov)', () => {
+  test('en Configuración se ve «Mensual», con el rojo a los 35 días', async ({ page }) => {
     await abrir(page);
     await irA(page, 'config');
-    await expect(page.locator(`#cfg-${K}`)).toHaveValue('semanal');
-    await expect(page.locator(`#cfg-hoy-${K}`)).toContainText('Hoy: Semanal');
+    await expect(page.locator(`#cfg-${K}`)).toHaveValue('mensual');
+    await expect(page.locator(`#cfg-hoy-${K}`)).toContainText('Hoy: Mensual');
     await expect(page.locator(`#cfg-hoy-${K}`)).toContainText('el valor de siempre');
     await expect(page.locator(`#cfg-guardar-${K}`)).toBeDisabled();
+    await expect(page.locator('#cfg-respaldo_rojo_dias')).toHaveValue('35');
   });
 
-  test('domingo 1-nov con el respaldo del sábado 31-oct: avisa «Toca el respaldo semanal — hace 1 día»', async ({ page }) => {
+  test('domingo 1-nov con el respaldo del sábado 31-oct: NO avisa (mensual)', async ({ page }) => {
     await abrir(page, { hoy: '2026-11-01', ultimo: '2026-10-31' });
-    await expect(aviso(page)).toBeVisible();
+    await expect(aviso(page)).toBeHidden();
+  });
+
+  test('con el último respaldo del 15-oct y hoy 1-nov: avisa «Toca el respaldo mensual»', async ({ page }) => {
+    await abrir(page, { hoy: '2026-11-01', ultimo: '2026-10-15' });
+    await expect(aviso(page)).toContainText('Toca el respaldo mensual');
+  });
+
+  test('con «Semanal» guardado el domingo 1-nov avisa «Toca el respaldo semanal — hace 1 día»', async ({ page }) => {
+    await abrir(page, { hoy: '2026-11-01', ultimo: '2026-10-31', cfg: SEMANAL });
     await expect(aviso(page)).toContainText('Toca el respaldo semanal');
     await expect(aviso(page)).toContainText('hace 1 día.');
   });
@@ -178,22 +190,22 @@ test.describe('la regla en detalle (vencimiento y nivel)', () => {
         n('2026-10-31', '2026-11-01', 'semanal'), n('2026-10-31', '2026-11-01', 'mensual'),
         n('2026-12-01', '2026-11-30', 'mensual'),                                                          // respaldo «del futuro»: no avisa
         n('', '2026-11-01', 'mensual'), n(null, '2026-11-01', 'semanal'),
-        n('2026-10-31', '2026-11-01', 'diario'),                                                           // frecuencia ilegible → semanal
+        n('2026-10-31', '2026-11-01', 'diario'),                                                           // frecuencia ilegible → mensual (el valor por defecto)
       ];
     });
-    expect(r).toEqual(['ambar', 'rojo', 'ambar', 'rojo', 'ambar', null, null, 'ambar', 'ambar', 'ambar']);
+    expect(r).toEqual(['ambar', 'rojo', 'ambar', 'rojo', 'ambar', null, null, 'ambar', 'ambar', null]);
   });
 
   test('un valor guardado que no sirve («diario») se ignora: rige lo de siempre', async ({ page }) => {
-    await abrir(page, { hoy: '2026-11-01', ultimo: '2026-10-31', cfg: [fila(1, K, 'diario')] });
-    expect(await page.evaluate(() => CFG.v('respaldo_frecuencia'))).toBe('semanal');
-    await expect(aviso(page)).toContainText('Toca el respaldo semanal');
+    await abrir(page, { hoy: '2026-11-01', ultimo: '2026-10-15', cfg: [fila(1, K, 'diario')] });
+    expect(await page.evaluate(() => CFG.v('respaldo_frecuencia'))).toBe('mensual');
+    await expect(aviso(page)).toContainText('Toca el respaldo mensual');
   });
 });
 
 test.describe('guardar la frecuencia desde Configuración', () => {
   test('pide confirmación, manda UNA petición (la frecuencia y los días del aviso rojo) y el aviso cambia al instante', async ({ page }) => {
-    const reg = await abrir(page, { hoy: '2026-11-01', ultimo: '2026-10-31' });
+    const reg = await abrir(page, { hoy: '2026-11-01', ultimo: '2026-10-31', cfg: SEMANAL });
     await expect(aviso(page)).toContainText('Toca el respaldo semanal');
     await page.evaluate(() => { window.__noAceptarAvisos = true; });                            // la confirmación la contesta esta prueba
     await irA(page, 'config');
@@ -215,7 +227,7 @@ test.describe('guardar la frecuencia desde Configuración', () => {
   });
 
   test('«Volver» en la confirmación no guarda nada', async ({ page }) => {
-    const reg = await abrir(page);
+    const reg = await abrir(page, { cfg: SEMANAL });
     await page.evaluate(() => { window.__noAceptarAvisos = true; });
     await irA(page, 'config');
     await page.locator(`#cfg-${K}`).selectOption('trimestral');
@@ -255,7 +267,7 @@ test.describe('los días del aviso rojo se ajustan solos a la frecuencia y no ba
   const rojo = page => page.locator(`#cfg-${ROJO}`);
 
   test('al elegir cada frecuencia el número salta a 10 / 35 / 100; al volver a la guardada, vuelve lo guardado', async ({ page }) => {
-    await abrir(page);
+    await abrir(page, { cfg: SEMANAL });
     await irA(page, 'config');
     await expect(rojo(page)).toHaveValue('10');
     await page.locator(`#cfg-${K}`).selectOption('mensual');
@@ -268,7 +280,7 @@ test.describe('los días del aviso rojo se ajustan solos a la frecuencia y no ba
   });
 
   test('con «Trimestral» no deja guardar menos de 100 días, pero sí 120; con «Mensual», menos de 35 no, 40 sí', async ({ page }) => {
-    const reg = await abrir(page);
+    const reg = await abrir(page, { cfg: SEMANAL });
     await irA(page, 'config');
     await page.evaluate(() => { window.__noAceptarAvisos = true; });
     await page.locator(`#cfg-${K}`).selectOption('trimestral');
@@ -289,7 +301,7 @@ test.describe('los días del aviso rojo se ajustan solos a la frecuencia y no ba
   });
 
   test('trimestral con 100 días: se guardan las dos filas y el servidor las acepta (el tope ya no es 60)', async ({ page }) => {
-    const reg = await abrir(page);
+    const reg = await abrir(page, { cfg: SEMANAL });
     await irA(page, 'config');
     await page.evaluate(() => { window.__noAceptarAvisos = true; });
     await page.locator(`#cfg-${K}`).selectOption('trimestral');
@@ -305,7 +317,7 @@ test.describe('los días del aviso rojo se ajustan solos a la frecuencia y no ba
   });
 
   test('si una de las dos filas la rechaza el servidor, no se guarda NINGUNA (una sola petición)', async ({ page }) => {
-    const reg = await abrir(page);
+    const reg = await abrir(page, { cfg: SEMANAL });
     reg.control.fallasEscritura.push({ tabla: 'configuracion', metodo: 'POST', tipo: 'servidor' });
     await irA(page, 'config');
     await page.evaluate(() => { window.__noAceptarAvisos = true; });
@@ -328,7 +340,7 @@ test.describe('los días del aviso rojo se ajustan solos a la frecuencia y no ba
   });
 
   test('la ayuda lo explica y el tope de la pantalla es 400, igual que el de la base', async ({ page }) => {
-    await abrir(page);
+    await abrir(page, { cfg: SEMANAL });
     await irA(page, 'config');
     await expect(page.locator('.cfg-fila', { has: rojo(page) })).toContainText('se ajusta solo (semanal 10 · mensual 35 · trimestral 100)');
     expect(await page.evaluate(() => [cfgValidar('respaldo_rojo_dias', 400), cfgValidar('respaldo_rojo_dias', 401)])).toEqual([null, 'Los días para el aviso rojo del respaldo debe ser un número entero entre 7 y 400.']);
@@ -339,7 +351,7 @@ test.describe('los días del aviso rojo se ajustan solos a la frecuencia y no ba
 
 test.describe('textos de la pestaña Datos', () => {
   test('ya no dice «cada domingo»: manda a la frecuencia elegida en Configuración', async ({ page }) => {
-    await abrir(page);
+    await abrir(page, { cfg: SEMANAL });
     const texto = await page.evaluate(() => document.body.innerText);
     expect(texto).not.toContain('Hazlo cada domingo');
     expect(await page.evaluate(() => document.documentElement.innerHTML.includes('con la frecuencia que elegiste en'))).toBe(true);

@@ -150,6 +150,10 @@
   .btn-edit:hover { border-color: var(--accent); background: rgba(232,184,75,0.08); }
 
   .table-wrap { overflow-x: auto; }
+  /* Auditoría: cada lista en su propio recuadro de altura limitada (5-6 filas a la vista) con desplazamiento propio, para no tener que
+     bajar toda una sección para llegar a la siguiente (sobre todo en el celular). El encabezado de la tabla se queda fijo. */
+  .aud-scroll { max-height: 330px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .aud-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; padding: 10px 14px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); font-family: 'Syne', sans-serif; font-weight: 600; border-bottom: 1px solid var(--border); }
   td { padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--text2); vertical-align: middle; }
@@ -568,7 +572,7 @@
     </div>
     <div id="alertZone" style="margin-bottom:16px;"></div>
 
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
       <div class="filter-bar" style="margin-bottom:0;">
         <button class="filter-btn" onclick="setFTablero('hoy',this)">Hoy</button>
         <button class="filter-btn" onclick="setFTablero('semana',this)">Esta semana</button>
@@ -1737,7 +1741,7 @@
         <div class="panel-title">📋 Ajustes manuales registrados en cierres</div>
         <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap aud-scroll">
         <table>
           <thead><tr><th>Fecha</th><th>Turno</th><th>Ajuste</th><th>Explicación</th></tr></thead>
           <tbody id="auditoria-body"></tbody>
@@ -1748,7 +1752,7 @@
       <div class="panel-header">
         <div class="panel-title">🗑 Pedidos eliminados / cancelados</div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap aud-scroll">
         <table>
           <thead><tr><th>Eliminado el</th><th>Motivo</th><th>Pedido original</th><th>Ubicación</th><th>Detalle</th><th>Monto</th></tr></thead>
           <tbody id="auditoria-eliminados-body"></tbody>
@@ -1759,7 +1763,7 @@
       <div class="panel-header">
         <div class="panel-title">🏷 Descuentos aplicados</div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap aud-scroll">
         <table>
           <thead><tr><th>Cuándo</th><th>Pedido</th><th>Lista</th><th>Descuento</th><th>Motivo</th><th>Impacto en cierre</th><th>Gastos borrados</th></tr></thead>
           <tbody id="auditoria-descuentos-body"></tbody>
@@ -2576,7 +2580,7 @@ const RESPALDO_ROJO_MINIMO = Object.freeze({ semanal: 7, mensual: 35, trimestral
 const RESPALDO_ROJO_SUGERIDO = Object.freeze({ semanal: 10, mensual: 35, trimestral: 100 });
 const CFG_DEFECTOS = Object.freeze({
   mesas: 8, recargo_para_llevar: 1000, empaque_domicilio: 1000,
-  respaldo_dia_semana: 0, respaldo_rojo_dias: 10, respaldo_frecuencia: 'semanal',
+  respaldo_dia_semana: 0, respaldo_rojo_dias: 35, respaldo_frecuencia: 'mensual',      // decisión del dueño (1-nov): mensual por defecto
   negocio_nombre: 'El Lobo', negocio_emoji: '🐺',
   catalogo_almuerzos: CATALOGO_ALMUERZOS_BASE, catalogo_rapidas: CATALOGO_RAPIDAS_BASE, catalogo_extras: CATALOGO_EXTRAS_BASE,
   categorias_egresos: CATEGORIAS_EGRESOS_BASE, nombres_cuentas: NOMBRES_CUENTAS_BASE,
@@ -4646,7 +4650,7 @@ function vencimientoRespaldo(frecuencia, hoyStr = today(), diaRespaldo = CFG.v('
 }
 // null = sin aviso; 'ambar' o 'rojo'. `fechaUltimo` = fecha (AAAA-MM-DD) del último respaldo completo; vacío = nunca se ha hecho.
 function nivelAvisoRespaldoPorFrecuencia(fechaUltimo, hoyStr = today(), frecuencia = CFG.v('respaldo_frecuencia'), diaRespaldo = CFG.v('respaldo_dia_semana'), rojoDias = CFG.v('respaldo_rojo_dias')) {
-  if (!RESPALDO_FRECUENCIAS_LISTA.includes(frecuencia)) frecuencia = 'semanal';
+  if (!RESPALDO_FRECUENCIAS_LISTA.includes(frecuencia)) frecuencia = CFG_DEFECTOS.respaldo_frecuencia;
   if (!fechaUltimo) return 'ambar';
   const dias = diasDesdeFecha(fechaUltimo, hoyStr);
   if (Number.isNaN(dias)) return 'ambar';
