@@ -1,8 +1,8 @@
 -- ═════════════════════════════════════════════════════════════════
--- El Lobo — CONFIGURACIÓN, ETAPA 5: ¿se piden las «comidas de la familia» al cerrar el almuerzo? (sí / no, con historial)
+-- El Lobo — CONFIGURACIÓN, CIERRE DEL DÍA: ¿se piden las «comidas de la familia» al cerrar el almuerzo? (sí / no, con historial)
 -- ═════════════════════════════════════════════════════════════════
--- Guía de uso: docs/CONFIGURACION.md  ·  Para deshacer: sql/rollback_configuracion_etapa_5.sql
--- Pruebas: tests/python/test_configuracion_etapa_5.py
+-- Guía de uso: docs/CONFIGURACION.md  ·  Para deshacer: sql/rollback_configuracion_cierre_familia.sql
+-- Pruebas: tests/python/test_configuracion_cierre_familia.py
 --
 -- QUÉ HACE (una sola transacción; seguro de volver a correr; NO toca ningún dato ni la tabla):
 --   Enseña a la base de datos una clave nueva de la tabla `configuracion` (etapas 1, 2, 4 y 3):

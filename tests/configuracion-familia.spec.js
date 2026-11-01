@@ -1,5 +1,5 @@
-// ⚙️ CONFIGURACIÓN → «Cierre del día» → ¿se piden las «comidas de la familia» al cerrar el almuerzo? (etapa 5).
-// Todo contra el backend falso (que imita sql/configuracion_etapa_5.sql: la clave cierre_comidas_familia solo acepta verdadero o
+// ⚙️ CONFIGURACIÓN → «Cierre del día» → ¿se piden las «comidas de la familia» al cerrar el almuerzo?
+// Todo contra el backend falso (que imita sql/configuracion_cierre_familia.sql: la clave cierre_comidas_familia solo acepta verdadero o
 // falso): nada toca tu Supabase real. Se comprueba, desde la pantalla, que:
 //   · SIN nada guardado todo sigue como siempre: el cierre del almuerzo pide la cantidad (obligatoria) y el historial muestra «Familia»;
 //   · guardar «No» (solo administrador, con confirmación, UNA fila nueva) hace que el campo desaparezca del cierre normal y del manual

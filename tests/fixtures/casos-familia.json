@@ -1,5 +1,5 @@
 {
- "comentario": "Casos compartidos por las pruebas de Python (Postgres real), de la pantalla y del servidor falso para la opción «comidas de la familia en el cierre» (clave cierre_comidas_familia, sql/configuracion_etapa_5.sql): las tres reglas deben dar el MISMO veredicto y el MISMO mensaje. «mensaje» null = válido.",
+ "comentario": "Casos compartidos por las pruebas de Python (Postgres real), de la pantalla y del servidor falso para la opción «comidas de la familia en el cierre» (clave cierre_comidas_familia, sql/configuracion_cierre_familia.sql): las tres reglas deben dar el MISMO veredicto y el MISMO mensaje. «mensaje» null = válido.",
  "casos": [
   {
    "id": "familia: verdadero (se piden, como siempre)",

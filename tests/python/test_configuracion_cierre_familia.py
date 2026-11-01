@@ -1,4 +1,4 @@
-"""Pruebas de la opción «comidas de la familia en el cierre» (sql/configuracion_etapa_5.sql) contra un Postgres de verdad.
+"""Pruebas de la opción «comidas de la familia en el cierre» (sql/configuracion_cierre_familia.sql) contra un Postgres de verdad.
 
 Misma base desechable que test_configuracion.py (imita a Supabase; esquema real de El Lobo + reglas de acceso + etapas 1, 2, 4 y 3);
 nunca toca tu Supabase. Qué comprueban:
@@ -11,7 +11,7 @@ nunca toca tu Supabase. Qué comprueban:
   · Instalar encima de la etapa 3 y repetir no rompe nada; el rollback deja la etapa 3 tal cual (funciones idénticas) sin borrar el
     historial, y se puede volver a instalar. Sin las etapas anteriores, la instalación se niega con un mensaje claro.
 
-Si no hay PostgreSQL instalado, se saltan solas.   Correr:  python -m pytest tests/python/test_configuracion_etapa_5.py -q
+Si no hay PostgreSQL instalado, se saltan solas.   Correr:  python -m pytest tests/python/test_configuracion_cierre_familia.py -q
 """
 import json
 import re
@@ -32,12 +32,12 @@ CONFIG = RAIZ / "sql" / "configuracion.sql"
 ETAPA2 = RAIZ / "sql" / "configuracion_etapa_2.sql"
 ETAPA4 = RAIZ / "sql" / "configuracion_etapa_4.sql"
 ETAPA3 = RAIZ / "sql" / "configuracion_etapa_3.sql"
-ETAPA5 = RAIZ / "sql" / "configuracion_etapa_5.sql"
-ROLLBACK5 = RAIZ / "sql" / "rollback_configuracion_etapa_5.sql"
+SQL_FAMILIA = RAIZ / "sql" / "configuracion_cierre_familia.sql"
+ROLLBACK_FAMILIA = RAIZ / "sql" / "rollback_configuracion_cierre_familia.sql"
 HTML = RAIZ / "Contabilidad" / "ElLobo-Sistema Contable.html"
 CASOS = json.loads((RAIZ / "tests" / "fixtures" / "casos-familia.json").read_text(encoding="utf-8"))["casos"]
 
-pytestmark = pytest.mark.skipif(not all(p.exists() for p in (ESQUEMA, CONFIG, ETAPA2, ETAPA4, ETAPA3, ETAPA5)), reason="Falta el SQL")
+pytestmark = pytest.mark.skipif(not all(p.exists() for p in (ESQUEMA, CONFIG, ETAPA2, ETAPA4, ETAPA3, SQL_FAMILIA)), reason="Falta el SQL")
 _n = [0]
 K = "cierre_comidas_familia"
 
@@ -60,7 +60,7 @@ def cluster():
         c.base_nueva("plantilla_e3", plantilla="plantilla_e4")
         c.psql_ok("plantilla_e3", ETAPA3.read_text(encoding="utf-8"))                       # etapa 3
         c.base_nueva("plantilla_e5", plantilla="plantilla_e3")
-        c.psql_ok("plantilla_e5", ETAPA5.read_text(encoding="utf-8"))
+        c.psql_ok("plantilla_e5", SQL_FAMILIA.read_text(encoding="utf-8"))
         yield c
     finally:
         c.detener()
@@ -192,7 +192,7 @@ def huella(cluster, db):
 
 def test_la_verificacion_del_final_dice_lo_esperado(cluster):
     base = cluster.base_nueva("cfg5_verif", plantilla="plantilla_e3")
-    salida = cluster.psql_ok(base, ETAPA5.read_text(encoding="utf-8"))
+    salida = cluster.psql_ok(base, SQL_FAMILIA.read_text(encoding="utf-8"))
     assert re.search(r"^\s*t\s*\|\s*1\s*\|\s*f\s*$", salida, re.M), salida[-300:]              # familia_instalada · disparador · anon_con_permisos
 
 
@@ -210,23 +210,23 @@ def test_instalar_cambia_solo_la_validacion_general(cluster, db):
 def test_correrlo_dos_veces_no_rompe_nada_ni_pierde_el_historial(cluster, db):
     guardar_ok(cluster, db, False)
     antes, huella_antes = filas(cluster, db), huella(cluster, db)
-    cluster.psql_ok(db, ETAPA5.read_text(encoding="utf-8"))
+    cluster.psql_ok(db, SQL_FAMILIA.read_text(encoding="utf-8"))
     assert filas(cluster, db) == antes and huella(cluster, db) == huella_antes
     assert agregar(cluster, db, K, "no")[0] == "error"                                         # y la regla sigue funcionando
 
 
 def test_sin_las_etapas_anteriores_la_instalacion_se_niega_con_un_mensaje_claro(cluster):
     cluster.base_nueva("cfg5_sin_e1", plantilla="plantilla_base")
-    codigo, _, avisos = cluster.psql("cfg5_sin_e1", ETAPA5.read_text(encoding="utf-8"), parar_en_error=True)
+    codigo, _, avisos = cluster.psql("cfg5_sin_e1", SQL_FAMILIA.read_text(encoding="utf-8"), parar_en_error=True)
     assert codigo != 0 and "sql/configuracion.sql" in avisos, avisos[-400:]
     cluster.base_nueva("cfg5_sin_e2", plantilla="plantilla_e1")
-    codigo, _, avisos = cluster.psql("cfg5_sin_e2", ETAPA5.read_text(encoding="utf-8"), parar_en_error=True)
+    codigo, _, avisos = cluster.psql("cfg5_sin_e2", SQL_FAMILIA.read_text(encoding="utf-8"), parar_en_error=True)
     assert codigo != 0 and "sql/configuracion_etapa_2.sql" in avisos, avisos[-400:]
     cluster.base_nueva("cfg5_sin_e4", plantilla="plantilla_e2")
-    codigo, _, avisos = cluster.psql("cfg5_sin_e4", ETAPA5.read_text(encoding="utf-8"), parar_en_error=True)
+    codigo, _, avisos = cluster.psql("cfg5_sin_e4", SQL_FAMILIA.read_text(encoding="utf-8"), parar_en_error=True)
     assert codigo != 0 and "sql/configuracion_etapa_4.sql" in avisos, avisos[-400:]
     cluster.base_nueva("cfg5_sin_e3", plantilla="plantilla_e4")                                  # el orden importa: 2 → 4 → 3 → 5
-    codigo, _, avisos = cluster.psql("cfg5_sin_e3", ETAPA5.read_text(encoding="utf-8"), parar_en_error=True)
+    codigo, _, avisos = cluster.psql("cfg5_sin_e3", SQL_FAMILIA.read_text(encoding="utf-8"), parar_en_error=True)
     assert codigo != 0 and "sql/configuracion_etapa_3.sql" in avisos, avisos[-400:]
     assert "cierre_comidas_familia" not in cluster.valor("cfg5_sin_e3", "select pg_get_functiondef('seguridad.validar_configuracion(text,jsonb)'::regprocedure)")
 
@@ -236,14 +236,14 @@ def test_el_rollback_deja_la_etapa_3_tal_cual_sin_borrar_el_historial_y_se_puede
     huella_e3 = huella(cluster, solo_e3)
     guardar_ok(cluster, db, False)
     historial = filas(cluster, db)
-    salida = cluster.psql_ok(db, ROLLBACK5.read_text(encoding="utf-8"))
+    salida = cluster.psql_ok(db, ROLLBACK_FAMILIA.read_text(encoding="utf-8"))
     assert re.search(r"^\s*t\s*$", salida, re.M), salida[-200:]                                    # familia_quitada = true
     assert huella(cluster, db) == huella_e3                                                        # funciones, permisos, disparador: los de la etapa 3
     assert filas(cluster, db) == historial                                                         # el historial NO se borra
     res = agregar(cluster, db, K, True)
     assert res[0] == "error" and res[2] == "configuracion_clave_desconocida", res                  # la base ya no acepta cambios de esta opción
     assert agregar(cluster, db, "mesas", 12)[0] == "ok" and agregar(cluster, db, "menu_platos", PLATOS_BASE)[0] == "ok"   # lo demás sigue
-    cluster.psql_ok(db, ROLLBACK5.read_text(encoding="utf-8"))                                     # dos veces: igual de tranquilo
-    cluster.psql_ok(db, ETAPA5.read_text(encoding="utf-8"))                                        # y se vuelve a instalar, con el historial puesto
+    cluster.psql_ok(db, ROLLBACK_FAMILIA.read_text(encoding="utf-8"))                                     # dos veces: igual de tranquilo
+    cluster.psql_ok(db, SQL_FAMILIA.read_text(encoding="utf-8"))                                        # y se vuelve a instalar, con el historial puesto
     assert agregar(cluster, db, K, True)[0] == "ok"
     assert [f["valor"] for f in filas(cluster, db) if f["clave"] == K] == [False, True]                # el historial de esta opción: lo viejo y lo nuevo

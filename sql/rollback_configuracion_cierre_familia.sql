@@ -1,12 +1,12 @@
 -- ═════════════════════════════════════════════════════════════════
--- El Lobo — DESHACER la etapa 5 de la configuración (sql/configuracion_etapa_5.sql)
+-- El Lobo — DESHACER la opción «comidas de la familia» (cierre del día) de la configuración (sql/configuracion_cierre_familia.sql)
 -- ═════════════════════════════════════════════════════════════════
 -- Deja la base como estaba al terminar la etapa 3: la validación general vuelve a ser exactamente la de
 -- sql/configuracion_etapa_3.sql (sin la clave cierre_comidas_familia).
 -- NO borra nada de la tabla: lo que ya se guardó queda en el historial (la base ya no deja agregar cambios nuevos de esta
 -- opción, y el sistema de la etapa 3 ignora esas filas: vuelve a pedir las comidas de la familia, como siempre).
--- OJO: si el sistema (el HTML) ya es el de la etapa 5, la pantalla «Cierre del día» de Configuración dejará de poder guardar
--- hasta que vuelvas a instalar la etapa 5. Para volver a usarla, corre otra vez sql/configuracion_etapa_5.sql.
+-- OJO: si el sistema (el HTML) ya trae esa opción, la pantalla «Cierre del día» de Configuración dejará de poder guardar
+-- hasta que vuelvas a instalarla. Para volver a usarla, corre otra vez sql/configuracion_cierre_familia.sql.
 -- Seguro de correr dos veces.
 begin;
 
