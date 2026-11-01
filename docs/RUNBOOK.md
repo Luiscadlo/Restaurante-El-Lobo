@@ -9,7 +9,7 @@ Para quien opera el sistema, no para quien programa. Cada sección es independie
 | La pantalla (el sistema) | GitHub Pages, desde la rama `main` del repositorio | Los dueños, vía pull request |
 | Los datos y los usuarios | Supabase (proyecto del restaurante) | Los dueños |
 | El código y la historia de cambios | https://github.com/Luiscadlo/Restaurante-El-Lobo (público) | Los dueños |
-| Respaldo semanal (manual) | Pestaña **Datos → 💾 Respaldo completo**: cada domingo un administrador descarga el JSON de todas las tablas. El sistema avisa si toca | Los dueños |
+| Respaldo (manual) | Pestaña **Datos → 💾 Respaldo completo**: un administrador descarga el JSON de todas las tablas. Cadencia decidida por el dueño (1-nov-2026): **el último día del mes, al cerrar el turno de la noche, o el primer día del mes antes de abrir el turno del día**, y además antes de cualquier cambio a la base. El sistema avisa si toca | Los dueños |
 
 Si Supabase se cae, el sistema no abre (muestra el error de conexión). Si GitHub Pages se cae, el enlace no carga. Ambos son servicios externos; no hay nada que reiniciar de nuestro lado.
 
@@ -57,8 +57,8 @@ Número de mesas, recargo de «para llevar», empaque de domicilio, nombre del n
 
 **Hay dos capas** (ninguna reemplaza a la otra) y un Excel aparte:
 
-1. **Datos → 💾 Respaldo completo** (solo administrador): descarga un JSON con **todas** las tablas, comprueba que cada una trae todas sus filas y solo entonces anota la fecha del respaldo. Hazlo **cada domingo** y guarda el archivo **fuera del repositorio** (carpeta privada, nube personal).
-2. **Aviso en pantalla** (solo administrador): desde cada domingo (o el día que se elija en ⚙️ Configuración) aparece en ámbar si todavía no hay un respaldo de esa semana, y se pone rojo a los 10 días (también configurable). Se apaga solo al terminar bien un respaldo completo.
+1. **Datos → 💾 Respaldo completo** (solo administrador): descarga un JSON con **todas** las tablas, comprueba que cada una trae todas sus filas y solo entonces anota la fecha del respaldo. Hazlo **a fin de mes** (el último día, cuando se cierra el turno de la noche; o el primer día del mes, antes de abrir el turno del día) y también **antes de cualquier cambio a la base**. Guarda el archivo **fuera del repositorio** (carpeta privada, nube personal).
+2. **Aviso en pantalla** (solo administrador): desde cada domingo (o el día que se elija en ⚙️ Configuración) aparece en ámbar si todavía no hay un respaldo de esa semana, y se pone rojo a los 10 días (también configurable, hasta 60). **Ojo:** el aviso sigue siendo semanal aunque el respaldo se haga a fin de mes; para que no moleste, sube «días para el aviso rojo» en ⚙️ Configuración (p. ej. 35) y tómalo como un recordatorio. Pendiente de decidir: si el aviso se vuelve mensual (cambio de código). Se apaga solo al terminar bien un respaldo completo.
 
 No hay respaldo automático: el que había se eliminó cuando se activó la seguridad (RLS), porque ya no podía leer con la llave pública. Detalle en `docs/DESPLIEGUE_SEGURIDAD.md` (Paso 8).
 
@@ -141,4 +141,4 @@ El Excel (Datos → Excel) y el Tablero deben dar lo mismo, con **una diferencia
 
 - ~~Ensayo de restauración en un proyecto aparte~~ — hecho el 27-oct-2026 con un respaldo real (ver «Respaldos»). Repetirlo cuando cambie la estructura de la base o al menos una vez al año.
 - Confirmación del contador sobre impuestos y facturación electrónica.
-- Decidir si algún día se automatiza el respaldo (hoy es manual cada domingo; el usuario `respaldo` de solo lectura ya está previsto para eso).
+- Decidir si algún día se automatiza el respaldo (hoy es manual, a fin de mes; el usuario `respaldo` de solo lectura ya está previsto para eso).

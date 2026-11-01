@@ -20,7 +20,6 @@ Sistema propio del restaurante El Lobo (Montería, Colombia): pedidos, cobros, f
 | `herramientas/` | `generar_rls.py` (SQL de seguridad desde la matriz de permisos) las de restauración: `esquema_a_sql.py`, `respaldo_a_sql.py`, `restaurar_respaldo.py` (ver `docs/RESTAURAR.md`) y `generar_copia_pruebas.py` (la copia de pruebas / réplica —sitio en carpeta o «archivo único» con el Menú incrustado—, ver `docs/PRUEBAS_REPLICA.md`). |
 | `tests/` | Pruebas automáticas (ver `tests/LEEME.md`). No se publican ni tocan datos reales. |
 | `docs/` | Documentación: `RUNBOOK.md` (operación diaria), `CONFIGURACION.md` (la pestaña ⚙️ Configuración), `RESTAURAR.md` (restaurar un respaldo), `PRUEBAS_REPLICA.md` (la réplica de pruebas), `DESPLIEGUE_SEGURIDAD.md`, `MATRIZ_PERMISOS.md`, `ESPECIFICO_EL_LOBO.md`. |
-| `QR del lobo .docx` | Material del local (QR de pago). No es parte del sistema. |
 
 ## Cómo se despliega
 
