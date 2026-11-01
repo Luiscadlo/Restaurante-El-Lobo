@@ -234,7 +234,7 @@ test.describe('M1 — eliminar un pagado de un turno ya cerrado', () => {
     const reg = await abrirSistema(page, { datos: conCierre() });
     const fin = page.evaluate(() => eliminarGrupoIngreso([101]));
     await expect(ventana(page)).toBeVisible();
-    expect(await opciones(page)).toEqual(['no', 'si', 'sin']);
+    expect(await opciones(page)).toEqual(['no', 'si']);          // no existe «sin tocar el cierre»: con el turno cerrado no se registran pedidos
     const txt = await textoVentana(page);
     expect(txt).toContain('Su turno ya está cerrado');
     expect(txt).toContain('efectivo $70.000 → $55.000');
@@ -272,15 +272,6 @@ test.describe('M1 — eliminar un pagado de un turno ya cerrado', () => {
     await accion(page, () => eliminarGrupoIngreso([301, 302]), null, 'si');
     expect(escrituras(reg, 'PATCH', 'cierres_dia')).toHaveLength(1);
     expect(await cierreHoy(page)).toEqual({ efectivo: 52000, transferencia: 34000, resultado: 86000 });
-  });
-
-  test('«Eliminar sin tocar el cierre»: borra el pedido y deja el cierre exactamente como estaba', async ({ page }) => {
-    const reg = await abrirSistema(page, { datos: conCierre() });
-    await accion(page, () => eliminarGrupoIngreso([101]), null, 'sin');
-    expect(escrituras(reg, 'PATCH', 'cierres_dia')).toHaveLength(0);
-    expect(await cierreHoy(page)).toEqual(INTACTO);
-    expect(escrituras(reg, 'DELETE', 'pedidos')).toHaveLength(1);
-    expect(await estaEn(page, 'ingresos', 101)).toBe(false);
   });
 
   test('«Volver»: no se escribe NADA (ni cierre, ni rastro, ni borrado) y el pedido sigue', async ({ page }) => {
@@ -410,15 +401,15 @@ test.describe('M1 — devolver un pago a pendiente (↩) en un turno ya cerrado'
     expect(await estaEn(page, 'ingresos', 101)).toBe(false);
   });
 
-  test('«Volver» no hace nada; «Devolver sin tocar el cierre» devuelve el pago y deja el cierre igual', async ({ page }) => {
+  test('«Volver» no hace nada y solo hay dos opciones (no existe «devolver sin tocar el cierre»)', async ({ page }) => {
     const reg = await abrirSistema(page, { datos: conCierre() });
-    await accion(page, () => revertirPago([102]), null, 'no');
+    const fin = page.evaluate(() => revertirPago([102]));
+    await expect(ventana(page)).toBeVisible();
+    expect(await opciones(page)).toEqual(['no', 'si']);
+    await elegir(page, 'no');
+    await fin;
     expect(reg.escrituras).toHaveLength(0);
     expect(await estaEn(page, 'ingresos', 102)).toBe(true);
-    await accion(page, () => revertirPago([102]), null, 'sin');
-    expect(escrituras(reg, 'PATCH', 'cierres_dia')).toHaveLength(0);
-    expect(await estaEn(page, 'pendientes', 102)).toBe(true);
-    expect(await cierreHoy(page)).toEqual(INTACTO);
   });
 
   test('turno abierto (sin cierre): el ↩ «Deshacer» sigue siendo inmediato, sin preguntas', async ({ page }) => {
@@ -492,15 +483,11 @@ test.describe('M1 — cambiar el método de pago de un pagado en un turno ya cer
     expect(await page.evaluate(() => ST.ingresos.find(p => p.id === 101).metodo)).toBe('transferencia');
   });
 
-  test('«Volver» no cambia nada; «Cambiar sin tocar el cierre» cambia el método y deja el cierre igual', async ({ page }) => {
+  test('«Volver» no cambia nada (no hay «cambiar sin tocar el cierre»)', async ({ page }) => {
     const reg = await abrirSistema(page, { datos: conCierre() });
     await cambiarMetodo(page, 101, 'transferencia', 'no');
     expect(reg.escrituras).toHaveLength(0);
     expect(await page.evaluate(() => ST.ingresos.find(p => p.id === 101).metodo)).toBe('efectivo');
-    await cambiarMetodo(page, 101, 'transferencia', 'sin');
-    expect(escrituras(reg, 'PATCH', 'cierres_dia')).toHaveLength(0);
-    expect(await page.evaluate(() => ST.ingresos.find(p => p.id === 101).metodo)).toBe('transferencia');
-    expect(await cierreHoy(page)).toEqual(INTACTO);
   });
 
   test('turno sin cierre guardado: se guarda directo, sin preguntas', async ({ page }) => {
@@ -542,37 +529,64 @@ test.describe('M1 — volver a cobrar un pedido cuyo turno ya tiene cierre guard
     await fin;
   });
 
-  test('cobrar de nuevo → pregunta → «Sí, sumarlo al cierre» deja el cierre otra vez en 70.000 / 104.000', async ({ page }) => {
+  test('cobrar de nuevo → pregunta ANTES de cobrar → «Sí, cobrar y sumar al cierre»: el cierre vuelve a 70.000 / 104.000 y se escribe primero', async ({ page }) => {
     const reg = await abrirSistema(page, { datos: conCierre() });
     await devolver101(page);
     const fin = page.evaluate(() => marcarPedidoIndividualPagado(101, 'k101'));
     await expect(ventana(page)).toBeVisible();
-    expect(await textoVentana(page)).toContain('Este pago no está en el cierre del turno');
-    expect(await opciones(page)).toEqual(['si', 'no']);
+    expect(await textoVentana(page)).toContain('¿cobrar y sumar al cierre?');
+    expect(await opciones(page)).toEqual(['no', 'si']);
+    expect(await estaEn(page, 'pendientes', 101)).toBe(true);        // todavía no se cobró
     await elegir(page, 'si');
     await fin;
     expect(await cierreHoy(page)).toEqual(INTACTO);
     expect(await estaEn(page, 'ingresos', 101)).toBe(true);
-    expect(escrituras(reg, 'PATCH', 'cierres_dia')).toHaveLength(2);       // una al devolver, otra al volver a cobrar
+    const cierres = escrituras(reg, 'PATCH', 'cierres_dia');
+    expect(cierres).toHaveLength(2);                                  // una al devolver, otra al volver a cobrar
+    expect(posicion(reg, 'PATCH', 'cierres_dia', 1)).toBeLessThan(posicion(reg, 'PATCH', 'pedidos', 1));
   });
 
-  test('«No tocar el cierre»: el pedido queda pagado y el cierre no se escribe', async ({ page }) => {
+  test('«Volver»: no se cobra, el pedido sigue pendiente y el cierre no se escribe', async ({ page }) => {
     const reg = await abrirSistema(page, { datos: conCierre() });
     await devolver101(page);
+    const antes = reg.escrituras.length;
     await cobrar(page, 'no');
-    expect(await estaEn(page, 'ingresos', 101)).toBe(true);
-    expect(escrituras(reg, 'PATCH', 'cierres_dia')).toHaveLength(1);
-    expect(await cierreHoy(page)).toEqual({ efectivo: 55000, transferencia: 34000, resultado: 89000 });
+    expect(reg.escrituras).toHaveLength(antes);
+    expect(await estaEn(page, 'pendientes', 101)).toBe(true);
+    expect(await estaEn(page, 'ingresos', 101)).toBe(false);
   });
 
-  test('si el cierre no se puede actualizar: el pedido SIGUE pagado, el cierre queda como estaba y sale un aviso', async ({ page }) => {
+  test('si el cierre no se puede actualizar: el pedido NO se cobra y sale un aviso', async ({ page }) => {
     const reg = await abrirSistema(page, { datos: conCierre() });
     await devolver101(page);
     reg.control.fallasEscritura.push({ tabla: 'cierres_dia', metodo: 'PATCH', tipo: 'servidor' });
     await cobrar(page, 'si');
-    await esperarAviso(page, 'El cierre no se actualizó');
-    expect(await estaEn(page, 'ingresos', 101)).toBe(true);
+    await esperarAviso(page, 'No se cobró el pedido');
+    expect(await estaEn(page, 'pendientes', 101)).toBe(true);
     expect(await cierreHoy(page)).toEqual({ efectivo: 55000, transferencia: 34000, resultado: 89000 });
+  });
+
+  test('el cierre se sumó pero el cobro falló: el cierre VUELVE a como estaba y el pedido sigue pendiente', async ({ page }) => {
+    const reg = await abrirSistema(page, { datos: conCierre() });
+    await devolver101(page);
+    reg.control.fallasEscritura.push({ tabla: 'pedidos', metodo: 'PATCH', tipo: 'servidor' });
+    // La comprobación en la base ve al pedido todavía pendiente (el cobro no llegó).
+    await lecturaDePedidos(page, route => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify([{ id: 101, estado: 'pendiente' }]) }));
+    await cobrar(page, 'si');
+    await expect(ventana(page)).toBeHidden();
+    expect(await estaEn(page, 'pendientes', 101)).toBe(true);
+    expect(await cierreHoy(page)).toEqual({ efectivo: 55000, transferencia: 34000, resultado: 89000 });
+  });
+
+  test('una mesa con varios pedidos (cobro de grupo) también pregunta y suma el total al cierre', async ({ page }) => {
+    const reg = await abrirSistema(page, { datos: conCierre() });
+    await accion(page, () => revertirPago([101, 104]), null, 'si');
+    expect(await cierreHoy(page)).toEqual({ efectivo: 42000, transferencia: 34000, resultado: 76000 });
+    await accion(page, () => marcarGrupoSinMesaPagado([101, 104], 'k'), null, 'si');
+    expect(await cierreHoy(page)).toEqual(INTACTO);
+    expect(await estaEn(page, 'ingresos', 104)).toBe(true);
+    expect(reg.denegadas).toEqual([]);
   });
 
   test('turno SIN cierre guardado: cobrar es inmediato, sin preguntas ni cierres tocados', async ({ page }) => {

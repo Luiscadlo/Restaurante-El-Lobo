@@ -6332,7 +6332,8 @@ function valoresDeCierre(base, dEf, dTr) {
 }
 const consultaDeCierre = c => `fecha=eq.${c.fecha}&turno=eq.${c.turno}`;
 
-// Pregunta qué hacer con el cierre. Devuelve 'si' (hacer la acción y corregir el cierre), 'sin' (hacerla sin tocar el cierre) o 'no'.
+// Pregunta qué hacer con el cierre. Devuelve 'si' (hacer la acción y corregir el cierre) o 'no' (volver). No hay opción de dejar el cierre
+// sin tocar: con el turno cerrado no se pueden registrar pedidos, así que todo pedido pagado está dentro del cierre.
 async function preguntarPorCierres(ajustes, { titulo, accion, aceptar, sin, peligro, nota = '', sumar = false }) {
   const lineas = ajustes.map(a => {
     const n = valoresDeCierre(a.cierre, a.dEf, a.dTr);
@@ -6343,11 +6344,11 @@ async function preguntarPorCierres(ajustes, { titulo, accion, aceptar, sin, peli
     // Pedido que se acaba de COBRAR (ya quedó pagado) en un turno cuyo cierre ya estaba guardado: el cierre no lo cuenta todavía.
     return ventanaSistema({
       titulo, tono: 'aviso', alEscape: 'no', foco: 'no',
-      cuerpo: `El pedido ya quedó pagado. Pero el turno de este pedido ya tiene su cierre guardado y ese cierre todavía NO cuenta este pago, así que el Tablero y la Caja se quedan cortos.\n\n` +
-        `Si lo sumas al cierre quedaría así:\n${lineas.join('\n')}`,
+      cuerpo: `El turno de este pedido ya tiene su cierre guardado y ese cierre todavía NO cuenta este pedido. Para que el cobro quede registrado, el cierre tiene que sumarlo.\n\n` +
+        `Si cobras, el cierre quedaría así:\n${lineas.join('\n')}`,
       opciones: [
+        { valor: 'no', texto: sin },
         { valor: 'si', texto: aceptar, detalle: 'Recomendado.', clase: 'btn-primary' },
-        { valor: 'no', texto: sin, detalle: 'El pedido queda pagado, pero el cierre no lo cuenta (tendrías que corregir el cierre a mano).' },
       ]
     });
   }
@@ -6358,41 +6359,48 @@ async function preguntarPorCierres(ajustes, { titulo, accion, aceptar, sin, peli
     opciones: [
       { valor: 'no', texto: 'Volver', detalle: 'No se hace nada.' },
       { valor: 'si', texto: aceptar, detalle: 'Recomendado.', clase: peligro ? 'btn-danger' : 'btn-primary' },
-      { valor: 'sin', texto: sin, detalle: 'Solo si este pedido se registró DESPUÉS de cerrar el turno (entonces no está dentro del cierre).' },
     ]
   });
 }
 
-// Después de COBRAR pedidos: si el turno de alguno ya tiene su cierre guardado, ese cierre todavía no cuenta el pago (es el caso de
-// «devolver a pendiente corrigiendo el cierre» y luego volver a cobrar). Se pregunta si se suma; nunca lanza error (el pago ya está hecho).
-async function ofrecerSumarAlCierre(pedidos) {
-  try {
-    const entradas = [];
-    for (const p of pedidos) {
-      if (!p || p.estado !== 'pagado') continue;
-      const cierre = ST.cierresDia.find(c => c.fecha === p.fecha && c.turno === p.turno);
-      if (!cierre) continue;
-      const dEf = -efectivoDe(p), dTr = -transferenciaDe(p);
-      if (dEf !== 0 || dTr !== 0) entradas.push({ pedido: p, cierre, dEf, dTr });
-    }
-    const ajustes = agruparAjustes(entradas);
-    if (!ajustes.length) return;
-    const decision = await preguntarPorCierres(ajustes, {
-      titulo: 'Este pago no está en el cierre del turno', sumar: true,
-      aceptar: 'Sí, sumarlo al cierre', sin: 'No tocar el cierre'
-    });
-    if (decision !== 'si') return;
-    await aplicarAjustesCierre(ajustes);
-    showToast('✅ Pago sumado al cierre del turno', 'ok');
-    renderAll();
-  } catch (e) {
+// ANTES de COBRAR pedidos pendientes: si el turno de alguno ya tiene su cierre guardado, ese cierre todavía no cuenta el pago (caso
+// «devolver a pendiente corrigiendo el cierre» y volver a cobrar). Se pregunta «cobrar y sumar al cierre» o «volver» (no hay cobrar a secas).
+// Devuelve null si no se cobra; si sí, { hechos, entradas } para poder dejar el cierre como estaba si el cobro falla.
+async function prepararCierreAntesDeCobrar(pedidos, parches) {
+  const entradas = [];
+  pedidos.forEach((p, i) => {
+    if (!p) return;
+    const cierre = ST.cierresDia.find(c => c.fecha === p.fecha && c.turno === p.turno);
+    if (!cierre) return;
+    const q = { ...p, ...parches[i], estado: 'pagado' };
+    const dEf = -efectivoDe(q), dTr = -transferenciaDe(q);
+    if (dEf !== 0 || dTr !== 0) entradas.push({ pedido: p, cierre, dEf, dTr });
+  });
+  const ajustes = agruparAjustes(entradas);
+  if (!ajustes.length) return { hechos: [], entradas: [] };
+  const decision = await preguntarPorCierres(ajustes, {
+    titulo: 'Este turno ya está cerrado: ¿cobrar y sumar al cierre?', sumar: true,
+    aceptar: 'Sí, cobrar y sumar al cierre', sin: 'Volver'
+  });
+  if (decision !== 'si') return null;
+  try { return { hechos: await aplicarAjustesCierre(ajustes), entradas }; }
+  catch (e) {
     console.error(e);
-    avisarSistema({
-      titulo: 'El cierre no se actualizó',
-      cuerpo: 'El pedido SÍ quedó pagado, pero no se pudo sumar al cierre del turno (el cierre quedó como estaba). Revisa la conexión y corrige el cierre desde Cierre del día.' + textoCierresSinRestaurar(e.cierresSinRestaurar),
-      tono: 'aviso'
-    });
+    avisarSistema({ titulo: 'No se cobró el pedido', cuerpo: 'No se pudo actualizar el cierre del turno, así que el pedido NO se cobró y todo sigue como estaba.\n\nRevisa la conexión e inténtalo de nuevo.' + textoCierresSinRestaurar(e.cierresSinRestaurar), tono: 'peligro' });
+    return null;
   }
+}
+// Si el cobro falló después de sumar al cierre: se mira en la base cuáles quedaron pagados; el cierre se queda con esos y suelta el resto.
+async function restaurarCierreSiNoSeCobro(previo, ids) {
+  if (!previo || !previo.hechos.length) return;
+  const enBase = await filasDePedidosEnBase(ids);
+  if (enBase === null) {
+    avisarSistema({ titulo: 'Revisa el cierre del turno', cuerpo: 'Se cortó la conexión y no se pudo comprobar si el pedido quedó cobrado. El cierre ya lo suma. Recarga la página y revisa el pedido y el cierre antes de repetir la acción.', tono: 'peligro' });
+    return;
+  }
+  const pagados = new Set(enBase.filter(f => f.estado === 'pagado').map(f => f.id));
+  const fallos = await deshacerAjustesCierre(previo.hechos, previo.entradas.filter(e => pagados.has(e.pedido.id)));
+  if (fallos.length) avisarSistema({ titulo: 'Revisa el cierre del turno', cuerpo: 'El cobro no se completó y el cierre no se pudo dejar como estaba.' + textoCierresSinRestaurar(fallos), tono: 'peligro' });
 }
 
 // Deja de nuevo los cierres como estaban. `entradasHechas`: las entradas cuya acción SÍ se alcanzó a hacer (su plata sigue fuera
@@ -6460,7 +6468,7 @@ async function eliminarGrupoIngreso(ids) {
   if (ajustes.length) {
     decision = await preguntarPorCierres(ajustes, {
       titulo: idArr.length > 1 ? '¿Eliminar este pedido completo? Su turno ya está cerrado' : '¿Eliminar este ingreso? Su turno ya está cerrado',
-      accion: 'eliminas el pedido', aceptar: 'Sí, eliminar y corregir el cierre', sin: 'Eliminar sin tocar el cierre', peligro: true
+      accion: 'eliminas el pedido', aceptar: 'Sí, eliminar y corregir el cierre', sin: '', peligro: true
     });
   } else {
     decision = (await confirmarSistema({ titulo: idArr.length > 1 ? '¿Eliminar este pedido completo (todos sus ítems)?' : '¿Eliminar este ingreso?', aceptar: 'Sí, eliminar', peligro: true })) ? 'sin' : 'no';
@@ -6534,7 +6542,7 @@ async function guardarMetodoIngreso(ids) {
   if (ajustes.length) {
     const decision = await preguntarPorCierres(ajustes, {
       titulo: '¿Cambiar el método de pago? Su turno ya está cerrado', accion: 'cambias el método de pago',
-      aceptar: 'Sí, cambiar y corregir el cierre', sin: 'Cambiar sin tocar el cierre', peligro: false
+      aceptar: 'Sí, cambiar y corregir el cierre', sin: '', peligro: false
     });
     if (decision === 'no') return;
     if (decision === 'si') {
@@ -6649,6 +6657,8 @@ async function marcarGrupoMesaPagado(ids, mesaNum, key) {
   const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
+  const previo = await prepararCierreAntesDeCobrar(pedidosDelGrupo, pedidosDelGrupo.map((_, i) => armarPatchPago(metodo, dividido, i === 0)));
+  if (!previo) return;
   try {
     for (let i = 0; i < ids.length; i++) {
       const patch = await patchPagoConFallback(ids[i], armarPatchPago(metodo, dividido, i === 0));
@@ -6669,8 +6679,8 @@ async function marcarGrupoMesaPagado(ids, mesaNum, key) {
     showToast(`✅ Pedido pagado — Mesa ${mesaNum}${quedan === 0 ? ' (mesa liberada)' : ''}`, 'ok',
       ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
     renderAll();
-    await ofrecerSumarAlCierre(pedidosDelGrupo);
   } catch (e) {
+    await restaurarCierreSiNoSeCobro(previo, ids);
     console.error(e);
     showToast('⚠ Error al procesar el pago', 'warning');
   }
@@ -6687,6 +6697,8 @@ async function marcarGrupoDomicilioPagado(ids, key) {
   const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
+  const previo = await prepararCierreAntesDeCobrar(pedidosDelGrupo, pedidosDelGrupo.map((_, i) => armarPatchPago(metodo, dividido, i === 0)));
+  if (!previo) return;
   try {
     for (let i = 0; i < ids.length; i++) {
       const patch = await patchPagoConFallback(ids[i], armarPatchPago(metodo, dividido, i === 0));
@@ -6699,8 +6711,8 @@ async function marcarGrupoDomicilioPagado(ids, key) {
     showToast('✅ Domicilio marcado como pagado', 'ok',
       ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
     renderAll();
-    await ofrecerSumarAlCierre(pedidosDelGrupo);
   } catch (e) {
+    await restaurarCierreSiNoSeCobro(previo, ids);
     console.error(e);
     showToast('⚠ Error al procesar el pago', 'warning');
   }
@@ -6717,6 +6729,8 @@ async function marcarGrupoSinMesaPagado(ids, key) {
   const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
+  const previo = await prepararCierreAntesDeCobrar(pedidosDelGrupo, pedidosDelGrupo.map((_, i) => armarPatchPago(metodo, dividido, i === 0)));
+  if (!previo) return;
   try {
     for (let i = 0; i < ids.length; i++) {
       const patch = await patchPagoConFallback(ids[i], armarPatchPago(metodo, dividido, i === 0));
@@ -6729,8 +6743,8 @@ async function marcarGrupoSinMesaPagado(ids, key) {
     showToast('✅ Pedido (sin mesa) marcado como pagado', 'ok',
       ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
     renderAll();
-    await ofrecerSumarAlCierre(pedidosDelGrupo);
   } catch (e) {
+    await restaurarCierreSiNoSeCobro(previo, ids);
     showToast('⚠ Error al procesar el pago', 'warning');
   }
 }
@@ -9492,7 +9506,7 @@ async function revertirPago(ids) {
   if (ajustes.length) {
     const decision = await preguntarPorCierres(ajustes, {
       titulo: '¿Devolver este pago a pendiente? Su turno ya está cerrado', accion: 'devuelves el pago a pendiente',
-      aceptar: 'Sí, devolver y corregir el cierre', sin: 'Devolver sin tocar el cierre', peligro: false,
+      aceptar: 'Sí, devolver y corregir el cierre', sin: '', peligro: false,
       nota: 'El cierre se queda cerrado con esas cifras. Cuando vuelvas a cobrar el pedido, el sistema te preguntará si lo sumas otra vez al cierre.'
     });
     if (decision === 'no') return;
@@ -9587,6 +9601,8 @@ async function marcarPedidoIndividualPagado(pedidoId, key) {
   const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
+  const previo = await prepararCierreAntesDeCobrar([ped], [armarPatchPago(metodo, dividido, true)]);
+  if (!previo) return;
   try {
     const patch = await patchPagoConFallback(pedidoId, armarPatchPago(metodo, dividido, true));
 
@@ -9613,8 +9629,8 @@ async function marcarPedidoIndividualPagado(pedidoId, key) {
     showToast(`✅ Pedido pagado${mesaNum ? ' — Mesa ' + mesaNum : ''}`, 'ok',
       pedidoPagado ? { label: '↩ Deshacer', onClick: () => revertirPago(pedidoPagado.id) } : null);
     renderAll();
-    await ofrecerSumarAlCierre([pedidoPagado]);
   } catch (e) {
+    await restaurarCierreSiNoSeCobro(previo, [pedidoId]);
     console.error(e);
     showToast('⚠ Error al procesar el pago', 'warning');
   }
