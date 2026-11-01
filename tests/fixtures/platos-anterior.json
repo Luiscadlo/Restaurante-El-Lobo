@@ -1,0 +1,195 @@
+{
+ "comentario": "Foto de PL (el autocompletado de Pedidos) tal como era ANTES de la etapa 3, sacada de main (935a971). Sin nada guardado, el sistema debe seguir ofreciendo exactamente estos platos, en este orden; la etapa 3 solo suma al final de proteínas «Pollo Frito/BBQ» y «Pechuga en salsa» (los dos que solo tenía el generador del Menú).",
+ "PL": {
+  "sopa": [
+   {
+    "c": "SP01",
+    "n": "Sopa de Hueso"
+   },
+   {
+    "c": "SP02",
+    "n": "Sopa de Queso"
+   },
+   {
+    "c": "SP03",
+    "n": "Sopa de Frijol"
+   },
+   {
+    "c": "SP04",
+    "n": "Sopa de Lenteja"
+   },
+   {
+    "c": "SP05",
+    "n": "Sopa de Pescado"
+   },
+   {
+    "c": "SP06",
+    "n": "Sopa de Verduras"
+   },
+   {
+    "c": "SP07",
+    "n": "Sopa de Garbanzos"
+   },
+   {
+    "c": "SP08",
+    "n": "Sopa de Arvejas"
+   },
+   {
+    "c": "SP09",
+    "n": "Sopa de Pollo"
+   }
+  ],
+  "arroz": [
+   {
+    "c": "AR01",
+    "n": "Arroz Blanco"
+   },
+   {
+    "c": "AR02",
+    "n": "Arroz de Coco"
+   },
+   {
+    "c": "AR03",
+    "n": "Arroz de Frijol"
+   },
+   {
+    "c": "AR04",
+    "n": "Arroz de Zanahoria"
+   },
+   {
+    "c": "AR05",
+    "n": "Arroz de Pimenton"
+   }
+  ],
+  "asado": [
+   {
+    "c": "AS01",
+    "n": "Asado de cerdo"
+   },
+   {
+    "c": "AS02",
+    "n": "Asado de pechuga"
+   },
+   {
+    "c": "AS03",
+    "n": "Asado de Res"
+   }
+  ],
+  "acomp": [
+   {
+    "c": "AC01",
+    "n": "Patacones"
+   },
+   {
+    "c": "AC02",
+    "n": "Tajada madura"
+   },
+   {
+    "c": "AC03",
+    "n": "Yuca Cocida"
+   }
+  ],
+  "proteina": [
+   {
+    "c": "PT01",
+    "n": "Pollo en salsa BBQ"
+   },
+   {
+    "c": "PT02",
+    "n": "Pollo Guisado en zumo de coco"
+   },
+   {
+    "c": "PT03",
+    "n": "Pollo en salsa de tomate"
+   },
+   {
+    "c": "PT04",
+    "n": "Pollo Frito"
+   },
+   {
+    "c": "PT05",
+    "n": "Pollo Guisado"
+   },
+   {
+    "c": "PT06",
+    "n": "Pollo Apanado"
+   },
+   {
+    "c": "PT07",
+    "n": "Cerdo Encebollado"
+   },
+   {
+    "c": "PT08",
+    "n": "Cerdo Guisado"
+   },
+   {
+    "c": "PT09",
+    "n": "Cerdo en Bistec"
+   },
+   {
+    "c": "PT10",
+    "n": "Chuleta en Coca Cola"
+   },
+   {
+    "c": "PT11",
+    "n": "Chuleta Frita/BBQ"
+   },
+   {
+    "c": "PT12",
+    "n": "Carne Guisada"
+   },
+   {
+    "c": "PT13",
+    "n": "Carne Desmechada"
+   },
+   {
+    "c": "PT14",
+    "n": "Carne Molida"
+   },
+   {
+    "c": "PT15",
+    "n": "Carne Goulash"
+   },
+   {
+    "c": "PT16",
+    "n": "Carne en Bistec"
+   },
+   {
+    "c": "PT17",
+    "n": "Pechuga Desmechada"
+   },
+   {
+    "c": "PT18",
+    "n": "Pechuga Apanada"
+   },
+   {
+    "c": "PT19",
+    "n": "Higado en Bistec"
+   },
+   {
+    "c": "PT20",
+    "n": "Costillas BBQ"
+   },
+   {
+    "c": "PT21",
+    "n": "Mondongo Guisado"
+   },
+   {
+    "c": "PT22",
+    "n": "Trifasico de carne y cerdo"
+   },
+   {
+    "c": "PT23",
+    "n": "Sobrebarriga guisada"
+   },
+   {
+    "c": "PT24",
+    "n": "Lengua en salsa"
+   },
+   {
+    "c": "PT25",
+    "n": "Fricache de Pescado"
+   }
+  ]
+ }
+}

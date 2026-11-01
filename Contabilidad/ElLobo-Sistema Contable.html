@@ -170,6 +170,30 @@
   .filter-btn:hover:not(.active) { border-color: var(--text2); color: var(--text); }
 
   .chart-container { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+  /* Tablero → «Resumen por día»: recuadro de altura fija (5 días a la vista) con barra de desplazamiento propia.
+     Solo lectura; no depende del rango de fechas de arriba. */
+  .resumen-dias { padding: 16px 16px 12px; }
+  .resumen-dias-scroll { --rd-fila: 34px; --rd-cabecera: 40px; overflow: auto; max-height: calc(var(--rd-cabecera) + var(--rd-fila) * 5 + 2px);
+    border: 1px solid var(--border); border-radius: var(--radius-sm); -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .resumen-dias-tabla { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .resumen-dias-tabla th { position: sticky; top: 0; z-index: 1; background: var(--surface2); height: calc(var(--rd-cabecera) / 2); padding: 0 4px; line-height: 1.1;
+    font-size: 9px; letter-spacing: 0; text-transform: none; font-family: inherit; font-weight: 600; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  .resumen-dias-tabla th[rowspan] { height: var(--rd-cabecera); }
+  .resumen-dias-tabla tr:nth-child(2) th { top: calc(var(--rd-cabecera) / 2); }
+  .resumen-dias-tabla th.rd-grupo { text-align: center; letter-spacing: 0.6px; font-size: 8.5px; }
+  .resumen-dias-tabla th.rd-g-ing { color: var(--green); }
+  .resumen-dias-tabla th.rd-g-egr { color: var(--red); }
+  .resumen-dias-tabla th:first-child, .resumen-dias-tabla td:first-child { text-align: left; }
+  .resumen-dias-tabla td { height: var(--rd-fila); padding: 0 4px; text-align: right; white-space: nowrap; box-sizing: border-box; }
+  .resumen-dias-tabla td.rd-dia { color: var(--text); font-weight: 500; }
+  .resumen-dias-tabla td.rd-cero { color: var(--text3); }
+  .resumen-dias-tabla td.rd-ing { color: var(--green); }
+  .resumen-dias-tabla td.rd-egr { color: var(--red); }
+  .resumen-dias-nota { font-size: 10.5px; color: var(--text3); margin-top: 8px; line-height: 1.4; }
+  .resumen-dias-tabla tr.rd-sin-cerrar td:first-child { color: var(--orange); box-shadow: inset 3px 0 0 var(--orange); padding-left: 8px; }
+  @media(max-width:600px) { .resumen-dias { padding: 12px 8px 10px; } .resumen-dias-tabla { font-size: 10px; }
+    .resumen-dias-tabla th { font-size: 8.5px; } .resumen-dias-tabla th, .resumen-dias-tabla td { padding-left: 2px; padding-right: 2px; }
+    .resumen-dias-tabla tr.rd-sin-cerrar td:first-child { padding-left: 6px; } }
   .chart-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--text2); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
   .chart-scale-row { display: grid; grid-template-columns: 40px 1fr; gap: 8px; align-items: start; }
   .chart-yaxis { position: relative; height: 100px; }
@@ -433,6 +457,9 @@
   .cfgcat-barra { display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: space-between; align-items: center; margin-top: 12px; }
   .cfgcat-acciones { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .cfgcat-contador { font-size: 12px; color: var(--accent); }
+  .cfgpla-lista { margin-top: 14px; }
+  .cfgpla-titulo { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+  .cfgpla-aviso { margin-top: 6px; padding: 7px 10px; font-size: 12px; line-height: 1.45; color: var(--text2); background: var(--surface2, rgba(255,255,255,.04)); border-left: 3px solid var(--accent); border-radius: 4px; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -552,6 +579,30 @@
       <div class="kpi-card blue"><div class="kpi-label">Ticket promedio</div><div class="kpi-value" id="kpi-ticket">$0</div><div class="kpi-sub">Solo almuerzos — ingresos ÷ pedidos</div></div>
       <div class="kpi-card purple"><div class="kpi-label">Promedio por día</div><div class="kpi-value" id="kpi-promedio">$0</div><div class="kpi-sub">Ingresos ÷ días con ventas</div></div>
       <div class="kpi-card orange"><div class="kpi-label">Bajo stock</div><div class="kpi-value" id="kpi-stock">0</div><div class="kpi-sub">Productos por reabastecer</div></div>
+    </div>
+
+    <div class="chart-container resumen-dias" id="resumen-dias-caja">
+      <div class="chart-title" style="margin-bottom:10px;">📅 Resumen por día</div>
+      <div class="resumen-dias-scroll" id="resumen-dias-scroll" tabindex="0" role="region" aria-label="Resumen de ingresos y egresos de cada día, de más reciente a más antiguo">
+        <table class="resumen-dias-tabla">
+          <thead>
+            <tr>
+              <th rowspan="2">Día</th>
+              <th class="rd-grupo rd-g-ing" colspan="2">INGRESOS</th>
+              <th class="rd-grupo rd-g-egr" colspan="2">EGRESOS</th>
+              <th rowspan="2" title="Ingresos − Egresos del día">Resultado</th>
+            </tr>
+            <tr>
+              <th title="Ventas de pedidos (efectivo + transferencia + ajuste del cierre), sin contar los abonos">Pedidos</th>
+              <th title="Fiados cobrados (abonos) dentro del cierre de ese día">Abonos</th>
+              <th title="Gastos registrados en el cierre del turno (no cuenta préstamos)">Turno</th>
+              <th title="Egresos registrados a mano en la pestaña Egresos">Manual</th>
+            </tr>
+          </thead>
+          <tbody id="resumen-dias-body"></tbody>
+        </table>
+      </div>
+      <div class="resumen-dias-nota" id="resumen-dias-nota"></div>
     </div>
 
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
@@ -1540,7 +1591,7 @@
         </div>
         <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
       </div>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th title="Abonos de fiado recibidos en ese turno — ya están dentro de Efectivo/Transf.">Abonos fiado</th><th>Gastos</th><th title="Almuerzos que comió la familia sin pagar (solo cierres de almuerzo)">Familia</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Turno</th><th>Efectivo</th><th>Transf.</th><th title="Abonos de fiado recibidos en ese turno — ya están dentro de Efectivo/Transf.">Abonos fiado</th><th>Gastos</th><th id="dd-th-familia" title="Almuerzos que comió la familia sin pagar (solo cierres de almuerzo)">Familia</th><th>Resultado</th><th></th></tr></thead><tbody id="dd-historial-body"></tbody></table></div>
     </div>
   </div>
 </section>
@@ -1739,6 +1790,8 @@
     <div id="config-catalogos"></div>
     <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin:22px 0 8px;">🧾 Egresos y cuentas</div>
     <div id="config-egresos"></div>
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin:22px 0 8px;">🍲 Menú</div>
+    <div id="config-platos"></div>
     <div class="panel">
       <div class="panel-header"><div class="panel-title">🕘 Historial de cambios</div></div>
       <div class="panel-body" id="config-historial"></div>
@@ -1890,7 +1943,7 @@
     </div>
 
     <div id="cierremanual-contenido" style="display:none;">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Úsalo solo si el sistema no se pudo usar ese día y las cuentas se llevaron aparte — escribe las ventas y los gastos directamente, sin depender de pedidos registrados. Estos valores mandan sobre cualquier pedido suelto que exista para ese día: en Ingresos, Tablero y Caja siempre se usa lo que escribas aquí, no lo que sumen los pedidos.</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;">Úsalo cuando el turno no quedó completo en el sistema (por ejemplo, te fuiste a mitad del turno, o el sistema no se pudo usar ese día): abajo ves lo que el sistema YA tiene de ese turno y escribes los totales reales de efectivo y transferencia. Los gastos son los mismos del turno: los que ya registraste aparecen en la lista y no hace falta volver a escribirlos. Estos valores mandan sobre cualquier pedido suelto de ese día: en Ingresos, Tablero y Caja siempre se usa lo que dejes aquí.</div>
 
       <div class="alert ok" id="cm-modo-edicion" style="display:none;margin-bottom:14px;">
         <div style="flex:1;">✏️ Corrigiendo el cierre manual guardado — cambia lo que haga falta y guarda.</div>
@@ -1899,7 +1952,7 @@
 
       <div class="form-group mb">
         <label>Fecha a cerrar</label>
-        <input type="date" id="cm-fecha">
+        <input type="date" id="cm-fecha" oninput="cambioFechaTurnoCierreManual()">
       </div>
 
       <div class="form-group mb">
@@ -1910,13 +1963,34 @@
         </div>
       </div>
 
+      <!-- Ya hay un cierre guardado para esa fecha/turno (lo pinta renderPanelSistemaCierreManual) -->
+      <div id="cm-aviso-existente" style="display:none;"></div>
+      <!-- Solo lectura: lo que el sistema YA tiene de ese turno (pedidos, desayuno, abonos, fiados, gastos) -->
+      <div id="cm-sistema" style="background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;"></div>
+
       <div class="form-group mb">
-        <label>Efectivo ($)</label>
-        <input type="text" inputmode="numeric" id="cm-efectivo" placeholder="0" oninput="formatMilesInput(this)">
+        <label>Efectivo ($) <span style="color:var(--text3);font-weight:400;">— total real del turno (incluye lo que ya tiene el sistema)</span></label>
+        <input type="text" inputmode="numeric" id="cm-efectivo" placeholder="0" oninput="formatMilesInput(this); marcarTocadoCierreManual('ef'); actualizarComparativoCierreManual(); actualizarResumenCierreManual()">
       </div>
       <div class="form-group mb">
-        <label>Transferencia ($)</label>
-        <input type="text" inputmode="numeric" id="cm-transferencia" placeholder="0" oninput="formatMilesInput(this)">
+        <label>Transferencia ($) <span style="color:var(--text3);font-weight:400;">— total real del turno (incluye lo que ya tiene el sistema)</span></label>
+        <input type="text" inputmode="numeric" id="cm-transferencia" placeholder="0" oninput="formatMilesInput(this); marcarTocadoCierreManual('tr'); actualizarComparativoCierreManual(); actualizarResumenCierreManual()">
+      </div>
+      <div id="cm-comparativo" style="font-size:11px;margin:-6px 0 14px;"></div>
+
+      <!-- Mismas tres cifras que muestra el cierre normal; se recalculan al escribir (ver actualizarResumenCierreManual). -->
+      <div class="monto-display" style="background:rgba(76,175,125,0.07);border-color:rgba(76,175,125,0.25);">
+        <div class="monto-val" id="cm-total-turno" style="color:var(--green);">$0</div>
+        <div class="monto-label">Total del turno (efectivo + transferencia)</div>
+      </div>
+      <div class="monto-display" style="margin-top:10px;">
+        <div class="monto-val" id="cm-resultado">$0</div>
+        <div class="monto-label">Utilidad del turno (ingresos − gastos)</div>
+      </div>
+      <div class="monto-display" style="margin:10px 0 14px;background:rgba(91,155,213,0.07);border-color:rgba(91,155,213,0.25);">
+        <div class="monto-val" id="cm-caja-esperada" style="color:var(--blue);">$0</div>
+        <div class="monto-label">Caja esperada en efectivo al cierre <span style="color:var(--text3);">(Después de préstamos)</span></div>
+        <div id="cm-caja-detalle" style="font-size:11px;color:var(--text3);margin-top:4px;text-transform:none;letter-spacing:0;"></div>
       </div>
       <!-- Solo turno ALMUERZO (ver seleccionarTurnoCierreManual). Opcional: vacío = "no registrado" (NULL). -->
       <div class="form-group mb" id="cm-platos-familia-wrap">
@@ -1926,6 +2000,7 @@
       </div>
       <div class="divider"></div>
 
+      <div style="font-size:12px;color:var(--text2);margin-bottom:10px;"><strong>Gastos del turno</strong> — son los mismos de la pestaña Cierre. Los que ya estaban registrados salen abajo (marcados «registrado»): no los vuelvas a escribir. Aquí solo agrega los que falten o quita los que sobren.</div>
       <div class="form-group mb">
         <label>Categoría del gasto</label>
         <select id="cm-gasto-cat" data-categorias="cierre:form"></select>
@@ -2179,28 +2254,65 @@
 // BLOQUE 1 — Variables globales, Supabase REST y utilidades
 // ══════════════════════════════════════════════════════════════════════
 
-// ── Catálogos de platos ────────────────────────────────────────────────
-const PL = {
-  sopa:[{c:'SP01',n:'Sopa de Hueso'},{c:'SP02',n:'Sopa de Queso'},{c:'SP03',n:'Sopa de Frijol'},
-        {c:'SP04',n:'Sopa de Lenteja'},{c:'SP05',n:'Sopa de Pescado'},{c:'SP06',n:'Sopa de Verduras'},
-        {c:'SP07',n:'Sopa de Garbanzos'},{c:'SP08',n:'Sopa de Arvejas'},{c:'SP09',n:'Sopa de Pollo'}],
-  arroz:[{c:'AR01',n:'Arroz Blanco'},{c:'AR02',n:'Arroz de Coco'},{c:'AR03',n:'Arroz de Frijol'},
-         {c:'AR04',n:'Arroz de Zanahoria'},{c:'AR05',n:'Arroz de Pimenton'}],
-  asado:[{c:'AS01',n:'Asado de cerdo'},{c:'AS02',n:'Asado de pechuga'},{c:'AS03',n:'Asado de Res'}],
-  acomp:[{c:'AC01',n:'Patacones'},{c:'AC02',n:'Tajada madura'},{c:'AC03',n:'Yuca Cocida'}],
-  proteina:[
-    {c:'PT01',n:'Pollo en salsa BBQ'},{c:'PT02',n:'Pollo Guisado en zumo de coco'},
-    {c:'PT03',n:'Pollo en salsa de tomate'},{c:'PT04',n:'Pollo Frito'},{c:'PT05',n:'Pollo Guisado'},
-    {c:'PT06',n:'Pollo Apanado'},{c:'PT07',n:'Cerdo Encebollado'},{c:'PT08',n:'Cerdo Guisado'},
-    {c:'PT09',n:'Cerdo en Bistec'},{c:'PT10',n:'Chuleta en Coca Cola'},{c:'PT11',n:'Chuleta Frita/BBQ'},
-    {c:'PT12',n:'Carne Guisada'},{c:'PT13',n:'Carne Desmechada'},{c:'PT14',n:'Carne Molida'},
-    {c:'PT15',n:'Carne Goulash'},{c:'PT16',n:'Carne en Bistec'},{c:'PT17',n:'Pechuga Desmechada'},
-    {c:'PT18',n:'Pechuga Apanada'},{c:'PT19',n:'Higado en Bistec'},{c:'PT20',n:'Costillas BBQ'},
-    {c:'PT21',n:'Mondongo Guisado'},{c:'PT22',n:'Trifasico de carne y cerdo'},
-    {c:'PT23',n:'Sobrebarriga guisada'},{c:'PT24',n:'Lengua en salsa'},{c:'PT25',n:'Fricache de Pescado'}
-  ],
-  comidaRapida: [],   // se llena con reconstruirCatalogo() desde el catálogo de Configuración (por defecto, CATALOGO_RAPIDAS_BASE)
-};
+// ── Platos del menú: los valores de El Lobo (lo que rige mientras el administrador no cambie nada) ──
+// Sopas, arroces, proteínas, acompañamientos y asados. Se editan desde ⚙️ Configuración → Platos del menú (etapa 3) y los
+// comparten el autocompletado de Pedidos y el generador de la imagen del Menú. Escritos como JSON a propósito: una prueba
+// automática compara esta lista con lo que exige sql/configuracion_etapa_3.sql. Los códigos NUNCA cambian ni se borran (un
+// plato se «retira» con activo: false), porque los pedidos viejos guardan el nombre del plato.
+const PLATOS_BASE = Object.freeze([
+  {"codigo": "SP01", "lista": "sopa", "nombre": "Sopa de Hueso", "activo": true},
+  {"codigo": "SP02", "lista": "sopa", "nombre": "Sopa de Queso", "activo": true},
+  {"codigo": "SP03", "lista": "sopa", "nombre": "Sopa de Frijol", "activo": true},
+  {"codigo": "SP04", "lista": "sopa", "nombre": "Sopa de Lenteja", "activo": true},
+  {"codigo": "SP05", "lista": "sopa", "nombre": "Sopa de Pescado", "activo": true},
+  {"codigo": "SP06", "lista": "sopa", "nombre": "Sopa de Verduras", "activo": true},
+  {"codigo": "SP07", "lista": "sopa", "nombre": "Sopa de Garbanzos", "activo": true},
+  {"codigo": "SP08", "lista": "sopa", "nombre": "Sopa de Arvejas", "activo": true},
+  {"codigo": "SP09", "lista": "sopa", "nombre": "Sopa de Pollo", "activo": true},
+  {"codigo": "AR01", "lista": "arroz", "nombre": "Arroz Blanco", "activo": true},
+  {"codigo": "AR02", "lista": "arroz", "nombre": "Arroz de Coco", "activo": true},
+  {"codigo": "AR03", "lista": "arroz", "nombre": "Arroz de Frijol", "activo": true},
+  {"codigo": "AR04", "lista": "arroz", "nombre": "Arroz de Zanahoria", "activo": true},
+  {"codigo": "AR05", "lista": "arroz", "nombre": "Arroz de Pimenton", "activo": true},
+  {"codigo": "AS01", "lista": "asado", "nombre": "Asado de cerdo", "activo": true},
+  {"codigo": "AS02", "lista": "asado", "nombre": "Asado de pechuga", "activo": true},
+  {"codigo": "AS03", "lista": "asado", "nombre": "Asado de Res", "activo": true},
+  {"codigo": "AC01", "lista": "acomp", "nombre": "Patacones", "activo": true},
+  {"codigo": "AC02", "lista": "acomp", "nombre": "Tajada madura", "activo": true},
+  {"codigo": "AC03", "lista": "acomp", "nombre": "Yuca Cocida", "activo": true},
+  {"codigo": "PT01", "lista": "proteina", "nombre": "Pollo en salsa BBQ", "activo": true},
+  {"codigo": "PT02", "lista": "proteina", "nombre": "Pollo Guisado en zumo de coco", "activo": true},
+  {"codigo": "PT03", "lista": "proteina", "nombre": "Pollo en salsa de tomate", "activo": true},
+  {"codigo": "PT04", "lista": "proteina", "nombre": "Pollo Frito", "activo": true},
+  {"codigo": "PT05", "lista": "proteina", "nombre": "Pollo Guisado", "activo": true},
+  {"codigo": "PT06", "lista": "proteina", "nombre": "Pollo Apanado", "activo": true},
+  {"codigo": "PT07", "lista": "proteina", "nombre": "Cerdo Encebollado", "activo": true},
+  {"codigo": "PT08", "lista": "proteina", "nombre": "Cerdo Guisado", "activo": true},
+  {"codigo": "PT09", "lista": "proteina", "nombre": "Cerdo en Bistec", "activo": true},
+  {"codigo": "PT10", "lista": "proteina", "nombre": "Chuleta en Coca Cola", "activo": true},
+  {"codigo": "PT11", "lista": "proteina", "nombre": "Chuleta Frita/BBQ", "activo": true},
+  {"codigo": "PT12", "lista": "proteina", "nombre": "Carne Guisada", "activo": true},
+  {"codigo": "PT13", "lista": "proteina", "nombre": "Carne Desmechada", "activo": true},
+  {"codigo": "PT14", "lista": "proteina", "nombre": "Carne Molida", "activo": true},
+  {"codigo": "PT15", "lista": "proteina", "nombre": "Carne Goulash", "activo": true},
+  {"codigo": "PT16", "lista": "proteina", "nombre": "Carne en Bistec", "activo": true},
+  {"codigo": "PT17", "lista": "proteina", "nombre": "Pechuga Desmechada", "activo": true},
+  {"codigo": "PT18", "lista": "proteina", "nombre": "Pechuga Apanada", "activo": true},
+  {"codigo": "PT19", "lista": "proteina", "nombre": "Higado en Bistec", "activo": true},
+  {"codigo": "PT20", "lista": "proteina", "nombre": "Costillas BBQ", "activo": true},
+  {"codigo": "PT21", "lista": "proteina", "nombre": "Mondongo Guisado", "activo": true},
+  {"codigo": "PT22", "lista": "proteina", "nombre": "Trifasico de carne y cerdo", "activo": true},
+  {"codigo": "PT23", "lista": "proteina", "nombre": "Sobrebarriga guisada", "activo": true},
+  {"codigo": "PT24", "lista": "proteina", "nombre": "Lengua en salsa", "activo": true},
+  {"codigo": "PT25", "lista": "proteina", "nombre": "Fricache de Pescado", "activo": true},
+  {"codigo": "PT26", "lista": "proteina", "nombre": "Pollo Frito/BBQ", "activo": true},
+  {"codigo": "PT27", "lista": "proteina", "nombre": "Pechuga en salsa", "activo": true}
+].map(Object.freeze));
+const PLATOS_LISTAS = ['sopa', 'arroz', 'proteina', 'acomp', 'asado'];
+// Vista «de hoy» que lee el autocompletado de Pedidos: solo los platos activos ({c: código, n: nombre}). Se rehace sola
+// cuando cambia la configuración (reconstruirPlatos).
+const PL = { comidaRapida: [] };   // comidaRapida se llena con reconstruirCatalogo() desde el catálogo de Configuración
+PLATOS_LISTAS.forEach(l => { PL[l] = PLATOS_BASE.filter(p => p.lista === l).map(p => ({ c: p.codigo, n: p.nombre })); });
 
 // ── Catálogos de productos: los valores de El Lobo (lo que rige mientras el administrador no cambie nada) ──
 // Se editan desde ⚙️ Configuración → Productos y precios (etapa 2). Escritos como JSON a propósito: una prueba automática
@@ -2446,7 +2558,9 @@ const CFG_DEFECTOS = Object.freeze({
   respaldo_dia_semana: 0, respaldo_rojo_dias: 10,
   negocio_nombre: 'El Lobo', negocio_emoji: '🐺',
   catalogo_almuerzos: CATALOGO_ALMUERZOS_BASE, catalogo_rapidas: CATALOGO_RAPIDAS_BASE, catalogo_extras: CATALOGO_EXTRAS_BASE,
-  categorias_egresos: CATEGORIAS_EGRESOS_BASE, nombres_cuentas: NOMBRES_CUENTAS_BASE
+  categorias_egresos: CATEGORIAS_EGRESOS_BASE, nombres_cuentas: NOMBRES_CUENTAS_BASE,
+  menu_platos: PLATOS_BASE,
+  cierre_comidas_familia: true
 });
 // Reglas de cada valor. ESPEJO de seguridad.validar_configuracion (sql/configuracion.sql): si cambia una, cambia la otra
 // (una prueba automática compara los rangos de los dos lados).
@@ -2462,7 +2576,9 @@ const CFG_REGLAS = Object.freeze({
   catalogo_rapidas:    { tipo: 'catalogo' },
   catalogo_extras:     { tipo: 'catalogo' },
   categorias_egresos:  { tipo: 'categorias' },
-  nombres_cuentas:     { tipo: 'cuentas' }
+  nombres_cuentas:     { tipo: 'cuentas' },
+  menu_platos:         { tipo: 'platos' },
+  cierre_comidas_familia: { tipo: 'booleano', nombre: 'La opción «comidas de la familia en el cierre»' }
 });
 // null = el valor sirve; si no, el texto que se le muestra a la persona.
 function cfgValidar(clave, valor) {
@@ -2471,6 +2587,8 @@ function cfgValidar(clave, valor) {
   if (r.tipo === 'catalogo') return cfgValidarCatalogo(clave, valor);
   if (r.tipo === 'categorias') return cfgValidarCategorias(valor);
   if (r.tipo === 'cuentas') return cfgValidarCuentas(valor);
+  if (r.tipo === 'platos') return cfgValidarPlatos(valor);
+  if (r.tipo === 'booleano') return typeof valor === 'boolean' ? null : `${r.nombre} debe ser sí o no (verdadero o falso).`;
   if (r.tipo === 'entero') {
     if (typeof valor !== 'number' || !Number.isFinite(valor)) return `${r.nombre} debe ser un número.`;
     if (!Number.isInteger(valor) || valor < r.min || valor > r.max) return `${r.nombre} debe ser un número entero entre ${r.min.toLocaleString('es-CO')} y ${r.max.toLocaleString('es-CO')}.`;
@@ -2517,6 +2635,9 @@ const recargoParaLlevar = instante => (instante === undefined ? CFG.v('recargo_p
 const valorEmpaque = instante => (instante === undefined ? CFG.v('empaque_domicilio') : CFG.en('empaque_domicilio', instante));
 const nombreNegocio = () => CFG.v('negocio_nombre');
 const emojiNegocio = () => CFG.v('negocio_emoji');
+// ¿El cierre del almuerzo pide las «comidas de la familia»? Sin nada guardado, sí (como siempre en El Lobo). Es un interruptor de
+// pantalla: lo ya guardado en cierres_dia.platos_familia no se borra ni se cambia nunca.
+const pedirComidasFamilia = () => CFG.v('cierre_comidas_familia') !== false;
 
 // ── Catálogos de productos y precios (etapa 2) ─────────────────────────────
 // Los almuerzos, las comidas rápidas / bebidas / adicionales y los productos extra salen de la configuración (claves
@@ -2808,6 +2929,121 @@ function categoriasYCuentasAlDia() {
   poblarCategoriasEnDOM();
   aplicarCuentasEnDOM();
   return true;
+}
+
+// ── Platos del menú (etapa 3) ──────────────────────────────────────────────────────────────────────────────────
+// Sopas, arroces, proteínas, acompañamientos y asados salen de la configuración (clave menu_platos: cada guardado es una
+// versión completa, con «vigente desde»). Es UNA sola lista que comparten el autocompletado de Pedidos y el generador de la
+// imagen del Menú. Cada plato tiene un CÓDIGO que no cambia nunca (SP sopa · AR arroz · PT proteína · AC acompañamiento ·
+// AS asado, más 2 o 3 números) y un NOMBRE que sí se puede cambiar. Un plato no se borra: se retira (activo: false).
+// Los pedidos guardan el plato como TEXTO (su nombre de ese día), y no se modifican nunca. Para que renombrar un plato no
+// parta la estadística en dos, los reportes leen cada texto con crearResolvedorPlatos(): lo llevan al plato que nombraba
+// cuando se tomó el pedido y lo cuentan con el nombre de HOY.
+const PLATO_PREFIJO = { sopa: 'SP', arroz: 'AR', proteina: 'PT', acomp: 'AC', asado: 'AS' };
+const PLATO_LISTA_NOMBRE = { sopa: 'Sopas', arroz: 'Arroces', proteina: 'Proteínas', acomp: 'Acompañamientos', asado: 'Asados' };
+const PLATO_LISTA_ICONO = { sopa: '🍲', arroz: '🍚', proteina: '🥩', acomp: '🍟', asado: '🔥' };
+const PLATOS_MAX = 300;
+// En qué campo del pedido se guarda el plato de cada lista (los asados van en el mismo campo que las proteínas).
+const platoCampo = lista => (lista === 'asado' ? 'proteina' : lista);
+
+// ESPEJO de seguridad.validar_menu_platos (sql/configuracion_etapa_3.sql): null = sirve; si no, el texto para la persona.
+function cfgValidarPlatos(valor) {
+  const que = 'La lista de platos del menú';
+  if (!Array.isArray(valor)) return `${que} debe ser una lista.`;
+  const n = valor.length;
+  if (n < PLATOS_BASE.length || n > PLATOS_MAX) return `${que} trae ${n} platos y esa cantidad no es válida.`;
+  const codigos = new Set(), nombres = new Set();
+  const largo = s => [...s].length;
+  const sinEspaciosBorde = s => s.replace(/^ +| +$/g, '');         // como btrim() de la base: solo espacios
+  for (const it of valor) {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return `${que} trae un plato mal formado.`;
+    if (Object.keys(it).sort().join(',') !== 'activo,codigo,lista,nombre') return `${que} trae un plato con campos que no corresponden.`;
+    if (typeof it.nombre !== 'string') return 'El nombre de cada plato debe ser un texto.';
+    const nom = it.nombre;
+    if (largo(nom) < 1 || largo(nom) > 50 || nom !== sinEspaciosBorde(nom)) return 'El nombre de cada plato debe tener entre 1 y 50 caracteres, sin espacios al principio ni al final.';
+    if (CAT_PROHIBIDOS.test(nom)) return 'Los nombres no pueden llevar los caracteres < > & " \' ` \\ (ni caracteres de control).';
+    if (typeof it.lista !== 'string' || !PLATOS_LISTAS.includes(it.lista)) return `La lista de "${nom}" no es válida (sopa, arroz, proteina, acomp o asado).`;
+    const pref = PLATO_PREFIJO[it.lista];
+    if (typeof it.codigo !== 'string') return `El código de "${nom}" debe ser un texto.`;
+    if (!new RegExp('^' + pref + '[0-9]{2,3}$').test(it.codigo)) return `El código "${it.codigo}" no sirve para la lista ${it.lista}: debe ser ${pref} seguido de 2 o 3 números.`;
+    if (codigos.has(it.codigo)) return `El código "${it.codigo}" está repetido.`;
+    codigos.add(it.codigo);
+    const clave = platoCampo(it.lista) + ':' + nom.toLowerCase();
+    if (nombres.has(clave)) return `El plato "${nom}" está repetido en su lista.`;
+    nombres.add(clave);
+    if (typeof it.activo !== 'boolean') return `"${nom}" debe estar activo o retirado (verdadero o falso).`;
+  }
+  if (PLATOS_BASE.some(b => !codigos.has(b.codigo))) return `${que} no puede quitar platos de El Lobo: se retiran, no se borran.`;
+  return null;
+}
+
+// Todos los platos (también los retirados) tal como regían en `instante`: {codigo, lista, nombre, activo}. Sin instante, los de hoy.
+const platosEn = instante => CFG.en('menu_platos', instante);
+
+// Rehace PL (lo que ofrece el autocompletado de Pedidos: solo los platos activos, con el nombre de hoy) en el mismo lugar.
+function reconstruirPlatos() {
+  const hoy = platosEn();
+  PLATOS_LISTAS.forEach(l => {
+    PL[l].length = 0;
+    hoy.filter(p => p.lista === l && p.activo).forEach(p => PL[l].push({ c: p.codigo, n: p.nombre }));
+  });
+}
+
+// Le deja la lista de hoy al generador del Menú (otra página del mismo sitio). Va por el almacenamiento del navegador: así
+// funciona igual dentro de la pestaña «Menú» y en la pestaña aparte, y el generador no necesita entrar a la base de datos.
+const MENU_PLATOS_LS = 'elLobo_menu_platos';
+function publicarPlatosParaMenu() {
+  try {
+    const hoy = platosEn().filter(p => p.activo);
+    const nombres = l => hoy.filter(p => p.lista === l).map(p => p.nombre);
+    localStorage.setItem(MENU_PLATOS_LS, JSON.stringify({ v: 1, sopas: nombres('sopa'), arroces: nombres('arroz'), proteinas: nombres('proteina'), acomp: nombres('acomp') }));
+  } catch (e) { /* sin almacenamiento en el navegador (p. ej. modo privado): el generador usa la lista de siempre */ }
+}
+
+// Si la configuración trae platos distintos a los que están en uso, rehace PL y se los deja al generador. Barato: compara una
+// firma de las versiones guardadas. Devuelve true si cambió algo.
+let firmaPlatos = null;
+function platosAlDia() {
+  // La firma distingue «aún sin datos» (null) de «datos sin platos guardados» ([]): al llegar los datos hay que publicar aunque
+  // la lista siga siendo la de siempre.
+  const firma = Array.isArray(ST.configuracion)
+    ? 'datos:' + ST.configuracion.filter(f => f && f.clave === 'menu_platos').map(f => `${f.id}@${f.vigente_desde}`).join('|') : 'sin-datos';
+  if (firma === firmaPlatos) return false;
+  firmaPlatos = firma;
+  reconstruirPlatos();
+  if (Array.isArray(ST.configuracion)) publicarPlatosParaMenu();       // antes de entrar (sin datos) no se pisa lo que ya había
+  return true;
+}
+
+// Cuándo se tomó un pedido (para saber qué nombres regían ese día). Sin hora guardada, el final de su fecha (Bogotá).
+function instanteDePedido(p) {
+  if (p && p.created_at && !Number.isNaN(Date.parse(p.created_at))) return p.created_at;
+  return p && p.fecha ? `${p.fecha}T23:59:59-05:00` : undefined;
+}
+// Para los reportes: devuelve una función (campo, texto, instante) → el nombre de HOY del plato que ese texto nombraba cuando se
+// tomó el pedido. `campo` es el del pedido (sopa, arroz, proteina, acomp). Un texto que no está en la lista (escrito a mano) se
+// deja igual. No modifica ningún pedido: solo cambia cómo se cuentan.
+function crearResolvedorPlatos() {
+  const ms = f => { const x = Date.parse(f.vigente_desde); return Number.isNaN(x) ? 0 : x; };
+  const llave = (p) => platoCampo(p.lista) + ':' + p.nombre;
+  const indexar = lista => { const m = new Map(); lista.forEach(p => { if (!m.has(llave(p))) m.set(llave(p), p.codigo); }); return m; };
+  // Una entrada por versión (la de El Lobo primero): desde cuándo rige y qué código tenía cada nombre.
+  const versiones = [{ desde: -Infinity, mapa: indexar(CFG_DEFECTOS.menu_platos) }]
+    .concat(CFG.historial('menu_platos').filter(f => cfgValidar('menu_platos', f.valor) === null).map(f => ({ desde: ms(f), mapa: indexar(f.valor) })));
+  // Respaldo: si el texto no estaba en la lista de esa fecha, pero en toda la historia solo nombra a UN plato, es ese.
+  const historia = new Map();
+  versiones.forEach(v => v.mapa.forEach((cod, k) => { if (!historia.has(k)) historia.set(k, new Set()); historia.get(k).add(cod); }));
+  const hoy = new Map(platosEn().map(p => [p.codigo, p.nombre]));
+  return (campo, texto, instante) => {
+    if (texto == null || texto === '') return texto;
+    const t = instante == null || instante === '' ? NaN : (typeof instante === 'number' ? instante : new Date(instante).getTime());
+    let v = versiones.length - 1;
+    if (!Number.isNaN(t)) { v = 0; for (let i = versiones.length - 1; i >= 0; i--) if (versiones[i].desde <= t) { v = i; break; } }
+    const k = campo + ':' + texto;
+    let codigo = versiones[v].mapa.get(k);
+    if (!codigo) { const posibles = historia.get(k); if (posibles && posibles.size === 1) codigo = [...posibles][0]; }
+    return (codigo && hoy.get(codigo)) || texto;
+  };
 }
 
 // "Para llevar" aplica a mesas y a "sin mesa" (cliente esperando de pie), no a domicilio/fiado
@@ -4424,6 +4660,7 @@ function exportarExcelCompleto() {
   // Categorías de egresos de hoy (código → grupo): el modelo financiero las lee para saber en qué rubro va cada una, también las que se creen.
   addSheet('Categorias_Egresos', CFG.v('categorias_egresos'));
   addSheet('Nombres_Cuentas', CFG.v('nombres_cuentas'));
+  addSheet('Menu_Platos', CFG.v('menu_platos'));
   // platos_familia (almuerzos de la familia) se fuerza como columna aunque
   // ningún cierre la traiga todavía (migración sin correr), para que el
   // esquema del Excel sea estable. Vacío = NULL = "no registrado".
@@ -5029,6 +5266,7 @@ function onHoraChange() {
 pintarTurnoManual();
 catalogoAlDia();          // arma PRECIOS / LABELS / catálogo desde la configuración (por ahora, los valores de El Lobo)
 categoriasYCuentasAlDia(); // categorías de egresos y nombres de cuentas (listas del formulario)
+platosAlDia();                // platos del menú (autocompletado de Pedidos y generador del Menú)
 rebuildPedidoSelect();
 // Reloj del header en tiempo real (solo visual, no toca el formulario)
 setInterval(actualizarReloj, 1000);
@@ -5213,7 +5451,7 @@ function doAC(tipo) {
   if (!filtered.length) { list.style.display = 'none'; return; }
   acIdx[tipo] = -1;
   list.innerHTML = filtered.map(p =>
-    `<div class="autocomplete-item" data-v="${p.n}" onmousedown="pickAC(event,'${tipo}','${p.n.replace(/'/g,"\\'")}')"><span>${p.n}</span><span class="item-code">${p.c}</span></div>`
+    `<div class="autocomplete-item" data-v="${escaparHtml(p.n)}" onmousedown="pickAC(event,'${tipo}','${p.n.replace(/'/g,"\\'")}')"><span>${escaparHtml(p.n)}</span><span class="item-code">${escaparHtml(p.c)}</span></div>`
   ).join('');
   list.style.display = 'block';
 }
@@ -5406,7 +5644,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   // almuerzo — ver aplicarReglaGratisPorTurno()). En almuerzo la familia se
   // anota por cantidad al cerrar el turno, no como pedido.
   if (selectedUbicacion === 'gratis' && turno === 'almuerzo') {
-    showToast('⚠ "Gratis" no existe en almuerzo — anota los almuerzos de la familia en el cierre del turno', 'warning');
+    showToast(pedirComidasFamilia() ? '⚠ "Gratis" no existe en almuerzo — anota los almuerzos de la familia en el cierre del turno' : '⚠ "Gratis" no existe en almuerzo', 'warning');
     return;
   }
 
@@ -7984,10 +8222,19 @@ function avisarSiNoEsAdmin(que) {
 // ── Cierre manual: respaldo por si el sistema no se pudo usar ese día y las
 // cuentas se llevaron aparte. Solo administrador. ──
 let cierreManualTurno = 'almuerzo';
-// Gastos categorizados en cola, en memoria, hasta que se pulse "Guardar cierre
-// manual" — ahí se insertan como filas reales en gastos_dia (igual que
-// agregarGastoDia()), para que sumen correctamente en Egresos y el Tablero.
+// Los gastos de un cierre manual son LOS MISMOS gastos_dia del turno (los de
+// la pestaña Cierre y Egresos): el formulario muestra los que ya están
+// registrados y trabaja solo con la DIFERENCIA, así nada se duplica ni se pisa.
+//  · cierreManualGastos: gastos NUEVOS en cola, en memoria, hasta pulsar
+//    "Guardar" — ahí se insertan como filas reales en gastos_dia (igual que
+//    agregarGastoDia()), para que sumen correctamente en Egresos y el Tablero.
+//  · cierreManualGastosQuitar: ids de gastos ya registrados que se marcaron
+//    para quitar al guardar.
 let cierreManualGastos = [];
+let cierreManualGastosQuitar = new Set();
+// ¿Ya se escribió a mano el efectivo / la transferencia? Si no, al cambiar de
+// fecha o turno se vuelven a precargar con lo que ya tiene el sistema.
+let cierreManualTocado = { ef: false, tr: false };
 // Cierre que se está corrigiendo ({fecha,turno}) o null si es uno nuevo desde
 // cero. Se usa en guardarCierreManual() para saber si hay que reemplazar los
 // gastos_dia viejos de ese turno en vez de sumar encima de ellos.
@@ -8040,31 +8287,37 @@ function cancelarEdicionCierreManual() {
 }
 
 // cierreExistente: si se está corrigiendo un cierre manual ya guardado, sus
-// valores (y sus gastos_dia reales) se precargan aquí; si es null, el
-// formulario queda en blanco para uno nuevo.
+// valores se precargan aquí; si es null, es un cierre nuevo: el formulario
+// arranca con lo que el sistema YA tiene de ese turno (para completarlo, no
+// para empezar de cero). Los gastos NO se copian a ninguna cola: se muestran
+// directamente los gastos_dia reales del turno (ver renderGastosCierreManual).
 function prepararFormCierreManual(cierreExistente = null) {
   cierreManualEditando = cierreExistente ? { fecha: cierreExistente.fecha, turno: cierreExistente.turno } : null;
 
-  document.getElementById('cm-fecha').value = cierreExistente ? cierreExistente.fecha : today();
+  // Día de negocio (no el del calendario): después de la medianoche, pero antes de las 9:00, el turno que se cierra
+  // todavía es el de ayer.
+  document.getElementById('cm-fecha').value = cierreExistente ? cierreExistente.fecha : diaNegocio();
   // La fecha y el turno de un cierre ya guardado no se pueden cambiar desde
   // acá — cambiarlos equivaldría a corregir OTRO cierre distinto. Para eso
   // está "➕ Nuevo en vez de esto".
   document.getElementById('cm-fecha').disabled = !!cierreExistente;
-  document.getElementById('cm-efectivo').value = cierreExistente ? Number(cierreExistente.efectivo || 0).toLocaleString('es-CO') : '';
-  document.getElementById('cm-transferencia').value = cierreExistente ? Number(cierreExistente.transferencia || 0).toLocaleString('es-CO') : '';
   // Vacío si es un cierre nuevo o si el cierre guardado tiene NULL ("no registrado").
   document.getElementById('cm-platos-familia').value = (cierreExistente && cierreExistente.platos_familia != null) ? cierreExistente.platos_familia : '';
   document.getElementById('cm-gasto-monto').value = '';
   document.getElementById('cm-gasto-nombre').value = '';
   document.getElementById('cm-gasto-cat').selectedIndex = 0;
-  cierreManualTurno = cierreExistente ? cierreExistente.turno : 'almuerzo';
-  // Los gastos reales de ese turno (insertados la vez que se guardó) se
-  // precargan en la cola para poder editarlos/quitarlos — al guardar se
-  // reemplazan por completo con lo que quede en la cola (ver guardarCierreManual).
-  cierreManualGastos = cierreExistente
-    ? ST.gastosDia.filter(g => g.fecha === cierreExistente.fecha && g.turno === cierreExistente.turno)
-        .map(g => ({ categoria: g.categoria, monto: g.monto, nombre: g.nombre }))
-    : [];
+  cierreManualTurno = cierreExistente ? cierreExistente.turno : (turnoManual === 'cena' ? 'cena' : 'almuerzo');
+  cierreManualGastos = [];
+  cierreManualGastosQuitar = new Set();
+  cierreManualTocado = { ef: !!cierreExistente, tr: !!cierreExistente };
+  if (cierreExistente) {
+    document.getElementById('cm-efectivo').value = Number(cierreExistente.efectivo || 0).toLocaleString('es-CO');
+    document.getElementById('cm-transferencia').value = Number(cierreExistente.transferencia || 0).toLocaleString('es-CO');
+  } else {
+    document.getElementById('cm-efectivo').value = '';
+    document.getElementById('cm-transferencia').value = '';
+    precargarTotalesCierreManual();
+  }
   pintarTurnoCierreManual();
   const btnAlm = document.getElementById('cm-btn-almuerzo');
   const btnCena = document.getElementById('cm-btn-cena');
@@ -8075,6 +8328,8 @@ function prepararFormCierreManual(cierreExistente = null) {
     b.style.cursor = cierreExistente ? 'not-allowed' : '';
   });
   renderGastosCierreManual();
+  renderPanelSistemaCierreManual();
+  actualizarComparativoCierreManual();
 
   const modoEl = document.getElementById('cm-modo-edicion');
   if (modoEl) modoEl.style.display = cierreExistente ? 'flex' : 'none';
@@ -8085,6 +8340,45 @@ function prepararFormCierreManual(cierreExistente = null) {
 function seleccionarTurnoCierreManual(t) {
   cierreManualTurno = t;
   pintarTurnoCierreManual();
+  cambioFechaTurnoCierreManual();
+}
+
+// Al cambiar la fecha o el turno (cierre nuevo): se vuelve a leer todo lo que el
+// sistema tiene de ESE turno — panel, gastos registrados y, si aún no se escribió
+// nada, los totales. Los gastos nuevos en cola se conservan.
+function cambioFechaTurnoCierreManual() {
+  cierreManualGastosQuitar = new Set();       // los ids son de la fecha/turno anterior
+  precargarTotalesCierreManual();
+  renderGastosCierreManual();
+  renderPanelSistemaCierreManual();
+  actualizarComparativoCierreManual();
+}
+
+function marcarTocadoCierreManual(cual) {
+  cierreManualTocado[cual] = true;
+}
+
+// Pone en efectivo/transferencia lo que el sistema ya suma de ese turno
+// (pedidos pagados + desayuno + abonos de fiado). Sin `forzar`, respeta lo que
+// ya se haya escrito a mano; con `forzar` (botón «Usar lo del sistema») lo reemplaza.
+function precargarTotalesCierreManual(forzar = false) {
+  if (cierreManualEditando && !forzar) return;     // corrigiendo: mandan los valores guardados
+  const fecha = document.getElementById('cm-fecha').value;
+  if (!fecha) return;
+  const v = calcularVentasFijas(fecha, cierreManualTurno);
+  const poner = (id, valor, clave) => {
+    if (!forzar && cierreManualTocado[clave]) return;
+    document.getElementById(id).value = valor ? Number(valor).toLocaleString('es-CO') : '';
+    if (forzar) cierreManualTocado[clave] = false;
+  };
+  poner('cm-efectivo', v.efectivo, 'ef');
+  poner('cm-transferencia', v.transferencia, 'tr');
+}
+
+function usarSistemaCierreManual() {
+  precargarTotalesCierreManual(true);
+  actualizarComparativoCierreManual();
+  actualizarResumenCierreManual();
 }
 
 function pintarTurnoCierreManual() {
@@ -8093,7 +8387,143 @@ function pintarTurnoCierreManual() {
   // El campo de almuerzos de la familia solo existe en el turno de almuerzo
   // (en comida rápida el consumo gratis va en pesos, con el pedido "Gratis").
   const platosWrap = document.getElementById('cm-platos-familia-wrap');
-  if (platosWrap) platosWrap.style.display = cierreManualTurno === 'almuerzo' ? '' : 'none';
+  if (platosWrap) platosWrap.style.display = cierreManualTurno === 'almuerzo' && pedirComidasFamilia() ? '' : 'none';
+}
+
+// Gastos que YA están registrados en el sistema para la fecha/turno que muestra el formulario.
+function gastosRegistradosCierreManual() {
+  const fecha = document.getElementById('cm-fecha').value;
+  return fecha ? ST.gastosDia.filter(g => g.fecha === fecha && g.turno === cierreManualTurno) : [];
+}
+
+// Todo lo que el sistema ya tiene de una fecha/turno, para mostrarlo (solo lectura) en el cierre manual:
+// lo mismo que suma el cierre normal (calcularVentasFijas) más los fiados del turno, que NO son plata recibida.
+function resumenSistemaTurno(fecha, turno) {
+  const v = calcularVentasFijas(fecha, turno);
+  const delTurno = lista => lista.filter(p => p.fecha === fecha && p.turno === turno);
+  const contar = filas => ({
+    pedidos: new Set(filas.map(p => p.grupo_pedido || `legacy-${p.id}`)).size,
+    monto: filas.reduce((a, p) => a + (p.monto_total || 0), 0),
+  });
+  return {
+    ...v,
+    pedidosEfectivo:      v.efectivo      - v.ventaDesayunoEfectivo      - v.abonosEfectivo,
+    pedidosTransferencia: v.transferencia - v.ventaDesayunoTransferencia - v.abonosTransferencia,
+    fiadosPendientes: contar(delTurno(ST.pendientes).filter(p => p.es_fiar === true)),
+    fiadosCobrados:   contar(delTurno(ST.ingresos).filter(cobradoViaAbonos)),
+    sinCobrar:        contar(delTurno(ST.pendientes).filter(p => p.es_fiar !== true && !p.es_gratis)),
+  };
+}
+
+// Panel de solo lectura: lo que el sistema ya tiene del turno que se está cerrando + aviso si ya existe un cierre guardado.
+function renderPanelSistemaCierreManual() {
+  const cont = document.getElementById('cm-sistema');
+  const aviso = document.getElementById('cm-aviso-existente');
+  if (!cont) return;
+  const fecha = document.getElementById('cm-fecha').value;
+  const turno = cierreManualTurno;
+  if (aviso) { aviso.style.display = 'none'; aviso.innerHTML = ''; }
+  if (!fecha) {
+    cont.innerHTML = '<div style="font-size:12px;color:var(--text3);">Elige la fecha para ver lo que el sistema ya tiene de ese turno.</div>';
+    return;
+  }
+
+  // ¿Ya hay un cierre guardado para esa fecha/turno (y no es el que se está corrigiendo)?
+  const guardado = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
+  const esElQueSeCorrige = !!(cierreManualEditando && cierreManualEditando.fecha === fecha && cierreManualEditando.turno === turno);
+  if (aviso && guardado && !esElQueSeCorrige) {
+    aviso.innerHTML = guardado.manual
+      ? `<div class="alert info" style="margin-bottom:14px;"><div style="flex:1;">✍️ Ya hay un <strong>cierre manual</strong> guardado para este turno. Si guardas, lo reemplazas.</div><button type="button" class="btn btn-outline" style="font-size:11px;" onclick="abrirCierreManualExistente()">✏️ Corregir ese cierre</button></div>`
+      : `<div class="alert info" style="margin-bottom:14px;"><div style="flex:1;">🧾 Ya hay un <strong>cierre normal</strong> guardado para este turno (${fmt((guardado.efectivo || 0) + (guardado.transferencia || 0))}). Si guardas, lo reemplazas por este cierre manual.</div></div>`;
+    aviso.style.display = 'block';
+  }
+
+  const r = resumenSistemaTurno(fecha, turno);
+  const nombreCliente = id => escaparHtml((ST.clientesFiado.find(c => c.id === id) || {}).nombre || 'Cliente');
+  const linea = (txt, val, extra = '') => `<div class="report-line"${extra}><span>${txt}</span><strong>${val}</strong></div>`;
+  const efTr = (e, t) => `💵 ${fmt(e)} · 📲 ${fmt(t)}`;
+  const gastosReg = gastosRegistradosCierreManual();
+  const gastosRegTotal = gastosReg.filter(g => !esCatExcluida(g.categoria)).reduce((a, g) => a + g.monto, 0);
+  const nada = !r.tieneApertura && !r.efectivo && !r.transferencia && !r.fiadosPendientes.pedidos && !r.fiadosCobrados.pedidos && !r.sinCobrar.pedidos && !gastosReg.length;
+
+  const partes = [`<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px;">📋 Lo que el sistema ya tiene de este turno <span style="text-transform:none;letter-spacing:0;">(solo lectura)</span></div>`];
+  if (nada) {
+    partes.push(`<div style="font-size:12px;color:var(--text2);">El sistema no tiene nada registrado de este turno: lo que escribas abajo es el total completo.</div>`);
+  } else {
+    partes.push(linea('Caja inicial', r.tieneApertura ? fmt(r.cajaInicial) : '$0 <span style="color:var(--text3);font-weight:400;">(sin abrir turno)</span>'));
+    partes.push(linea('Ventas de pedidos pagados', efTr(r.pedidosEfectivo, r.pedidosTransferencia)));
+    if (turno === 'almuerzo') partes.push(linea('Venta de desayuno', efTr(r.ventaDesayunoEfectivo, r.ventaDesayunoTransferencia)));
+    partes.push(linea('Abonos de fiado recibidos', efTr(r.abonosEfectivo, r.abonosTransferencia)));
+    if (r.abonos.length) {
+      partes.push(`<div style="font-size:11px;color:var(--text2);margin:2px 0 6px;">${r.abonos.map(a =>
+        `📒 ${nombreCliente(a.cliente_fiado_id)} · ${a.cuenta === 'efectivo' ? '💵' : '📲'} ${fmt(a.monto)}${a.nota ? ` · ${escaparHtml(a.nota)}` : ''}`).join('<br>')}</div>`);
+    }
+    partes.push(linea('<strong>Total que el sistema suma</strong>', efTr(r.efectivo, r.transferencia), ' style="border-top:1px solid var(--border2);margin-top:4px;padding-top:6px;"'));
+    const fiados = [];
+    if (r.fiadosPendientes.pedidos) fiados.push(`${r.fiadosPendientes.pedidos} pedido(s) por ${fmt(r.fiadosPendientes.monto)} <strong>sin cobrar todavía</strong>`);
+    if (r.fiadosCobrados.pedidos)   fiados.push(`${r.fiadosCobrados.pedidos} pedido(s) por ${fmt(r.fiadosCobrados.monto)} ya cobrados con abonos`);
+    partes.push(linea('Fiados de este turno <span style="color:var(--text3);font-weight:400;">(no es plata recibida)</span>', fiados.length ? '' : 'Ninguno'));
+    if (fiados.length) partes.push(`<div style="font-size:11px;color:var(--text2);margin:-2px 0 6px;">${fiados.join('<br>')}</div>`);
+    if (r.sinCobrar.pedidos) partes.push(linea('Pedidos sin cobrar <span style="color:var(--text3);font-weight:400;">(no es plata recibida)</span>', `${r.sinCobrar.pedidos} por ${fmt(r.sinCobrar.monto)}`));
+    partes.push(linea('Gastos ya registrados <span style="color:var(--text3);font-weight:400;">(sin préstamos)</span>', gastosReg.length ? `${gastosReg.length} por ${fmt(gastosRegTotal)}` : 'Ninguno'));
+  }
+  if (r.efectivo || r.transferencia) {
+    partes.push(`<button type="button" class="btn btn-outline" style="width:100%;margin-top:10px;font-size:11px;" onclick="usarSistemaCierreManual()">⬇ Usar lo del sistema como punto de partida</button>`);
+  }
+  cont.innerHTML = partes.join('');
+}
+
+// Botón «Corregir ese cierre» del aviso: abre en modo corrección el cierre manual que ya existe para la fecha/turno elegidos.
+function abrirCierreManualExistente() {
+  const fecha = document.getElementById('cm-fecha').value;
+  const c = ST.cierresDia.find(x => x.fecha === fecha && x.turno === cierreManualTurno && x.manual);
+  if (!c) return;
+  cierreManualPendiente = c;
+  prepararFormCierreManual(c);
+}
+
+// Línea bajo los totales: cuánto se aparta lo escrito de lo que el sistema ya tiene (lo normal: más, porque se
+// vendió algo que no se alcanzó a registrar). Si es MENOS, avisa en rojo: casi seguro falta sumar algo (un abono, el desayuno…).
+function actualizarComparativoCierreManual() {
+  const el = document.getElementById('cm-comparativo');
+  if (!el) return;
+  const fecha = document.getElementById('cm-fecha').value;
+  if (!fecha) { el.innerHTML = ''; return; }
+  const v = calcularVentasFijas(fecha, cierreManualTurno);
+  if (!v.efectivo && !v.transferencia) { el.innerHTML = ''; return; }
+  const dif = (nombre, escrito, sistema) => {
+    const d = escrito - sistema;
+    if (d > 0) return `<div style="color:var(--text2);">${nombre}: ${fmt(d)} más de lo que tiene el sistema (ventas que no se registraron).</div>`;
+    if (d < 0) return `<div style="color:var(--red);">⚠ ${nombre}: ${fmt(-d)} MENOS de lo que el sistema ya tiene registrado. Revisa que no falte sumar algo.</div>`;
+    return `<div style="color:var(--text3);">${nombre}: igual a lo que tiene el sistema.</div>`;
+  };
+  el.innerHTML = dif('Efectivo', valMiles('cm-efectivo'), v.efectivo) + dif('Transferencia', valMiles('cm-transferencia'), v.transferencia);
+}
+
+// Las tres cifras del cierre normal, en vivo, para el cierre manual: total del turno, utilidad y caja esperada en
+// efectivo. Mismas reglas que recalcularResultadoCierre(): la utilidad descuenta los gastos reales (sin préstamos); la
+// caja esperada parte de la caja inicial del turno y descuenta TODOS los gastos, préstamos incluidos (es plata que
+// sale físicamente de la caja). Cuenta los gastos ya registrados que no se van a quitar más los nuevos en cola.
+function actualizarResumenCierreManual() {
+  const tot = document.getElementById('cm-total-turno');
+  if (!tot) return;
+  const fecha = document.getElementById('cm-fecha').value;
+  const efectivo = valMiles('cm-efectivo');
+  const transferencia = valMiles('cm-transferencia');
+  const vigentes = [...gastosRegistradosCierreManual().filter(g => !cierreManualGastosQuitar.has(g.id)), ...cierreManualGastos];
+  const gastos = vigentes.filter(g => !esCatExcluida(g.categoria)).reduce((a, g) => a + g.monto, 0);
+  const gastosConPrestamos = vigentes.reduce((a, g) => a + g.monto, 0);
+  const apertura = fecha ? ST.aperturasTurno.find(a => a.fecha === fecha && a.turno === cierreManualTurno) : null;
+  const cajaInicial = apertura ? (apertura.caja_inicial || 0) : 0;
+  const resultado = efectivo + transferencia - gastos;
+  const cajaEsperada = cajaInicial + efectivo - gastosConPrestamos;
+  tot.textContent = fmt(efectivo + transferencia);
+  const res = document.getElementById('cm-resultado');
+  res.textContent = fmt(resultado);
+  res.style.color = resultado >= 0 ? 'var(--accent)' : 'var(--red)';
+  document.getElementById('cm-caja-esperada').textContent = fmt(cajaEsperada);
+  document.getElementById('cm-caja-detalle').textContent =
+    `Caja inicial ${fmt(cajaInicial)}${apertura ? '' : ' (sin abrir turno)'} + efectivo ${fmt(efectivo)} − gastos ${fmt(gastosConPrestamos)}`;
 }
 
 // Igual que agregarGastoDia(), pero se queda en cola local (cierreManualGastos)
@@ -8109,49 +8539,73 @@ function agregarGastoCierreManual() {
   renderGastosCierreManual();
 }
 
+// Quita un gasto NUEVO (todavía en cola, aún no guardado).
 function quitarGastoCierreManual(idx) {
   cierreManualGastos.splice(idx, 1);
   renderGastosCierreManual();
 }
 
+// Marca un gasto YA REGISTRADO para quitarlo al guardar (no se borra hasta entonces); «Dejar» lo recupera.
+function quitarGastoRegistradoCierreManual(id) {
+  cierreManualGastosQuitar.add(id);
+  renderGastosCierreManual();
+}
+function dejarGastoRegistradoCierreManual(id) {
+  cierreManualGastosQuitar.delete(id);
+  renderGastosCierreManual();
+}
+
 function renderGastosCierreManual() {
   const cont = document.getElementById('cm-gastos-lista');
-  cont.innerHTML = cierreManualGastos.length
-    ? cierreManualGastos.map((g, i) => `
-        <div class="report-line">
-          <span><span class="badge ${catC(g.categoria)}">${catNombreHtml(g.categoria)}</span> ${g.nombre ? ' ' + g.nombre : ''}</span>
+  const registrados = gastosRegistradosCierreManual();
+  const insignia = g => g.categoria
+    ? `<span class="badge ${catC(g.categoria)}">${catNombreHtml(g.categoria)}</span>`
+    : '<span style="color:var(--text3);font-size:11px;">sin categoría</span>';
+  const fila = (g, nota, estilo, boton) => `
+        <div class="report-line"${estilo ? ` style="${estilo}"` : ''}>
+          <span>${insignia(g)} ${g.nombre ? ' ' + escaparHtml(g.nombre) : ''} <span style="font-size:10px;color:var(--text3);">${nota}</span></span>
           <span style="display:flex;align-items:center;gap:8px;">
             <strong class="amount-neg">${fmt(g.monto)}</strong>
-            <button class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="quitarGastoCierreManual(${i})">✕</button>
+            ${boton}
           </span>
-        </div>`).join('')
-    : '';
-  const total = cierreManualGastos.filter(g => !esCatExcluida(g.categoria)).reduce((a,b) => a + b.monto, 0);
+        </div>`;
+  const btnQuitar = onclick => `<button type="button" class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="${onclick}" title="Quitar este gasto">✕</button>`;
+  const btnDejar  = onclick => `<button type="button" class="btn btn-outline" style="padding:3px 8px;font-size:10px;" onclick="${onclick}" title="Dejar este gasto como estaba">↩ Dejar</button>`;
+  cont.innerHTML = [
+    ...registrados.map(g => cierreManualGastosQuitar.has(g.id)
+      ? fila(g, '· se quitará al guardar', 'text-decoration:line-through;opacity:0.6;', btnDejar(`dejarGastoRegistradoCierreManual(${Number(g.id)})`))
+      : fila(g, '· registrado', '', btnQuitar(`quitarGastoRegistradoCierreManual(${Number(g.id)})`))),
+    ...cierreManualGastos.map((g, i) => fila(g, '· nuevo', '', btnQuitar(`quitarGastoCierreManual(${i})`))),
+  ].join('');
+  const total = [...registrados.filter(g => !cierreManualGastosQuitar.has(g.id)), ...cierreManualGastos]
+    .filter(g => !esCatExcluida(g.categoria)).reduce((a, b) => a + b.monto, 0);
   document.getElementById('cm-gastos-total').textContent = fmt(total);
+  actualizarResumenCierreManual();       // los gastos cambian la utilidad y la caja esperada
 }
 
 // Mismo shape que guardarCierre() (efectivo/transferencia/gastos/resultado),
-// pero con los valores escritos a mano en vez de calculados de los pedidos.
-// Los gastos en cola se insertan como filas reales en gastos_dia (con su
-// categoría) para que sumen en Egresos y el Tablero igual que un gasto
-// cargado desde el cierre normal. Se marca manual:true para distinguirlo
-// en el historial. Sirve tanto para crear un cierre manual nuevo como para
-// corregir uno ya guardado (ver prepararFormCierreManual/cierreManualEditando).
+// pero con los totales escritos a mano en vez de calculados de los pedidos.
+// Los gastos se guardan POR DIFERENCIA sobre los gastos_dia reales del turno
+// (se quitan los marcados, se agregan los nuevos): lo que ya estaba registrado
+// no se toca ni se duplica, y `gastos` del cierre sale SIEMPRE de la suma real
+// de esas filas. Los abonos de fiado que el sistema ya recibió en el turno se
+// guardan en abonos_efectivo/abonos_transferencia (igual que el cierre normal).
+// Se marca manual:true para distinguirlo en el historial. Sirve tanto para crear
+// un cierre manual nuevo como para corregir uno ya guardado.
 async function guardarCierreManual() {
+  const btnGuardar = document.getElementById('cm-btn-guardar');
+  if (btnGuardar && btnGuardar.disabled) return;      // ya hay un guardado en curso: un segundo clic no repite nada
   const fecha = document.getElementById('cm-fecha').value;
   const turno = cierreManualTurno;
   if (!fecha) { showToast('⚠ Selecciona una fecha', 'warning'); return; }
 
   const efectivo      = valMiles('cm-efectivo');
   const transferencia = valMiles('cm-transferencia');
-  const gastos = cierreManualGastos.filter(g => !esCatExcluida(g.categoria)).reduce((a,b) => a + b.monto, 0);
-  const resultado = efectivo + transferencia - gastos;
 
   // "editando" = se abrió este formulario desde "Editar"/"Corregir cierre"
   // sobre ESTE mismo cierre manual (fecha y turno bloqueados, así que no
   // pueden haber cambiado). Si es así, no hace falta confirmar sobrescritura
-  // (es la corrección que se pidió) y hay que limpiar sus gastos_dia viejos
-  // antes de insertar los de la cola actual, para no duplicarlos.
+  // (es la corrección que se pidió).
   const editando = !!(cierreManualEditando && cierreManualEditando.fecha === fecha && cierreManualEditando.turno === turno);
   const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
   if (existing && !editando && !(await confirmarSistema({ titulo: 'Ya existe un cierre guardado para esa fecha/turno', cuerpo: '¿Sobrescribirlo con estos datos manuales?', aceptar: 'Sí, sobrescribir', peligro: true }))) return;
@@ -8160,7 +8614,10 @@ async function guardarCierreManual() {
   // vacío = NULL = "no registrado" — distinto de 0, que significa "no comieron".
   // En comida rápida no aplica y siempre se guarda NULL.
   let platosFamilia = null;
-  if (turno === 'almuerzo') {
+  if (turno === 'almuerzo' && !pedirComidasFamilia()) {
+    // Opción apagada en Configuración: no se pide; si el cierre ya traía el dato, se conserva tal cual.
+    platosFamilia = existing && existing.platos_familia != null ? existing.platos_familia : null;
+  } else if (turno === 'almuerzo') {
     const platosEl  = document.getElementById('cm-platos-familia');
     const platosRaw = platosEl.value.trim();
     if (platosRaw !== '') {
@@ -8174,27 +8631,31 @@ async function guardarCierreManual() {
     }
   }
 
-  const datosGuardar = { efectivo, transferencia, gastos, resultado, manual: true, platos_familia: platosFamilia };
-  const btnGuardar = document.getElementById('cm-btn-guardar');
-
   try {
     if (btnGuardar) btnGuardar.disabled = true;
 
-    // 0) Si se está corrigiendo, los gastos_dia que quedaron de la vez
-    //    anterior se borran primero — la cola de abajo (con lo que se haya
-    //    editado/quitado/agregado) es la que manda de ahora en adelante.
-    if (editando) {
-      const gastosViejos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno);
-      for (const g of gastosViejos) {
-        try { await sbDelete('gastos_dia', `id=eq.${g.id}`); }
-        catch (e) { console.error(e); showToast(`⚠ No se pudo quitar un gasto viejo ("${g.nombre || g.categoria}")`, 'warning'); }
+    // 1) Quitar los gastos ya registrados que se marcaron. Si alguno falla se
+    //    para aquí (sin guardar el cierre): lo ya quitado no se vuelve a intentar.
+    for (const id of [...cierreManualGastosQuitar]) {
+      const g = ST.gastosDia.find(x => x.id === id && x.fecha === fecha && x.turno === turno);
+      if (g) {
+        try { await sbDelete('gastos_dia', `id=eq.${id}`); }
+        catch (e) {
+          console.error(e);
+          showToast(`⚠ No se pudo quitar el gasto "${g.nombre || catNombre(g.categoria)}" — el cierre NO se guardó, intenta de nuevo`, 'warning');
+          renderGastosCierreManual();
+          return;
+        }
+        ST.gastosDia = ST.gastosDia.filter(x => x.id !== id);
       }
-      ST.gastosDia = ST.gastosDia.filter(g => !(g.fecha === fecha && g.turno === turno));
+      cierreManualGastosQuitar.delete(id);
     }
 
-    // 1) Insertar cada gasto de la cola como fila real en gastos_dia, igual
-    //    que agregarGastoDia(), para que Egresos/Tablero los sumen.
-    for (const g of cierreManualGastos) {
+    // 2) Insertar cada gasto NUEVO como fila real en gastos_dia, igual que
+    //    agregarGastoDia(), para que Egresos/Tablero lo sumen. Los ya insertados salen de la cola, así un reintento
+    //    después de un fallo no los duplica.
+    while (cierreManualGastos.length) {
+      const g = cierreManualGastos[0];
       try {
         let row;
         try {
@@ -8206,16 +8667,33 @@ async function guardarCierreManual() {
           } else { throw e; }
         }
         ST.gastosDia.push(row);
+        cierreManualGastos.shift();
       } catch (e) {
         console.error(e);
-        showToast(`⚠ No se pudo guardar el gasto "${g.nombre || catNombre(g.categoria)}"`, 'warning');
+        showToast(`⚠ No se pudo guardar el gasto "${g.nombre || catNombre(g.categoria)}" — el cierre NO se guardó, intenta de nuevo`, 'warning');
+        renderGastosCierreManual();
+        return;
       }
     }
 
-    // 2) Upsert del cierre en sí (mismo patrón que guardarCierre()). Si las
-    //    columnas opcionales "manual" o "platos_familia" aún no existen en
-    //    Supabase (migración sin correr), reintenta sin la que falte — el
-    //    cierre nunca debe quedar bloqueado por eso.
+    // 3) Totales del cierre. Los gastos salen de las filas REALES del turno (sin préstamos), no de lo que había en pantalla.
+    const gastos = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno && !esCatExcluida(g.categoria)).reduce((a, g) => a + g.monto, 0);
+    const resultado = efectivo + transferencia - gastos;
+    const { abonosEfectivo, abonosTransferencia } = calcularVentasFijas(fecha, turno);
+    const datosGuardar = {
+      efectivo, transferencia, gastos, resultado, manual: true, platos_familia: platosFamilia,
+      // Parte de efectivo/transferencia que vino de abonos de fiado (ya está DENTRO de esos dos totales).
+      abonos_efectivo: abonosEfectivo, abonos_transferencia: abonosTransferencia
+    };
+    // Si se reemplaza un cierre NORMAL que traía ajuste, el ajuste se limpia: los totales escritos ya son los reales.
+    if (existing) {
+      const aj = ajustesDeCierre(existing);
+      if (aj.efectivo || aj.transferencia) Object.assign(datosGuardar, { ajuste_efectivo: 0, ajuste_transferencia: 0, ajuste_manual_nota: '' });
+    }
+
+    // 4) Upsert del cierre en sí (mismo patrón que guardarCierre()). Si alguna
+    //    columna opcional aún no existe en Supabase (migración sin correr),
+    //    reintenta sin la que falte — el cierre nunca debe quedar bloqueado por eso.
     let payload = { ...datosGuardar };
     for (;;) {
       try {
@@ -8229,15 +8707,18 @@ async function guardarCierreManual() {
         break;
       } catch (e) {
         const msg = e.message || '';
-        const columnaFaltante = ['manual', 'platos_familia'].find(c => c in payload && msg.includes(c));
+        const columnaFaltante = ['manual', 'platos_familia', 'abonos_efectivo', 'abonos_transferencia', 'ajuste_efectivo', 'ajuste_transferencia', 'ajuste_manual_nota'].find(c => c in payload && msg.includes(c));
         if (!columnaFaltante) throw e;
         const valorOmitido = payload[columnaFaltante];
         const { [columnaFaltante]: _omit, ...resto } = payload;
         payload = resto;
         if (columnaFaltante === 'manual') {
           showToast('⚠ El cierre se guardó, pero falta agregar la columna "manual" en Supabase (ver migracion_supabase_6.sql)', 'warning');
-        } else if (valorOmitido != null) {
-          showToast('⚠ Los almuerzos de la familia no se guardaron — falta agregar la columna platos_familia en Supabase (ver script SQL)', 'warning');
+        } else if (columnaFaltante === 'platos_familia') {
+          if (valorOmitido != null) showToast('⚠ Los almuerzos de la familia no se guardaron — falta agregar la columna platos_familia en Supabase (ver script SQL)', 'warning');
+        } else if (!(columnaFaltante.startsWith('abonos_') && !valorOmitido)) {
+          // Abonos en 0 no se pierden al omitirlos; lo demás sí merece aviso.
+          showToast(`⚠ "${columnaFaltante}" no se guardó — falta agregar esa columna en Supabase (ver script SQL)`, 'warning');
         }
       }
     }
@@ -9677,6 +10158,69 @@ function turnosCerrados() {
   return new Set(ST.cierresDia.map(c => `${c.fecha}::${c.turno}`));
 }
 
+// «Resumen por día» del Tablero: una línea por día, de más reciente a más antiguo, con lo que entró (pedidos y abonos
+// de fiado) y lo que salió (gastos del turno y egresos manuales). Es solo lectura y NO usa el rango de fechas del
+// Tablero. Mismas reglas que el resto del Tablero: los ingresos salen de los cierres guardados (efectivo +
+// transferencia + ajuste; los abonos que el cierre trae adentro se muestran aparte) y los egresos son los mismos de
+// egresosCombinados() (los préstamos no cuentan). Un día sin cierre pero con ventas se marca en naranja («sin cerrar»).
+const RESUMEN_DIAS_MAX = 60;
+function resumenPorDia(max = RESUMEN_DIAS_MAX) {
+  const dias = new Map();
+  const dia = f => {
+    if (!dias.has(f)) dias.set(f, { fecha: f, pedidos: 0, abonos: 0, egrTurno: 0, egrManual: 0, sinCerrar: false });
+    return dias.get(f);
+  };
+  ST.cierresDia.forEach(c => {
+    const d = dia(c.fecha);
+    const abonos = abonosDeCierre(c);
+    const total  = (c.efectivo || 0) + (c.transferencia || 0) + ajustesDeCierre(c).total;
+    d.abonos  += abonos;
+    d.pedidos += total - abonos;
+  });
+  egresosCombinados().forEach(e => {
+    const d = dia(e.fecha);
+    if (e.origen === 'cierre') d.egrTurno += (e.monto || 0); else d.egrManual += (e.monto || 0);
+  });
+  const cerrados = turnosCerrados();
+  ST.ingresos.forEach(i => {
+    if (!cerrados.has(`${i.fecha}::${i.turno}`)) dia(i.fecha).sinCerrar = true;
+  });
+  return [...dias.values()]
+    .sort((a, b) => b.fecha.localeCompare(a.fecha))
+    .slice(0, max)
+    .map(d => {
+      const ingresos = d.pedidos + d.abonos, egresos = d.egrTurno + d.egrManual;
+      return { ...d, ingresos, egresos, resultado: ingresos - egresos };
+    });
+}
+
+function etiquetaDiaResumen(f) {
+  const [y, m, dd] = f.split('-').map(Number);
+  const sem = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'][new Date(y, m - 1, dd).getDay()];
+  return `${sem} ${String(dd).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+}
+
+function renderResumenDias() {
+  const body = document.getElementById('resumen-dias-body');
+  if (!body) return;
+  const filas = resumenPorDia();
+  // Sin «$» para que quepan las 5 cifras en una línea en el celular; el cero se ve apagado.
+  const num = (n, clase) => {
+    const v = Math.round(n || 0);
+    if (!v) return '<td class="rd-cero">–</td>';
+    return `<td class="${clase || ''}">${(v < 0 ? '−' : '') + Math.abs(v).toLocaleString('es-CO')}</td>`;
+  };
+  body.innerHTML = filas.length ? filas.map(d =>
+    `<tr data-fecha="${d.fecha}"${d.sinCerrar ? ' class="rd-sin-cerrar"' : ''}>
+      <td class="rd-dia" ${d.sinCerrar ? 'title="Tiene ventas de un turno que aún no se ha cerrado"' : ''}>${etiquetaDiaResumen(d.fecha)}</td>
+      ${num(d.pedidos, 'rd-ing')}${num(d.abonos, 'rd-ing')}${num(d.egrTurno, 'rd-egr')}${num(d.egrManual, 'rd-egr')}
+      <td class="${d.resultado < 0 ? 'rd-egr' : d.resultado > 0 ? 'rd-ing' : 'rd-cero'}" style="font-weight:600;">${d.resultado ? (d.resultado < 0 ? '−' : '') + Math.abs(d.resultado).toLocaleString('es-CO') : '–'}</td>
+    </tr>`).join('')
+    : '<tr><td colspan="6" class="rd-cero" style="text-align:center;">Todavía no hay días con movimiento.</td></tr>';
+  const nota = document.getElementById('resumen-dias-nota');
+  if (nota) nota.textContent = `En pesos · desliza para ver más días (hasta ${RESUMEN_DIAS_MAX}) · naranja = tiene ventas sin cerrar · no depende del rango de arriba.`;
+}
+
 function renderTablero() {
   const cerrados = turnosCerrados();
 
@@ -9799,6 +10343,7 @@ function renderTablero() {
   document.getElementById('alertZone').innerHTML = al.map(a=>`<div class="alert ${a.t}">${a.m}</div>`).join('');
 
   renderGraficosTablero();
+  renderResumenDias();
 
   const cnt  = t  => alm.filter(i=>i.pedido===t).reduce((a,b)=>a+(b.cantidad||1),0);
   document.getElementById('rp-comp').textContent  = cnt('completo');
@@ -9840,21 +10385,24 @@ function renderTablero() {
   document.getElementById('rp-otros').textContent = fmt(sumaGrupo(egrs, 'otro'));
   document.getElementById('rp-tegr').textContent  = fmt(tE);
 
-  // Top por campo
+  // Top por campo. Cada plato se cuenta con su nombre de HOY: si se le cambió el nombre, los pedidos con el nombre anterior
+  // suman junto con el nuevo (crearResolvedorPlatos). Ningún pedido se modifica.
+  const nombreDePlato = crearResolvedorPlatos();
+  const asadosHoy = new Set(platosEn().filter(p => p.lista === 'asado').map(p => p.nombre));       // también los retirados
   function topCat(campo, max) {
     const acc = {};
-    alm.forEach(i => { if (i[campo]) acc[i[campo]] = (acc[i[campo]]||0) + (i.cantidad||1); });
+    alm.forEach(i => { if (i[campo]) { const n = nombreDePlato(campo, i[campo], instanteDePedido(i)); acc[n] = (acc[n]||0) + (i.cantidad||1); } });
     return Object.entries(acc).sort((a,b)=>b[1]-a[1]).slice(0, max);
   }
   function renderTop(elId, entries) {
     document.getElementById(elId).innerHTML = entries.length
-      ? entries.map(([n,c],i)=>`<div class="report-line"><span>${i+1}. ${n}</span><strong>${c} pedidos</strong></div>`).join('')
+      ? entries.map(([n,c],i)=>`<div class="report-line"><span>${i+1}. ${escaparHtml(n)}</span><strong>${c} pedidos</strong></div>`).join('')
       : '<div style="color:var(--text3);font-size:12px;">Sin datos aún</div>';
   }
-  renderTop('rp-proteinas', topCat('proteina', 5).filter(([n]) => !PL.asado.some(a=>a.n===n)));
+  renderTop('rp-proteinas', topCat('proteina', 5).filter(([n]) => !asadosHoy.has(n)));
   renderTop('rp-sopas',     topCat('sopa',     5));
   renderTop('rp-arroces',   topCat('arroz',    5));
-  renderTop('rp-asados',    topCat('proteina', 3).filter(([n]) => PL.asado.some(a=>a.n===n)));
+  renderTop('rp-asados',    topCat('proteina', 3).filter(([n]) => asadosHoy.has(n)));
 
   // Desglose comidas rápidas por categoría
   const crIng = ings.filter(i => i.turno === 'cena');
@@ -10327,7 +10875,7 @@ function actualizarCamposFamiliaCierre() {
   const fecha = document.getElementById('dd-fecha').value || today();
 
   const wrap = document.getElementById('dd-platos-familia-wrap');
-  if (wrap) wrap.style.display = esAlmuerzo ? '' : 'none';
+  if (wrap) wrap.style.display = esAlmuerzo && pedirComidasFamilia() ? '' : 'none';
   const req = document.getElementById('dd-platos-familia-req');
   if (req) {
     const existente = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
@@ -10540,7 +11088,10 @@ async function guardarCierre() {
   // el pedido "Gratis").
   const existing = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
   let platosFamilia = null;
-  if (ddTurno === 'almuerzo') {
+  if (ddTurno === 'almuerzo' && !pedirComidasFamilia()) {
+    // Opción apagada en Configuración: no se pide ni se escribe; si el cierre ya traía el dato, se conserva tal cual.
+    platosFamilia = existing && existing.platos_familia != null ? existing.platos_familia : null;
+  } else if (ddTurno === 'almuerzo') {
     const platosEl  = document.getElementById('dd-platos-familia');
     const platosRaw = platosEl.value.trim();
     if (platosRaw === '') {
@@ -10649,13 +11200,44 @@ async function agregarGastoDia() {
   } catch(e) { showToast('⚠ Error al registrar gasto', 'warning'); }
 }
 
+// Quitar un gasto del turno (desde Cierre o desde Egresos): pide confirmación, lo borra, actualiza el cierre de ese
+// turno si ya existe y redibuja TODAS las pestañas, así la fila desaparece al instante donde se esté mirando.
 async function eliminarGastoDia(id) {
+  const quitado = ST.gastosDia.find(g => g.id === id);
+  if (!quitado) return;
+  const turnoTxt = quitado.turno === 'almuerzo' ? 'almuerzo' : 'comidas rápidas';
+  if (!(await confirmarSistema({
+    titulo: '¿Quitar este gasto?',
+    cuerpo: `${quitado.nombre || catNombre(quitado.categoria) || 'Gasto'} · ${fmt(quitado.monto)}\n${quitado.fecha} (${turnoTxt})\nSe quita de Egresos y de las cuentas de ese turno.`,
+    aceptar: 'Sí, quitar el gasto', peligro: true,
+  }))) return;
   try {
     await sbDelete('gastos_dia', `id=eq.${id}`);
     ST.gastosDia = ST.gastosDia.filter(g => g.id !== id);
     if (ddEditId === id) ddEditId = null;
-    renderDiaADia();
-  } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
+  } catch(e) { console.error(e); showToast('⚠ Error al eliminar', 'warning'); return; }
+  // El cierre de ese turno (si ya existe) baja sus «gastos» en lo mismo: así Caja, que lee el cierre, y Egresos, que
+  // lee los gastos, nunca quedan descuadrados.
+  try { await ajustarCierrePorGastoQuitado(quitado); }
+  catch(e) { console.error(e); showToast('⚠ El gasto se quitó, pero no se pudo actualizar el cierre de ese turno: ábrelo con «Corregir cierre» y guárdalo', 'warning'); }
+  renderAll();
+  showToast('🗑 Gasto quitado', 'ok');
+}
+
+// Si el turno del gasto quitado ya tiene cierre (normal o manual), sus «gastos» bajan en el monto del gasto y su
+// resultado sube en lo mismo (el cierre guarda sus totales; no los recalcula solo). Los préstamos no cuentan como
+// gasto del cierre, así que no lo tocan. Se usa la diferencia —no se recalcula desde las filas— para no alterar nada
+// más de lo que ya traía el cierre.
+async function ajustarCierrePorGastoQuitado(g) {
+  if (esCatExcluida(g.categoria)) return;
+  const c = ST.cierresDia.find(x => x.fecha === g.fecha && x.turno === g.turno);
+  if (!c) return;
+  const gastos = Math.max(0, (c.gastos || 0) - (g.monto || 0));
+  const resultado = (c.resultado || 0) + ((c.gastos || 0) - gastos);
+  if (gastos === c.gastos && resultado === c.resultado) return;
+  await sbPatch('cierres_dia', `fecha=eq.${g.fecha}&turno=eq.${g.turno}`, { gastos, resultado });
+  c.gastos = gastos;
+  c.resultado = resultado;
 }
 
 function editarGastoDia(id) {
@@ -10690,20 +11272,33 @@ async function guardarEdicionGastoDia(id) {
 }
 
 async function eliminarCierre(fecha, turno) {
-  if (!(await confirmarSistema({ titulo: `¿Eliminar el cierre del ${fecha} (${turno})?`, aceptar: 'Sí, eliminar el cierre', peligro: true }))) return;
+  const cierre = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
+  const gastosDelTurno = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno);
+  // Los gastos de un turno son UNA sola lista, la misma que ven la pestaña Cierre y Egresos (y la que se llenó al
+  // abrir el turno). Por eso borrar un cierre MANUAL ya no se lleva los gastos por delante sin preguntar: se elige.
+  // Un cierre normal siempre deja sus gastos: el turno vuelve a quedar abierto para re-cerrarlo con los mismos.
+  let borrarGastos = false;
+  if (cierre && cierre.manual && gastosDelTurno.length) {
+    const total = gastosDelTurno.reduce((a, g) => a + (g.monto || 0), 0);
+    const eleccion = await ventanaSistema({
+      titulo: `¿Eliminar el cierre manual del ${fecha} (${turno})?`,
+      cuerpo: `Ese turno tiene ${gastosDelTurno.length} gasto(s) registrado(s) por ${fmt(total)} — son los mismos que se ven en Cierre y en Egresos.`,
+      tono: 'peligro', alEscape: 'no', foco: 'no',
+      opciones: [
+        { valor: 'solo', texto: 'Eliminar solo el cierre', clase: 'btn-danger', detalle: 'Los gastos se quedan registrados (siguen sumando en Egresos).' },
+        { valor: 'todo', texto: 'Eliminar el cierre y también sus gastos', clase: 'btn-danger', detalle: 'Se borran los gastos de ese turno. Úsalo si el día se cargó solo a mano y vas a volver a cargarlo.' },
+        { valor: 'no', texto: 'Volver' },
+      ],
+    });
+    if (eleccion !== 'solo' && eleccion !== 'todo') return;
+    borrarGastos = eleccion === 'todo';
+  } else if (!(await confirmarSistema({ titulo: `¿Eliminar el cierre del ${fecha} (${turno})?`, aceptar: 'Sí, eliminar el cierre', peligro: true }))) return;
   try {
-    const cierre = ST.cierresDia.find(c => c.fecha === fecha && c.turno === turno);
     await sbDelete('cierres_dia', `fecha=eq.${fecha}&turno=eq.${turno}`);
     ST.cierresDia = ST.cierresDia.filter(c => !(c.fecha === fecha && c.turno === turno));
 
-    // Un cierre manual trae sus propios gastos_dia (los que se cargaron a
-    // mano al guardarlo) — si se borra el cierre, esos gastos quedan sueltos
-    // y duplicados si se vuelve a cargar el día a mano, así que se borran
-    // también. Un cierre normal, en cambio, deja sus gastos intactos: el
-    // turno vuelve a quedar abierto para re-cerrarlo con los mismos gastos.
-    if (cierre && cierre.manual) {
-      const gastosDelCierre = ST.gastosDia.filter(g => g.fecha === fecha && g.turno === turno);
-      for (const g of gastosDelCierre) {
+    if (borrarGastos) {
+      for (const g of gastosDelTurno) {
         try { await sbDelete('gastos_dia', `id=eq.${g.id}`); } catch (e) { console.error(e); }
       }
       ST.gastosDia = ST.gastosDia.filter(g => !(g.fecha === fecha && g.turno === turno));
@@ -10733,6 +11328,9 @@ function renderHistorialCierres() {
   const histData = ST.cierresDia.filter(c => inP(c.fecha, fDD)).sort((a,b) => b.fecha.localeCompare(a.fecha) || a.turno.localeCompare(b.turno));
   const histBody = document.getElementById('dd-historial-body');
   if (!histBody) return;
+  const verFamilia = pedirComidasFamilia();
+  const thFamilia = document.getElementById('dd-th-familia');
+  if (thFamilia) thFamilia.style.display = verFamilia ? '' : 'none';
   histBody.innerHTML = histData.length
     ? histData.map(c => `<tr>
         <td>${c.fecha}</td>
@@ -10741,7 +11339,7 @@ function renderHistorialCierres() {
         <td class="amount-pos">${fmt(c.transferencia)}</td>
         <td title="Ya incluidos en Efectivo/Transf.">${abonosDeCierre(c) ? fmt(abonosDeCierre(c)) : '—'}</td>
         <td class="amount-neg">${fmt(c.gastos)}</td>
-        <td>${c.turno === 'almuerzo' && c.platos_familia != null ? c.platos_familia : '—'}</td>
+        ${verFamilia ? `<td>${c.turno === 'almuerzo' && c.platos_familia != null ? c.platos_familia : '—'}</td>` : ''}
         <td style="color:${c.resultado>=0?'var(--green)':'var(--red)'};">${fmt(c.resultado)}${ajustesDeCierre(c).total ? ` <span title="${textoAjusteCierre(c)}">*</span>` : ''}</td>
         <td style="display:flex;gap:4px;">
           <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="${c.manual ? `editarCierreManual('${c.fecha}','${c.turno}')` : `irADiaADia('${c.fecha}','${c.turno}')`}">${c.manual ? '✏️ Editar' : 'Ver'}</button>
@@ -10761,7 +11359,9 @@ function renderDiaADia() {
   // Caja solo trabaja el día de negocio en curso (hoy, o ayer mientras no pasen las 9:00 a. m.): un día anterior se
   // muestra bloqueado —haya cierre o no— y para verlo o corregirlo hay que ingresar como administrador.
   const diaAnteriorParaCaja = !adminAutenticado && fecha < diaNegocio();
-  const mostrarCerrado  = (!!cierreExistente && !viendoHistorialCierre) || diaAnteriorParaCaja;
+  // Un cierre MANUAL siempre se muestra cerrado aquí (aunque se llegue con «Ver»): esta pantalla recalcula desde los
+  // pedidos y no debe ofrecer guardar encima de totales escritos a mano — se corrige en su propio formulario.
+  const mostrarCerrado  = (!!cierreExistente && (!viendoHistorialCierre || !!cierreExistente.manual)) || diaAnteriorParaCaja;
 
   const banner     = document.getElementById('dd-cerrado-banner');
   const formActivo = document.getElementById('dd-form-activo');
@@ -10851,6 +11451,14 @@ function renderDiaADia() {
 }
 
 function irADiaADia(fecha, turno) {
+  // Un cierre MANUAL no se corrige en la pantalla Cierre: ahí los totales se recalculan desde los pedidos y con el
+  // botón de guardar activo se podrían pisar los totales escritos a mano. Se abre su propio formulario, que además
+  // muestra lo que el sistema tiene y trabaja con los mismos gastos del turno. (Así también funcionan los lápices
+  // ✏️ de Ingresos y de Egresos.)
+  if (ST.cierresDia.some(c => c.fecha === fecha && c.turno === turno && c.manual)) {
+    editarCierreManual(fecha, turno);
+    return;
+  }
   document.getElementById('dd-fecha').value = fecha;
   ddTurno = turno;
   ddEditId = null;
@@ -11617,7 +12225,10 @@ const CFG_PANTALLA = [
     { clave: 'respaldo_dia_semana', titulo: 'Día del respaldo semanal', entrada: 'dia',
       ayuda: 'El aviso aparece desde ese día y sigue hasta que haya un respaldo completo hecho desde entonces.' },
     { clave: 'respaldo_rojo_dias', titulo: 'Días sin respaldo para el aviso rojo', entrada: 'numero', unidad: 'días',
-      ayuda: 'Si pasan estos días sin un respaldo completo, el aviso se pone rojo.' } ] }
+      ayuda: 'Si pasan estos días sin un respaldo completo, el aviso se pone rojo.' } ] },
+  { titulo: '🍽️ Cierre del día', campos: [
+    { clave: 'cierre_comidas_familia', titulo: 'Comidas de la familia al cerrar el almuerzo', entrada: 'si_no',
+      ayuda: 'Sí: el cierre del almuerzo pide cuántas comidas comió la familia sin pagar (en el cierre manual es opcional) y el historial muestra la columna «Familia». No: ese campo y esa columna dejan de aparecer y los cierres nuevos quedan sin ese dato. Lo que ya está guardado no se borra ni se cambia.' } ] }
 ];
 const CFG_CAMPOS = CFG_PANTALLA.flatMap(p => p.campos);
 const cfgCampo = clave => CFG_CAMPOS.find(c => c.clave === clave);
@@ -11628,6 +12239,7 @@ function cfgTexto(clave, valor) {
   if (!c) return String(valor);
   if (c.entrada === 'dinero') return fmt(valor);
   if (c.entrada === 'dia') return DIAS_SEMANA[valor] || String(valor);
+  if (c.entrada === 'si_no') return valor === true ? 'Sí' : valor === false ? 'No' : String(valor);
   if (c.entrada === 'simbolo') return valor === '' ? '(sin símbolo)' : String(valor);
   if (c.entrada === 'numero') return `${Number(valor).toLocaleString('es-CO')}${c.unidad ? ' ' + c.unidad : ''}`;
   return String(valor);
@@ -11652,6 +12264,7 @@ function cfgHtmlCampo(c) {
   const enter = `onkeydown="if(event.key==='Enter'){event.preventDefault();cfgGuardar('${c.clave}')}"`;
   let entrada;
   if (c.entrada === 'dia') entrada = `<select id="${id}" onchange="${marcar}">${DIAS_SEMANA.map((d, i) => `<option value="${i}">${d}</option>`).join('')}</select>`;
+  else if (c.entrada === 'si_no') entrada = `<select id="${id}" onchange="${marcar}"><option value="true">Sí</option><option value="false">No</option></select>`;
   else if (c.entrada === 'dinero') entrada = `<input type="text" inputmode="numeric" id="${id}" autocomplete="off" oninput="formatMilesInput(this);${marcar}" ${enter}>`;
   else if (c.entrada === 'numero') entrada = `<input type="text" inputmode="numeric" id="${id}" autocomplete="off" maxlength="4" oninput="this.value=this.value.replace(/[^0-9]/g,'');${marcar}" ${enter}>`;
   else entrada = `<input type="text" id="${id}" autocomplete="off" spellcheck="false" maxlength="${c.entrada === 'simbolo' ? 16 : 60}" oninput="${marcar}" ${enter}>`;
@@ -11672,6 +12285,7 @@ function cfgLeer(clave) {
   const c = cfgCampo(clave), el = document.getElementById('cfg-' + clave);
   if (!c || !el) return undefined;
   if (c.entrada === 'dia') return parseInt(el.value, 10);
+  if (c.entrada === 'si_no') return el.value === 'true';
   if (c.entrada === 'dinero') return el.value.trim() === '' ? NaN : parseMiles(el.value);
   if (c.entrada === 'numero') return el.value.trim() === '' ? NaN : parseInt(el.value, 10);
   return el.value.trim();
@@ -11707,6 +12321,7 @@ function renderConfiguracion() {
   }
   cfgCatRender();
   cfgEgrRender();
+  cfgPlaRender();
   cfgRenderHistorial();
 }
 
@@ -11718,17 +12333,18 @@ function cfgRenderHistorial() {
     cont.innerHTML = '<div style="font-size:12px;color:var(--text3);">Todavía no se ha cambiado nada: el sistema usa los valores de siempre de El Lobo. Cada cambio que guardes aparecerá aquí, con la fecha, la hora y quién lo hizo.</div>';
     return;
   }
-  const vigentes = new Set([...CFG_CAMPOS.map(c => c.clave), ...CFGCAT_CLAVES.map(k => CFGCAT[k].clave), CFGEGR_CLAVE, CFGCTA_CLAVE].map(clave => CFG.fila(clave)).filter(Boolean));
+  const vigentes = new Set([...CFG_CAMPOS.map(c => c.clave), ...CFGCAT_CLAVES.map(k => CFGCAT[k].clave), CFGEGR_CLAVE, CFGCTA_CLAVE, CFGPLA_CLAVE].map(clave => CFG.fila(clave)).filter(Boolean));
   const t = f => { const x = Date.parse(f.vigente_desde); return Number.isNaN(x) ? 0 : x; };
   const ordenadas = [...filas].sort((a, b) => (t(b) - t(a)) || ((b.id || 0) - (a.id || 0)));
   cont.innerHTML = `<div class="table-wrap"><table>
     <thead><tr><th>Desde</th><th>Qué</th><th>Valor</th><th>Quién</th><th></th></tr></thead>
     <tbody>${ordenadas.map((f, j) => {
-      const c = cfgCampo(f.clave), cat = cfgCatDe(f.clave), egr = f.clave === CFGEGR_CLAVE || f.clave === CFGCTA_CLAVE;
-      const previo = (cat || egr) ? ordenadas.slice(j + 1).find(x => x.clave === f.clave) : null;      // la versión anterior de la lista
+      const c = cfgCampo(f.clave), cat = cfgCatDe(f.clave), egr = f.clave === CFGEGR_CLAVE || f.clave === CFGCTA_CLAVE, pla = f.clave === CFGPLA_CLAVE;
+      const previo = (cat || egr || pla) ? ordenadas.slice(j + 1).find(x => x.clave === f.clave) : null;      // la versión anterior de la lista
       const valor = cat ? cfgResumenCatalogo(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave])
-        : egr ? cfgResumenEgresos(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave]) : cfgTexto(f.clave, f.valor);
-      return `<tr><td>${escaparHtml(fechaHoraLegible(f.vigente_desde))}</td><td>${escaparHtml(c ? c.titulo : cat ? 'Productos: ' + cat.titulo : f.clave === CFGEGR_CLAVE ? 'Categorías de egresos' : f.clave === CFGCTA_CLAVE ? 'Nombres de las cuentas' : f.clave)}</td><td>${escaparHtml(valor)}</td><td>${escaparHtml(f.creado_por || '—')}</td><td>${vigentes.has(f) ? '<span class="badge badge-green">rige hoy</span>' : ''}</td></tr>`;
+        : egr ? cfgResumenEgresos(f.clave, f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave])
+        : pla ? cfgResumenPlatos(f.valor, previo ? previo.valor : CFG_DEFECTOS[f.clave]) : cfgTexto(f.clave, f.valor);
+      return `<tr><td>${escaparHtml(fechaHoraLegible(f.vigente_desde))}</td><td>${escaparHtml(c ? c.titulo : cat ? 'Productos: ' + cat.titulo : f.clave === CFGEGR_CLAVE ? 'Categorías de egresos' : f.clave === CFGCTA_CLAVE ? 'Nombres de las cuentas' : pla ? 'Platos del menú' : f.clave)}</td><td>${escaparHtml(valor)}</td><td>${escaparHtml(f.creado_por || '—')}</td><td>${vigentes.has(f) ? '<span class="badge badge-green">rige hoy</span>' : ''}</td></tr>`;
     }).join('')}</tbody></table></div>`;
 }
 
@@ -12310,7 +12926,7 @@ function cfgCtaEditar(i, campo, valor) {
 function cfgCtaDescartar() { cfgCta = null; cfgCtaFirma = null; cfgCtaRenderCuerpo(); cfgCtaActualizarBarra(); }
 
 // Guardado común: revisa, avisa si otro administrador cambió lo mismo, pide confirmación y guarda una versión nueva.
-async function cfgEgrGuardarVersion({ clave, titulo, payload, lineas, descartar }) {
+async function cfgEgrGuardarVersion({ clave, titulo, payload, lineas, descartar, pie }) {
   const mal = cfgValidar(clave, payload);
   if (mal) { showToast('⚠ ' + mal, 'warning'); return; }
   if (!lineas.length) { showToast('ℹ️ Ya está así: no hay nada que guardar', 'info'); return; }
@@ -12327,7 +12943,7 @@ async function cfgEgrGuardarVersion({ clave, titulo, payload, lineas, descartar 
   } catch (e) { /* sin conexión: el guardado de abajo fallará con su propio aviso */ }
   const ok = await confirmarSistema({
     titulo: `¿Guardar los cambios en «${titulo}»?`,
-    cuerpo: `${lineas.slice(0, 12).join('\n')}${lineas.length > 12 ? `\n…y ${lineas.length - 12} cambios más` : ''}\n\nRigen desde ahora. Lo que ya registraste no cambia: los gastos y los movimientos conservan sus montos y sus códigos; solo cambia cómo se llaman.`,
+    cuerpo: `${lineas.slice(0, 12).join('\n')}${lineas.length > 12 ? `\n…y ${lineas.length - 12} cambios más` : ''}\n\n${pie || 'Rigen desde ahora. Lo que ya registraste no cambia: los gastos y los movimientos conservan sus montos y sus códigos; solo cambia cómo se llaman.'}`,
     aceptar: 'Sí, guardar'
   });
   if (!ok) return;
@@ -12366,6 +12982,195 @@ async function cfgCtaGuardar() {
   await cfgEgrGuardarVersion({ clave: CFGCTA_CLAVE, titulo: 'Nombres de las cuentas', payload, lineas: cfgCtaDiff(cfgCtaVigente(), payload), descartar: () => { cfgCta = null; cfgCtaFirma = null; } });
 }
 
+// ── Pantalla: Platos del menú (etapa 3) ──────────────────────────────────────────────────────────────────────
+// Un panel con las cinco listas. Lo que la persona va cambiando vive en una copia de trabajo (cfgPla); «Guardar cambios» manda la
+// lista COMPLETA como una versión nueva. Nada se borra: «Retirar» solo deja de ofrecer el plato. Cambiar el NOMBRE es lo único
+// que cambia lo que se ve: el aviso lo dice y los reportes cuentan juntos el nombre viejo y el nuevo. El código de un plato
+// nuevo (SP10, AR06, PT28…) no cambia nunca.
+const CFGPLA_CLAVE = 'menu_platos';
+let cfgPla = null;                                      // copia de trabajo (null = nada cambiado)
+let cfgPlaFirma = null, cfgPlaConstruido = false;
+
+const cfgPlaVigente = () => CFG.v(CFGPLA_CLAVE);
+const cfgPlaFilas = () => cfgPla || cfgPlaVigente();
+function cfgPlaBorrador() { if (!cfgPla) cfgPla = JSON.parse(JSON.stringify(cfgPlaVigente())); return cfgPla; }
+// Lo que se manda a la base (sin marcas internas, con el nombre limpio).
+function cfgPlaPayload(filas) { return filas.map(f => ({ codigo: f.codigo, lista: f.lista, nombre: cfgLimpiar(f.nombre), activo: !!f.activo })); }
+function cfgPlaCambios() {
+  if (!cfgPla) return 0;
+  const antes = new Map(cfgPlaPayload(cfgPlaVigente()).map(f => [f.codigo, JSON.stringify(f)]));
+  return cfgPlaPayload(cfgPla).reduce((n, f) => n + (antes.get(f.codigo) !== JSON.stringify(f) ? 1 : 0), 0);
+}
+// Qué cambió entre dos versiones (en palabras): sirve para la confirmación (largo) y para el historial (corto).
+function cfgPlaDiff(antes, despues, corto) {
+  const lineas = [];
+  if (!Array.isArray(antes) || !Array.isArray(despues)) return lineas;
+  const previos = new Map(antes.map(f => [f.codigo, f]));
+  despues.forEach(f => {
+    const a = previos.get(f.codigo);
+    if (!a) { lineas.push(`➕ Plato nuevo (${(PLATO_LISTA_NOMBRE[f.lista] || f.lista).toLowerCase()}): ${f.nombre}`); return; }
+    if (a.nombre !== f.nombre) {
+      lineas.push(corto ? `Nombre: «${a.nombre}» → «${f.nombre}»`
+        : `✏️ Cambia el nombre «${a.nombre}» por «${f.nombre}»: los pedidos anteriores con «${a.nombre}» se contarán junto con «${f.nombre}».`);
+    }
+    if (!!a.activo !== !!f.activo) lineas.push(f.activo ? `✅ Se reactiva: ${f.nombre}` : `🚫 Se retira: ${f.nombre}`);
+  });
+  return lineas;
+}
+function cfgResumenPlatos(valor, previo) {
+  const l = cfgPlaDiff(previo, valor, true);
+  if (!l.length) return 'sin diferencias';
+  return `${l.length} cambio${l.length === 1 ? '' : 's'}: ${l.slice(0, 3).join(' · ')}${l.length > 3 ? ` · …y ${l.length - 3} más` : ''}`;
+}
+
+function cfgPlaConstruir() {
+  const zona = document.getElementById('config-platos');
+  if (!zona) return;
+  zona.innerHTML = `<div class="panel cfg-panel" id="cfgpla-panel">
+      <div class="panel-header"><div class="panel-title">🍲 Platos del menú</div></div>
+      <div class="panel-body">
+        <div class="cfg-ayuda">La lista de platos que comparten <b>Pedidos</b> (el autocompletado) y el generador del <b>Menú del día</b>. Puedes crear un plato, cambiarle el nombre o retirarlo (deja de ofrecerse, pero los pedidos viejos lo siguen contando). Si cambias un nombre, los pedidos anteriores con el nombre viejo se cuentan <b>juntos con el nuevo</b> en los reportes, para que la estadística no se parta en dos. No se modifica ningún pedido guardado.</div>
+        <div class="cfg-hoy" id="cfgpla-hoy"></div>
+        <div id="cfgpla-listas"></div>
+        <div class="cfgcat-barra">
+          <div></div>
+          <div class="cfgcat-acciones">
+            <span class="cfgcat-contador" id="cfgpla-contador"></span>
+            <button type="button" class="btn btn-outline" id="cfgpla-descartar" onclick="cfgPlaDescartar()" disabled>Descartar</button>
+            <button type="button" class="btn btn-primary" id="cfgpla-guardar" onclick="cfgPlaGuardar()" disabled>Guardar cambios</button>
+          </div>
+        </div>
+      </div></div>`;
+  cfgPlaConstruido = true;
+}
+
+function cfgPlaBaseDe(f) { return f._nuevo ? null : cfgPlaVigente().find(x => x.codigo === f.codigo) || null; }
+// Aviso que sale debajo del nombre cuando se está cambiando el de un plato que ya existía.
+function cfgPlaAvisoTexto(f) {
+  const base = cfgPlaBaseDe(f);
+  const nuevo = cfgLimpiar(f.nombre);
+  if (!base || !nuevo || nuevo === base.nombre) return '';
+  return `✏️ Vas a cambiar el nombre <b>«${escaparHtml(base.nombre)}»</b> por <b>«${escaparHtml(nuevo)}»</b>. Ten en cuenta que los pedidos anteriores con «${escaparHtml(base.nombre)}» se contarán junto con «${escaparHtml(nuevo)}» en los reportes, para que no se parta la estadística en dos.`;
+}
+function cfgPlaClasesFila(f) {
+  const base = cfgPlaBaseDe(f);
+  const cambio = !f._nuevo && base && JSON.stringify(cfgPlaPayload([f])[0]) !== JSON.stringify(cfgPlaPayload([base])[0]);
+  return [f.activo ? '' : 'cfgcat-retirado', f._nuevo ? 'cfgcat-nuevo' : cambio ? 'cfgcat-cambio' : ''].filter(Boolean).join(' ');
+}
+function cfgPlaHtmlFila(f, i, habilitado) {
+  const dis = habilitado ? '' : ' disabled';
+  const aviso = cfgPlaAvisoTexto(f);
+  const estado = f._nuevo
+    ? `<span class="badge badge-gray">nuevo</span> <button type="button" class="btn btn-outline" onclick="cfgPlaQuitar(${i})"${dis}>Quitar</button>`
+    : f.activo
+      ? `<span class="badge badge-green">activo</span> <button type="button" class="btn btn-outline" onclick="cfgPlaAlternar(${i})"${dis}>Retirar</button>`
+      : `<span class="badge badge-gray">retirado</span> <button type="button" class="btn btn-outline" onclick="cfgPlaAlternar(${i})"${dis}>Reactivar</button>`;
+  return `<tr id="cfgpla-fila-${i}" class="${cfgPlaClasesFila(f)}"><td class="cfgcat-cod">${escaparHtml(f.codigo)}</td>
+    <td><input type="text" maxlength="50" autocomplete="off" spellcheck="false" aria-label="Nombre del plato ${escaparHtml(f.codigo)}" value="${escaparHtml(f.nombre || '')}" oninput="cfgPlaEditar(${i},this.value)"${dis}>
+      <div class="cfgpla-aviso" id="cfgpla-aviso-${i}" style="display:${aviso ? 'block' : 'none'};">${aviso}</div></td>
+    <td class="cfgcat-estado">${estado}</td></tr>`;
+}
+function cfgPlaRenderCuerpo() {
+  const zona = document.getElementById('cfgpla-listas');
+  if (!zona) return;
+  const ok = CFG.disponible();
+  const filas = cfgPlaFilas();
+  zona.innerHTML = PLATOS_LISTAS.map(l => {
+    const propias = filas.map((f, i) => ({ f, i })).filter(x => x.f.lista === l);
+    const activos = propias.filter(x => x.f.activo).length;
+    return `<div class="cfgpla-lista" id="cfgpla-lista-${l}">
+      <div class="cfgpla-titulo">${PLATO_LISTA_ICONO[l]} ${PLATO_LISTA_NOMBRE[l]} <span class="badge badge-gray">${activos} activo${activos === 1 ? '' : 's'} de ${propias.length}</span></div>
+      <div class="table-wrap"><table class="cfgcat-tabla"><thead><tr><th>Código</th><th>Nombre</th><th>Estado</th></tr></thead><tbody>${propias.map(x => cfgPlaHtmlFila(x.f, x.i, ok)).join('')}</tbody></table></div>
+      <div style="margin:6px 0 14px;"><button type="button" class="btn btn-outline" id="cfgpla-agregar-${l}" onclick="cfgPlaAgregar('${l}')"${ok ? '' : ' disabled'}>＋ Agregar a ${PLATO_LISTA_NOMBRE[l].toLowerCase()}</button></div>
+    </div>`;
+  }).join('');
+}
+function cfgPlaActualizarHoy() {
+  const el = document.getElementById('cfgpla-hoy');
+  if (!el) return;
+  const filas = cfgPlaVigente(), fila = CFG.fila(CFGPLA_CLAVE), activos = filas.filter(f => f.activo).length;
+  el.innerHTML = `Hoy: <b>${activos} plato${activos === 1 ? '' : 's'} activo${activos === 1 ? '' : 's'}</b> de ${filas.length} · ` + (fila
+    ? `desde ${escaparHtml(fechaHoraLegible(fila.vigente_desde))} · por ${escaparHtml(fila.creado_por || '—')}`
+    : 'los platos de siempre (nunca se han cambiado)');
+}
+function cfgPlaActualizarBarra() {
+  const n = cfgPlaCambios(), ok = CFG.disponible();
+  const cont = document.getElementById('cfgpla-contador'), g = document.getElementById('cfgpla-guardar'), d = document.getElementById('cfgpla-descartar');
+  if (cont) cont.textContent = n ? `${n} cambio${n === 1 ? '' : 's'} sin guardar` : '';
+  if (g) g.disabled = !ok || n === 0;
+  if (d) d.disabled = !cfgPla;
+}
+function cfgPlaRender() {
+  if (!document.getElementById('config-platos')) return;
+  if (!cfgPlaConstruido) cfgPlaConstruir();
+  cfgPlaActualizarHoy();
+  if (!cfgPla) {                                        // mientras se edita no se pisa lo escrito
+    const firma = JSON.stringify(cfgPlaVigente()) + '|' + CFG.disponible();
+    if (firma !== cfgPlaFirma) { cfgPlaFirma = firma; cfgPlaRenderCuerpo(); }
+  }
+  cfgPlaActualizarBarra();
+}
+
+function cfgPlaEditar(i, valor) {
+  const filas = cfgPlaBorrador();
+  if (!filas[i]) return;
+  filas[i].nombre = valor;
+  const tr = document.getElementById('cfgpla-fila-' + i);
+  if (tr) tr.className = cfgPlaClasesFila(filas[i]);
+  const av = document.getElementById('cfgpla-aviso-' + i);
+  if (av) { const t = cfgPlaAvisoTexto(filas[i]); av.innerHTML = t; av.style.display = t ? 'block' : 'none'; }
+  cfgPlaActualizarBarra();
+}
+function cfgPlaAlternar(i) {
+  const filas = cfgPlaBorrador();
+  if (!filas[i]) return;
+  filas[i].activo = !filas[i].activo;
+  cfgPlaRenderCuerpo();
+  cfgPlaActualizarBarra();
+}
+function cfgPlaSiguienteCodigo(filas, lista) {
+  const usados = new Set(filas.map(f => f.codigo));
+  for (let n = 1; n <= 999; n++) { const c = PLATO_PREFIJO[lista] + String(n).padStart(2, '0'); if (!usados.has(c)) return c; }
+  return null;
+}
+function cfgPlaAgregar(lista) {
+  const filas = cfgPlaBorrador();
+  if (filas.length >= PLATOS_MAX) { showToast(`⚠ Ya hay ${PLATOS_MAX} platos: es el máximo. Retira alguno que no uses.`, 'warning'); return; }
+  const codigo = cfgPlaSiguienteCodigo(filas, lista);
+  if (!codigo) { showToast('⚠ Ya no hay códigos libres en esa lista', 'warning'); return; }
+  filas.push({ codigo, lista, nombre: '', activo: true, _nuevo: true });
+  cfgPlaRenderCuerpo();
+  cfgPlaActualizarBarra();
+  const el = document.querySelector(`#cfgpla-fila-${filas.length - 1} input`);
+  if (el) { el.focus(); if (el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); }
+}
+function cfgPlaQuitar(i) {
+  const filas = cfgPlaBorrador();
+  if (!filas[i] || !filas[i]._nuevo) return;            // solo se quita lo que todavía no se ha guardado
+  filas.splice(i, 1);
+  cfgPlaRenderCuerpo();
+  cfgPlaActualizarBarra();
+}
+function cfgPlaDescartar() { cfgPla = null; cfgPlaFirma = null; cfgPlaRenderCuerpo(); cfgPlaActualizarBarra(); }
+async function cfgPlaGuardar() {
+  if (cfgGuardando) return;
+  if (!adminAutenticado) { showToast('⚠ Solo el administrador puede cambiar la configuración', 'warning'); return; }
+  if (!CFG.disponible()) { showToast('⚠ Falta instalar la configuración en Supabase (sql/configuracion.sql, sql/configuracion_etapa_2.sql, sql/configuracion_etapa_4.sql y sql/configuracion_etapa_3.sql)', 'warning'); return; }
+  const filas = cfgPla;
+  if (!filas) return;
+  for (const f of filas) if (!cfgLimpiar(f.nombre)) { showToast('⚠ Falta el nombre de un plato' + (f._nuevo ? ' nuevo' : ''), 'warning'); return; }
+  const payload = cfgPlaPayload(filas);
+  const vigente = cfgPlaVigente();
+  const hayRenombres = payload.some(f => { const a = vigente.find(x => x.codigo === f.codigo); return a && a.nombre !== f.nombre; });
+  await cfgEgrGuardarVersion({
+    clave: CFGPLA_CLAVE, titulo: 'Platos del menú', payload, lineas: cfgPlaDiff(vigente, payload),
+    pie: 'Rigen desde ahora. No se modifica ningún pedido guardado.' + (hayRenombres
+      ? ' En los reportes (los platos más pedidos) los pedidos con el nombre anterior se suman al nombre nuevo, también los de meses pasados.'
+      : ' Los pedidos ya tomados conservan el nombre que tenían.'),
+    descartar: () => { cfgPla = null; cfgPlaFirma = null; }
+  });
+}
+
 // ── TABS ──────────────────────────────────────────────────────────────
 function showTab(id, el) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -12380,6 +13185,7 @@ function showTab(id, el) {
 function renderAll() {
   catalogoAlDia();
   categoriasYCuentasAlDia();
+  platosAlDia();
   // Operativas — sin contraseña
   renderIngresos();
   renderPendientes();

@@ -103,7 +103,7 @@
 
 <div class="tabs">
   <button class="tab active" onclick="switchTab('menu')">🍽️ Menú del Día</button>
-  <button class="tab" onclick="switchTab('admin')">⚙️ Administrar Platos</button>
+  <button class="tab" onclick="switchTab('admin')">📋 Platos disponibles</button>
 </div>
 
 <div id="vista-menu">
@@ -134,8 +134,9 @@
 </div>
 
 <div id="vista-admin">
+  <p class="admin-tip" id="admin-origen" style="margin:0 0 14px; font-size:0.8rem; font-style:normal; color:#bbb"></p>
   <div class="admin-grid" id="admin-grid"></div>
-  <p class="admin-tip" style="margin-top:14px; text-align:center">💾 Los cambios se guardan automáticamente en este navegador.</p>
+  <p class="admin-tip" style="margin-top:14px; text-align:center">Los platos se cambian en el sistema, no aquí.</p>
 </div>
 
 <script>
@@ -143,7 +144,7 @@ const DEFAULT = {
   sopas:     ["Sopa de Hueso","Sopa de Queso","Sopa de Frijol","Sopa de Lenteja","Sopa de Pescado","Sopa de Verduras","Sopa de Garbanzos","Sopa de Arvejas","Sopa de Pollo"],
   arroces:   ["Arroz Blanco","Arroz de Coco","Arroz de Frijol","Arroz de Zanahoria","Arroz de Pimenton"],
   proteinas: ["Pollo en salsa BBQ","Pollo Guisado en zumo de coco","Pollo en salsa de tomate","Pollo Frito","Pollo Frito/BBQ","Pollo Guisado","Pollo Apanado","Cerdo Encebollado","Cerdo Guisado","Cerdo en Bistec","Chuleta en Coca Cola","Chuleta Frita/BBQ","Carne Guisada","Carne Desmechada","Carne Molida","Carne Goulash","Carne en Bistec","Pechuga Desmechada","Pechuga Apanada","Pechuga en salsa","Higado en Bistec","Costillas BBQ","Mondongo Guisado","Trifasico de carne y cerdo","Sobrebarriga guisada","Lengua en salsa","Fricache de Pescado"],
-  acomp:     ["Patacones","Tajadas","Yuca Cocida"]
+  acomp:     ["Patacones","Tajada madura","Yuca Cocida"]
 };
 
 const CATEGORIAS = [
@@ -153,28 +154,52 @@ const CATEGORIAS = [
   { key: "acomp",     label: "Acompañamientos", icon: "🍟" }
 ];
 
+// Los platos son UNA sola lista, la del sistema (⚙️ Configuración → Platos del menú): la comparten Pedidos y este generador.
+// El sistema se la deja a esta página en el almacenamiento del navegador (clave elLobo_menu_platos) cada vez que se abre, y
+// cada vez que el administrador la cambia. Si todavía no la ha dejado (p. ej. este navegador nunca abrió el sistema), se usa
+// la lista de siempre (DEFAULT). Desde aquí ya no se agregan ni se quitan platos: se hace en el sistema.
+const CLAVE_PLATOS = "elLobo_menu_platos";
+const CLAVES_LISTAS = ["sopas", "arroces", "proteinas", "acomp"];
+function platosValidos(p) {
+  if (!p || typeof p !== "object" || p.v !== 1) return false;
+  return CLAVES_LISTAS.every(k => Array.isArray(p[k]) && p[k].length <= 300 &&
+    p[k].every(n => typeof n === "string" && n.length >= 1 && n.length <= 50));
+}
+let origenPlatos = "siempre";                         // "sistema" = la lista que dejó el sistema · "siempre" = la de siempre (DEFAULT)
 function cargarCatalogo() {
   try {
-    const saved = localStorage.getItem("elLobo_catalogo");
-    return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT));
-  } catch(e) { return JSON.parse(JSON.stringify(DEFAULT)); }
-}
-function guardarCatalogo(cat) {
-  localStorage.setItem("elLobo_catalogo", JSON.stringify(cat));
+    const crudo = localStorage.getItem(CLAVE_PLATOS);
+    const p = crudo ? JSON.parse(crudo) : null;
+    if (platosValidos(p)) {
+      origenPlatos = "sistema";
+      const cat = {};
+      CLAVES_LISTAS.forEach(k => { cat[k] = p[k].slice(); });
+      return cat;
+    }
+  } catch (e) { /* almacenamiento no disponible o dañado: se usa la lista de siempre */ }
+  origenPlatos = "siempre";
+  return JSON.parse(JSON.stringify(DEFAULT));
 }
 
 let catalogo = cargarCatalogo();
 
+// Arma las casillas de elegir. Si ya había platos marcados, los que siguen en la lista (mismo nombre) quedan marcados.
 function buildMenuLists() {
   CATEGORIAS.forEach(({ key }) => {
     const c = document.getElementById("lista-" + key);
+    const marcados = new Set([...c.querySelectorAll("input:checked")].map(i => i.parentElement.querySelector("label").textContent));
     c.innerHTML = "";
     catalogo[key].forEach((item, i) => {
       const div = document.createElement("div");
       div.className = "check-item";
       const uid = key + "_" + i;
-      div.innerHTML = "<input type=\"checkbox\" id=\"" + uid + "\" data-cat=\"" + key + "\" onchange=\"updateCount('" + key + "')\">" +
-                      "<label for=\"" + uid + "\">" + item + "</label>";
+      const caja = document.createElement("input");
+      caja.type = "checkbox"; caja.id = uid; caja.dataset.cat = key;
+      caja.checked = marcados.has(item);
+      caja.addEventListener("change", () => updateCount(key));
+      const etiqueta = document.createElement("label");
+      etiqueta.htmlFor = uid; etiqueta.textContent = item;       // textContent: un nombre nunca se interpreta como código
+      div.appendChild(caja); div.appendChild(etiqueta);
       c.appendChild(div);
     });
     updateCount(key);
@@ -192,50 +217,37 @@ function getSel(cat) {
     .map(c => c.parentElement.querySelector("label").textContent);
 }
 
+// Vista de solo lectura de los platos de hoy (se cambian en el sistema).
 function buildAdmin() {
   const grid = document.getElementById("admin-grid");
   grid.innerHTML = "";
+  const aviso = document.getElementById("admin-origen");
+  aviso.textContent = origenPlatos === "sistema"
+    ? "Esta es la lista de platos del sistema. Para crear, renombrar o retirar un plato: ⚙️ Configuración → Platos del menú (solo administrador)."
+    : "Este navegador todavía no recibió la lista del sistema, así que se muestran los platos de siempre. Abre el sistema una vez para actualizarla. Para crear, renombrar o retirar platos: ⚙️ Configuración → Platos del menú (solo administrador).";
   CATEGORIAS.forEach(({ key, label, icon }) => {
     const card = document.createElement("div");
     card.className = "admin-card";
-    card.innerHTML = "<h3>" + icon + " " + label + " <span class=\"badge-count\" id=\"badge-" + key + "\">" + catalogo[key].length + "</span></h3>" +
-      "<ul class=\"admin-lista\" id=\"admin-lista-" + key + "\"></ul>" +
-      "<div class=\"add-row\">" +
-        "<input type=\"text\" id=\"input-" + key + "\" placeholder=\"Nombre del plato...\" onkeydown=\"if(event.key==='Enter') agregarPlato('" + key + "')\">"+
-        "<button class=\"btn-agregar\" onclick=\"agregarPlato('" + key + "')\" >+</button>" +
-      "</div>";
+    const h = document.createElement("h3");
+    h.appendChild(document.createTextNode(icon + " " + label + " "));
+    const badge = document.createElement("span");
+    badge.className = "badge-count"; badge.id = "badge-" + key; badge.textContent = catalogo[key].length;
+    h.appendChild(badge);
+    const ul = document.createElement("ul");
+    ul.className = "admin-lista"; ul.id = "admin-lista-" + key;
+    catalogo[key].forEach(item => { const li = document.createElement("li"); const s = document.createElement("span"); s.textContent = item; li.appendChild(s); ul.appendChild(li); });
+    card.appendChild(h); card.appendChild(ul);
     grid.appendChild(card);
-    renderAdminLista(key);
   });
 }
 
-function renderAdminLista(key) {
-  const ul = document.getElementById("admin-lista-" + key);
-  ul.innerHTML = "";
-  catalogo[key].forEach((item, i) => {
-    const li = document.createElement("li");
-    li.innerHTML = "<span>" + item + "</span><button class=\"btn-eliminar\" onclick=\"eliminarPlato('" + key + "', " + i + ")\" title=\"Eliminar\">✕</button>";
-    ul.appendChild(li);
-  });
-  const badge = document.getElementById("badge-" + key);
-  if (badge) badge.textContent = catalogo[key].length;
-}
-
-function agregarPlato(key) {
-  const input = document.getElementById("input-" + key);
-  const nombre = input.value.trim();
-  if (!nombre) return;
-  if (catalogo[key].includes(nombre)) {
-    input.style.borderColor = "#ef5350";
-    setTimeout(() => input.style.borderColor = "#444", 1500);
-    return;
-  }
-  catalogo[key].push(nombre);
-  guardarCatalogo(catalogo);
-  input.value = "";
-  renderAdminLista(key);
+// El sistema dejó una lista nueva (o cambió): se vuelve a leer y se rehacen las casillas sin perder lo marcado.
+window.addEventListener("storage", e => {
+  if (e.key !== CLAVE_PLATOS && e.key !== null) return;
+  catalogo = cargarCatalogo();
   buildMenuLists();
-}
+  if (document.getElementById("vista-admin").style.display === "block") buildAdmin();
+});
 
 // Aviso o pregunta en una ventana propia (reemplaza alert/confirm del navegador). Devuelve true con «aceptar» y false con
 // «cancelar» o Esc; si no hay botón «cancelar» es solo un aviso. Un clic fuera de la ventana no decide nada.
@@ -264,16 +276,6 @@ function avisoMenu({ titulo, cuerpo = "", aceptar = "Aceptar", cancelar = null }
     fondo.classList.add("visible");
     (cancelar ? zona.firstChild : ok).focus();        // al borrar, el foco queda en «Volver»
   });
-}
-
-async function eliminarPlato(key, idx) {
-  const nombre = catalogo[key][idx];
-  if (!(await avisoMenu({ titulo: "¿Eliminar \"" + nombre + "\"?", aceptar: "Sí, eliminar", cancelar: "Volver" }))) return;
-  if (catalogo[key][idx] !== nombre) return;            // la lista cambió mientras se preguntaba: no se borra otro plato
-  catalogo[key].splice(idx, 1);
-  guardarCatalogo(catalogo);
-  renderAdminLista(key);
-  buildMenuLists();
 }
 
 function switchTab(tab) {

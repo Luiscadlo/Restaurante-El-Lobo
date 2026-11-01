@@ -368,7 +368,7 @@ def test_los_rangos_son_los_mismos_en_la_base_la_pantalla_y_el_servidor_falso():
 def test_los_valores_de_siempre_de_la_pantalla_son_validos_y_cada_clave_tiene_su_campo():
     html = HTML.read_text(encoding="utf-8")
     bloque = re.search(r"const CFG_DEFECTOS = Object\.freeze\(\{(.*?)\}\);", html, re.S).group(1)
-    defectos = dict(re.findall(r"(\w+): ('[^']*'|\d+)", bloque))
+    defectos = dict(re.findall(r"(\w+): ('[^']*'|\d+|(?:true|false)\b)", bloque))
     assert defectos["mesas"] == "8" and defectos["recargo_para_llevar"] == "1000" and defectos["empaque_domicilio"] == "1000"
     assert defectos["respaldo_dia_semana"] == "0" and defectos["respaldo_rojo_dias"] == "10"
     assert defectos["negocio_nombre"] == "'El Lobo'" and defectos["negocio_emoji"] == "'🐺'"
@@ -377,4 +377,7 @@ def test_los_valores_de_siempre_de_la_pantalla_son_validos_y_cada_clave_tiene_su
         assert minimo <= int(defectos[clave]) <= maximo, clave
     # Toda clave que la base acepta tiene su campo en la pantalla (y al revés).
     en_pantalla = set(re.findall(r"\{ clave: '([a-z_]+)', titulo:", html))
-    assert en_pantalla == set(defectos) == set(en_sql) | {"negocio_nombre", "negocio_emoji"}
+    # «negocio_*» son texto y «cierre_comidas_familia» es sí/no: no tienen rango numérico en la base. El valor de siempre de El Lobo
+    # para las comidas de la familia es «sí» (como se cerraba antes de existir la opción).
+    assert defectos["cierre_comidas_familia"] == "true"
+    assert en_pantalla == set(defectos) == set(en_sql) | {"negocio_nombre", "negocio_emoji", "cierre_comidas_familia"}

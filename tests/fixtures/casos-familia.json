@@ -1,0 +1,75 @@
+{
+ "comentario": "Casos compartidos por las pruebas de Python (Postgres real), de la pantalla y del servidor falso para la opción «comidas de la familia en el cierre» (clave cierre_comidas_familia, sql/configuracion_cierre_familia.sql): las tres reglas deben dar el MISMO veredicto y el MISMO mensaje. «mensaje» null = válido.",
+ "casos": [
+  {
+   "id": "familia: verdadero (se piden, como siempre)",
+   "clave": "cierre_comidas_familia",
+   "valor": true,
+   "mensaje": null
+  },
+  {
+   "id": "familia: falso (no se piden)",
+   "clave": "cierre_comidas_familia",
+   "valor": false,
+   "mensaje": null
+  },
+  {
+   "id": "familia: el texto «true» no sirve",
+   "clave": "cierre_comidas_familia",
+   "valor": "true",
+   "mensaje": "La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso)."
+  },
+  {
+   "id": "familia: el texto «sí» no sirve",
+   "clave": "cierre_comidas_familia",
+   "valor": "sí",
+   "mensaje": "La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso)."
+  },
+  {
+   "id": "familia: el texto vacío no sirve",
+   "clave": "cierre_comidas_familia",
+   "valor": "",
+   "mensaje": "La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso)."
+  },
+  {
+   "id": "familia: el número 1 no sirve",
+   "clave": "cierre_comidas_familia",
+   "valor": 1,
+   "mensaje": "La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso)."
+  },
+  {
+   "id": "familia: el número 0 no sirve",
+   "clave": "cierre_comidas_familia",
+   "valor": 0,
+   "mensaje": "La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso)."
+  },
+  {
+   "id": "familia: nulo (null) no sirve",
+   "clave": "cierre_comidas_familia",
+   "valor": null,
+   "mensaje": "La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso)."
+  },
+  {
+   "id": "familia: una lista vacía no sirve",
+   "clave": "cierre_comidas_familia",
+   "valor": [],
+   "mensaje": "La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso)."
+  },
+  {
+   "id": "familia: una lista con verdadero no sirve",
+   "clave": "cierre_comidas_familia",
+   "valor": [
+    true
+   ],
+   "mensaje": "La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso)."
+  },
+  {
+   "id": "familia: un objeto no sirve",
+   "clave": "cierre_comidas_familia",
+   "valor": {
+    "valor": true
+   },
+   "mensaje": "La opción «comidas de la familia en el cierre» debe ser sí o no (verdadero o falso)."
+  }
+ ]
+}
