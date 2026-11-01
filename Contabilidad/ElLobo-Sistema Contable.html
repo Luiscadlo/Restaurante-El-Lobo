@@ -4878,7 +4878,7 @@ function ajustarAltoHeaderSticky() {
 ajustarAltoHeaderSticky();
 window.addEventListener('resize', ajustarAltoHeaderSticky);
 
-['ing-fecha','egr-fecha','venta-fecha','dd-fecha','caja-mov-fecha'].forEach(id => {
+['ing-fecha','egr-fecha','venta-fecha','dd-fecha','caja-mov-fecha','ingext-fecha'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.value = today();
 });
@@ -6605,15 +6605,6 @@ function irAPendientesConMesa(mesaNum) {
       setTimeout(() => el.classList.remove('highlighted'), 2000);
     }
   }, 150);
-}
-
-function scrollToMesa(mesaNum) {
-  const el = document.getElementById(`mesa-group-${mesaNum}-1`);
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth' });
-    el.classList.add('highlighted');
-    setTimeout(() => el.classList.remove('highlighted'), 2000);
-  }
 }
 
 // Arma el patch de "pago" para UN pedido — incluye el reparto exacto de pago
@@ -10560,19 +10551,37 @@ async function registrarVenta() {
   if (!p) return;
   if (p.stock < cant) { showToast(`⚠ Stock insuficiente (hay ${p.stock} ${p.unidad})`, 'warning'); return; }
 
+  // Dos escrituras (el nuevo stock y el consumo). Si la segunda falla, la primera se deshace (el stock vuelve a lo que era): así nunca
+  // queda el stock más bajo sin un consumo que lo explique (M8). Se deshace con el stock, no borrando el consumo, porque caja puede
+  // cambiar el inventario pero no borrar consumos (solo el administrador).
   const nuevoStock = p.stock - cant;
+  try { await sbPatch('inventario', `id=eq.${id}`, { stock: nuevoStock }); }
+  catch(e) { console.error(e); showToast('⚠ No se registró el consumo. No se cambió nada', 'warning'); return; }
+  let cons;
   try {
-    await sbPatch('inventario', `id=eq.${id}`, { stock: nuevoStock });
-    const [cons] = await sbInsert('consumos', {
+    [cons] = await sbInsert('consumos', {
       producto_id: id, nombre: p.nombre, cantidad: cant, fecha, costo: p.costo * cant
     });
-    p.stock = nuevoStock;
-    ST.consumos.unshift(cons);
-    setSyncBadge('ok');
-    renderAll();
-    document.getElementById('venta-cantidad').value = '';
-    showToast(`✅ Consumo registrado — ${p.nombre}`, 'ok');
-  } catch(e) { showToast('⚠ Error al registrar consumo', 'warning'); }
+  } catch(e) {
+    console.error(e);
+    try {
+      await sbPatch('inventario', `id=eq.${id}`, { stock: p.stock });
+      showToast('⚠ No se registró el consumo. El stock quedó como estaba', 'warning');
+    } catch(e2) {
+      console.error(e2);
+      p.stock = nuevoStock;
+      renderAll();
+      avisarSistema({ titulo: 'Revisa el stock', tono: 'peligro',
+        cuerpo: `No se pudo guardar el consumo de ${cant} ${p.unidad} de ${p.nombre}, pero el stock ya había bajado y no se pudo devolver.\n\nRecarga la página y corrige el stock de ${p.nombre} a mano antes de seguir.` });
+    }
+    return;
+  }
+  p.stock = nuevoStock;
+  ST.consumos.unshift(cons);
+  setSyncBadge('ok');
+  renderAll();
+  document.getElementById('venta-cantidad').value = '';
+  showToast(`✅ Consumo registrado — ${p.nombre}`, 'ok');
 }
 
 function setFinv(f, btn) {
