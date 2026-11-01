@@ -129,7 +129,7 @@ El Excel (Datos → Excel) y el Tablero deben dar lo mismo, con **una diferencia
 
 | Síntoma | Qué hacer |
 |---|---|
-| Con el enlace viejo (`Contabildad`) la pantalla tarda un instante en cargar | Es solo una redirección al sistema. Para saltarla, guarda el enlace nuevo (la raíz del sitio: `https://luiscadlo.github.io/Restaurante-El-Lobo/`) y borra el viejo de favoritos. |
+| Al abrir un favorito o acceso directo viejo sale «Este enlace cambió» | La carpeta vieja `Contabildad` (escrita con «d» por error) se eliminó el 1-nov-2026. Toca el botón de esa pantalla y guarda el enlace permanente (la raíz del sitio: `https://luiscadlo.github.io/Restaurante-El-Lobo/`); borra el viejo de favoritos y vuelve a crear el acceso directo del celular. |
 | Se restauró y salió «Se cortó la conexión… No se sabe si alcanzó a terminar» | **No lo repitas.** Recarga y mira en Datos cuántos pedidos hay: si coincide con el respaldo, terminó; si no, no se cambió nada. La copia «ANTES_de…» ya se había descargado. Ver `docs/RESTAURAR.md`. |
 | Pantalla de entrada no deja pasar a nadie | ¿Se activó RLS sin crear usuarios con rol? Revisa el `select email, raw_app_meta_data ->> 'rol' from auth.users`. Último recurso: `sql/rollback_rls.sql`. |
 | La caja no puede cobrar tras un cambio | Puede ser un permiso faltante. Abre la consola (F12) y busca peticiones con error 403; pásaselas a Claude. Reversa: arriba. |
