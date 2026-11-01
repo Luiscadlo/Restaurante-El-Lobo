@@ -11754,6 +11754,21 @@ async function eliminarGastoDia(id) {
   showToast('🗑 Gasto quitado', 'ok');
 }
 
+// Un gasto cambió de monto o de categoría: su turno (si ya tiene cierre) cambia en la diferencia. Los préstamos no cuentan.
+async function ajustarCierrePorGastoEditado(antes, despues) {
+  const aporte = g => (esCatExcluida(g.categoria) ? 0 : (g.monto || 0));
+  const delta = aporte(despues) - aporte(antes);
+  if (delta === 0) return;
+  const c = ST.cierresDia.find(x => x.fecha === despues.fecha && x.turno === despues.turno);
+  if (!c) return;
+  const gastos = Math.max(0, (c.gastos || 0) + delta);
+  const resultado = (c.resultado || 0) + ((c.gastos || 0) - gastos);
+  if (gastos === c.gastos && resultado === c.resultado) return;
+  await sbPatch('cierres_dia', `fecha=eq.${despues.fecha}&turno=eq.${despues.turno}`, { gastos, resultado });
+  c.gastos = gastos;
+  c.resultado = resultado;
+}
+
 // Si el turno del gasto quitado ya tiene cierre (normal o manual), sus «gastos» bajan en el monto del gasto y su
 // resultado sube en lo mismo (el cierre guarda sus totales; no los recalcula solo). Los préstamos no cuentan como
 // gasto del cierre, así que no lo tocan. Se usa la diferencia —no se recalcula desde las filas— para no alterar nada
@@ -11793,11 +11808,15 @@ async function guardarEdicionGastoDia(id) {
     const patch = categoria !== undefined ? { nombre, monto, categoria } : { nombre, monto };
     await sbPatch('gastos_dia', `id=eq.${id}`, patch);
     const g = ST.gastosDia.find(g => g.id === id);
+    const antes = g ? { ...g } : null;
     if (g) Object.assign(g, patch);
     ddEditId = null;
     setSyncBadge('ok');
-    renderDiaADia();
-    showToast('✅ Gasto actualizado', 'ok');
+    // Si el turno de este gasto ya tiene cierre guardado, el cierre cambia en la diferencia (igual que al quitar un gasto).
+    let avisoCierre = false;
+    if (g && antes) { try { await ajustarCierrePorGastoEditado(antes, g); } catch (e2) { console.error(e2); avisoCierre = true; } }
+    renderAll();
+    showToast(avisoCierre ? '⚠ El gasto se actualizó, pero no se pudo actualizar el cierre de ese turno: ábrelo con «Corregir cierre» y guárdalo' : '✅ Gasto actualizado', avisoCierre ? 'warning' : 'ok');
   } catch(e) { showToast('⚠ Error al actualizar', 'warning'); }
 }
 
