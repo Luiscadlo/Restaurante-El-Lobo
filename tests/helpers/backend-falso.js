@@ -57,7 +57,7 @@ function copiaProfunda(x) { return JSON.parse(JSON.stringify(x)); }
 const RANGOS_CONFIG = {
   mesas: [1, 60, 'El número de mesas'], recargo_para_llevar: [0, 50000, 'El recargo de «para llevar»'],
   empaque_domicilio: [0, 50000, 'El empaque de domicilio'], respaldo_dia_semana: [0, 6, 'El día del respaldo semanal'],
-  respaldo_rojo_dias: [7, 60, 'Los días para el aviso rojo del respaldo'],
+  respaldo_rojo_dias: [7, 400, 'Los días para el aviso rojo del respaldo'],
 };
 function validarConfiguracion(clave, valor) {
   const mal = message => ({ code: '22023', message, details: 'configuracion_invalida', hint: null });
@@ -558,6 +558,13 @@ async function abrirSistema(page, opciones = {}) {
       try { cuerpo = req.postDataJSON(); } catch (e) { /* sin cuerpo */ }
       // Configuración: el disparador de la base valida, y pone él mismo vigente_desde / creado_en / creado_por.
       if (tabla === 'configuracion' && metodo === 'POST') {
+        // Falla simulada de escritura (reg.control.fallasEscritura): no se guarda NINGUNA fila de la petición.
+        const iFallaCfg = reg.control.fallasEscritura.findIndex(f => f.tabla === 'configuracion' && f.metodo === 'POST');
+        if (iFallaCfg >= 0) {
+          const falla = reg.control.fallasEscritura.splice(iFallaCfg, 1)[0];
+          if (falla.tipo === 'red') return route.abort('failed');
+          return route.fulfill({ status: 500, contentType: 'application/json', headers: cors, body: JSON.stringify({ code: 'XX000', message: 'fallo simulado del servidor', details: null, hint: null }) });
+        }
         const nuevas = (Array.isArray(cuerpo) ? cuerpo : [cuerpo || {}]);
         const malo = nuevas.map(f => validarConfiguracion(f.clave, f.valor)).find(Boolean)
           || nuevas.map(f => { const m = validarCatalogoHistoria(f.clave, f.valor, datos.configuracion); return m ? { code: '22023', message: m, details: 'configuracion_invalida', hint: null } : null; }).find(Boolean);

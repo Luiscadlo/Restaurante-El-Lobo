@@ -192,7 +192,7 @@ test.describe('la regla en detalle (vencimiento y nivel)', () => {
 });
 
 test.describe('guardar la frecuencia desde Configuración', () => {
-  test('pide confirmación, manda UNA fila nueva y el aviso cambia al instante', async ({ page }) => {
+  test('pide confirmación, manda UNA petición (la frecuencia y los días del aviso rojo) y el aviso cambia al instante', async ({ page }) => {
     const reg = await abrir(page, { hoy: '2026-11-01', ultimo: '2026-10-31' });
     await expect(aviso(page)).toContainText('Toca el respaldo semanal');
     await page.evaluate(() => { window.__noAceptarAvisos = true; });                            // la confirmación la contesta esta prueba
@@ -202,11 +202,12 @@ test.describe('guardar la frecuencia desde Configuración', () => {
     await page.click(`#cfg-guardar-${K}`);
     await expect(page.locator('#sis-cuerpo')).toContainText('Cada cuánto se hace el respaldo');
     await expect(page.locator('#sis-cuerpo')).toContainText('Hoy: Semanal  →  Nuevo: Mensual');
+    await expect(page.locator('#sis-cuerpo')).toContainText('Días para el aviso rojo: 10  →  35');   // se ajustó solo al elegir «Mensual»
     expect(escrituras(reg, 'configuracion', 'POST')).toHaveLength(0);                          // todavía no se guardó
     await page.click('#sis-opciones button[data-eleccion="si"]');
     await expect(toasts(page).filter({ hasText: 'Guardado: Cada cuánto se hace el respaldo = Mensual' })).toHaveCount(1);
     expect(escrituras(reg, 'configuracion', 'POST')).toHaveLength(1);
-    expect(escrituras(reg, 'configuracion', 'POST')[0].cuerpo).toEqual({ clave: K, valor: 'mensual' });
+    expect(escrituras(reg, 'configuracion', 'POST')[0].cuerpo).toEqual([{ clave: K, valor: 'mensual' }, { clave: 'respaldo_rojo_dias', valor: 35 }]);
     await expect(page.locator(`#cfg-hoy-${K}`)).toContainText('Hoy: Mensual');
     await expect(page.locator(`#cfg-${K}`)).toHaveValue('mensual');                            // el selector se queda en «Mensual»
     await expect(page.locator(`#cfg-guardar-${K}`)).toBeDisabled();
@@ -246,6 +247,93 @@ test.describe('guardar la frecuencia desde Configuración', () => {
   test('caja no ve el aviso ni puede guardar la configuración', async ({ page }) => {
     await abrir(page, { hoy: '2026-11-01', ultimo: '2026-10-31', usuario: 'caja' });
     await expect(aviso(page)).toBeHidden();
+  });
+});
+
+const ROJO = 'respaldo_rojo_dias';
+test.describe('los días del aviso rojo se ajustan solos a la frecuencia y no bajan de su mínimo', () => {
+  const rojo = page => page.locator(`#cfg-${ROJO}`);
+
+  test('al elegir cada frecuencia el número salta a 10 / 35 / 100; al volver a la guardada, vuelve lo guardado', async ({ page }) => {
+    await abrir(page);
+    await irA(page, 'config');
+    await expect(rojo(page)).toHaveValue('10');
+    await page.locator(`#cfg-${K}`).selectOption('mensual');
+    await expect(rojo(page)).toHaveValue('35');
+    await page.locator(`#cfg-${K}`).selectOption('trimestral');
+    await expect(rojo(page)).toHaveValue('100');
+    await page.locator(`#cfg-${K}`).selectOption('semanal');
+    await expect(rojo(page)).toHaveValue('10');                      // lo guardado
+    await expect(page.locator(`#cfg-guardar-${ROJO}`)).toBeDisabled();
+  });
+
+  test('con «Trimestral» no deja guardar menos de 100 días, pero sí 120; con «Mensual», menos de 35 no, 40 sí', async ({ page }) => {
+    const reg = await abrir(page);
+    await irA(page, 'config');
+    await page.evaluate(() => { window.__noAceptarAvisos = true; });
+    await page.locator(`#cfg-${K}`).selectOption('trimestral');
+    await rojo(page).fill('60');                                      // el servidor lo aceptaría (7–400): lo frena la pantalla
+    await page.click(`#cfg-guardar-${ROJO}`);
+    await expect(toasts(page).filter({ hasText: 'Con respaldo trimestral los días para el aviso rojo no pueden ser menos de 100' })).toHaveCount(1);
+    expect(escrituras(reg, 'configuracion', 'POST')).toHaveLength(0);
+    await page.locator(`#cfg-${K}`).selectOption('mensual');
+    await rojo(page).fill('34');
+    await page.click(`#cfg-guardar-${K}`);                            // guardar la frecuencia con un número por debajo del mínimo
+    await expect(toasts(page).filter({ hasText: 'Con respaldo mensual los días para el aviso rojo no pueden ser menos de 35' })).toHaveCount(1);
+    expect(escrituras(reg, 'configuracion', 'POST')).toHaveLength(0);
+    await rojo(page).fill('40');
+    await page.click(`#cfg-guardar-${K}`);
+    await page.click('#sis-opciones button[data-eleccion="si"]');
+    await expect(toasts(page).filter({ hasText: 'aviso rojo a los 40 días' })).toHaveCount(1);
+    expect(escrituras(reg, 'configuracion', 'POST')[0].cuerpo).toEqual([{ clave: K, valor: 'mensual' }, { clave: ROJO, valor: 40 }]);
+  });
+
+  test('trimestral con 100 días: se guardan las dos filas y el servidor las acepta (el tope ya no es 60)', async ({ page }) => {
+    const reg = await abrir(page);
+    await irA(page, 'config');
+    await page.evaluate(() => { window.__noAceptarAvisos = true; });
+    await page.locator(`#cfg-${K}`).selectOption('trimestral');
+    await page.click(`#cfg-guardar-${K}`);
+    await expect(page.locator('#sis-cuerpo')).toContainText('Días para el aviso rojo: 10  →  100');
+    await page.click('#sis-opciones button[data-eleccion="si"]');
+    await expect(toasts(page).filter({ hasText: 'aviso rojo a los 100 días' })).toHaveCount(1);
+    expect(await page.evaluate(() => [CFG.v('respaldo_frecuencia'), CFG.v('respaldo_rojo_dias')])).toEqual(['trimestral', 100]);
+    await expect(rojo(page)).toHaveValue('100');
+    await expect(page.locator(`#cfg-hoy-${ROJO}`)).toContainText('100 días');
+    await expect(page.locator(`#cfg-guardar-${K}`)).toBeDisabled();
+    await expect(page.locator(`#cfg-guardar-${ROJO}`)).toBeDisabled();
+  });
+
+  test('si una de las dos filas la rechaza el servidor, no se guarda NINGUNA (una sola petición)', async ({ page }) => {
+    const reg = await abrir(page);
+    reg.control.fallasEscritura.push({ tabla: 'configuracion', metodo: 'POST', tipo: 'servidor' });
+    await irA(page, 'config');
+    await page.evaluate(() => { window.__noAceptarAvisos = true; });
+    await page.locator(`#cfg-${K}`).selectOption('mensual');
+    await page.click(`#cfg-guardar-${K}`);
+    await page.click('#sis-opciones button[data-eleccion="si"]');
+    await expect(toasts(page).filter({ hasText: 'No se pudo guardar' })).toHaveCount(1);
+    expect(await page.evaluate(() => [CFG.v('respaldo_frecuencia'), CFG.v('respaldo_rojo_dias')])).toEqual(['semanal', 10]);
+  });
+
+  test('guardar solo los días (sin cambiar la frecuencia) sigue siendo una fila; más alto que el mínimo vale', async ({ page }) => {
+    const reg = await abrir(page, { cfg: [fila(1, K, 'mensual'), fila(2, ROJO, 35)] });
+    await irA(page, 'config');
+    await page.evaluate(() => { window.__noAceptarAvisos = true; });
+    await rojo(page).fill('50');
+    await page.click(`#cfg-guardar-${ROJO}`);
+    await page.click('#sis-opciones button[data-eleccion="si"]');
+    await expect(toasts(page).filter({ hasText: 'Guardado: Días sin respaldo para el aviso rojo = 50' })).toHaveCount(1);
+    expect(escrituras(reg, 'configuracion', 'POST')[0].cuerpo).toEqual({ clave: ROJO, valor: 50 });
+  });
+
+  test('la ayuda lo explica y el tope de la pantalla es 400, igual que el de la base', async ({ page }) => {
+    await abrir(page);
+    await irA(page, 'config');
+    await expect(page.locator('.cfg-fila', { has: rojo(page) })).toContainText('se ajusta solo (semanal 10 · mensual 35 · trimestral 100)');
+    expect(await page.evaluate(() => [cfgValidar('respaldo_rojo_dias', 400), cfgValidar('respaldo_rojo_dias', 401)])).toEqual([null, 'Los días para el aviso rojo del respaldo debe ser un número entero entre 7 y 400.']);
+    expect(validarConfiguracion(ROJO, 401)).not.toBeNull();
+    expect(validarConfiguracion(ROJO, 400)).toBeNull();
   });
 });
 

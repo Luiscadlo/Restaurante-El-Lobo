@@ -393,7 +393,7 @@ test.describe('valores inválidos', () => {
     ['mesas', '0', 'entre 1 y 60'], ['mesas', '61', 'entre 1 y 60'], ['mesas', '', 'debe ser un número'],
     ['recargo_para_llevar', '50001', 'entre 0 y 50.000'], ['recargo_para_llevar', '', 'debe ser un número'],
     ['empaque_domicilio', '60000', 'entre 0 y 50.000'],
-    ['respaldo_rojo_dias', '6', 'entre 7 y 60'], ['respaldo_rojo_dias', '61', 'entre 7 y 60'],
+    ['respaldo_rojo_dias', '6', 'entre 7 y 400'], ['respaldo_rojo_dias', '401', 'entre 7 y 400'],
     ['negocio_nombre', '', 'entre 1 y 40 caracteres'], ['negocio_nombre', 'N'.repeat(41), 'entre 1 y 40 caracteres'],
     ['negocio_emoji', '🐺'.repeat(9), 'hasta 8 caracteres'],
   ];

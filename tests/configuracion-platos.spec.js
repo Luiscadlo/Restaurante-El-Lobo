@@ -321,6 +321,17 @@ test.describe('reportes «más pedidos»', () => {
     expect(await top(page, 'rp-asados')).toEqual([['Asado de cerdo', 9]]);
   });
 
+  test('M3 · con asados que se piden MÁS que las proteínas, las «proteínas más pedidas» siguen mostrando sus 5 (se filtra antes de cortar)', async ({ page }) => {
+    const proteinas = [['Pollo en salsa BBQ', 6], ['Pollo Frito', 5], ['Carne Guisada', 4], ['Chuleta Frita', 3], ['Costillas BBQ', 2], ['Pollo Crocante', 1]];
+    const pedidos = [
+      pedidoPlato({ proteina: 'Asado de cerdo', cantidad: 20 }), pedidoPlato({ proteina: 'Asado de pechuga', cantidad: 15 }), pedidoPlato({ proteina: 'Asado de Res', cantidad: 12 }),
+      ...proteinas.map(([nombre, cantidad]) => pedidoPlato({ proteina: nombre, cantidad })),
+    ];
+    await abrirSistema(page, { usuario: 'admin', datos: datosReporte([], pedidos) });
+    expect(await top(page, 'rp-proteinas')).toEqual(proteinas.slice(0, 5));                       // antes salían solo 2: los 3 asados ocupaban el corte
+    expect(await top(page, 'rp-asados')).toEqual([['Asado de cerdo', 20], ['Asado de pechuga', 15], ['Asado de Res', 12]]);
+  });
+
   test('un asado renombrado suma con su nombre de hoy', async ({ page }) => {
     const v = cambiar(BASE, 'AS02', { nombre: 'Asado de pechuga a la plancha' });
     const pedidos = [pedidoPlato({ proteina: 'Asado de pechuga', cantidad: 2 }), pedidoPlato({ proteina: 'Asado de pechuga a la plancha', cantidad: 1, fecha: '2026-10-18', created_at: '2026-10-18T12:00:00-05:00' })];

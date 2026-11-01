@@ -349,7 +349,9 @@ MENSAJES_TEXTO = ["El nombre del negocio debe tener entre 1 y 40 caracteres, sin
 
 
 def test_los_rangos_son_los_mismos_en_la_base_la_pantalla_y_el_servidor_falso():
-    sql = CONFIG.read_text(encoding="utf-8")
+    # Lo que rige hoy es lo que dice el ÚLTIMO archivo de la cadena de configuración (sql/configuracion_respaldo_frecuencia.sql: ahí el
+    # tope de los días del aviso rojo del respaldo sube de 60 a 400); el de la etapa 1 queda como punto de partida.
+    sql = (CONFIG.parent / "configuracion_respaldo_frecuencia.sql").read_text(encoding="utf-8")
     html = HTML.read_text(encoding="utf-8")
     js = BACKEND_FALSO.read_text(encoding="utf-8")
     en_sql = {c: (int(a), int(b), n) for c, a, b, n in re.findall(r"\('([a-z_]+)', (\d+), (\d+), '([^']+)'\)", sql)}

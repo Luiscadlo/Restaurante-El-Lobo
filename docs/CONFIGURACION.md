@@ -27,7 +27,7 @@ la misma tabla y la misma pantalla; igual la **etapa 3** (📋 **Platos del men�
 | Empaque de domicilio | Pesos por cada almuerzo a domicilio (la comida rápida no lo cobra) | $0–$50.000 | $1.000 |
 | Cada cuánto se hace el respaldo | **Semanal:** el aviso aparece desde el día elegido de cada semana. **Mensual:** desde el último día de cada mes (lo ideal: hacerlo ese día al cerrar la noche, o el primero del mes antes de abrir). **Trimestral:** desde el último día de marzo, junio, septiembre y diciembre. En todos los casos el aviso se apaga solo con un respaldo completo hecho desde ese día | semanal · mensual · trimestral | semanal |
 | Día del respaldo semanal | Solo cuenta si la frecuencia es semanal: el aviso aparece desde ese día y sigue hasta que haya un respaldo completo hecho desde entonces | domingo … sábado | domingo |
-| Días para el aviso rojo | Con tantos días sin respaldo completo, el aviso se pone rojo. Nunca antes de 7 días (semanal), 35 (mensual) o 100 (trimestral), aunque el número escrito sea menor | 7–60 | 10 |
+| Días para el aviso rojo | Con tantos días sin respaldo completo, el aviso se pone rojo. Nunca antes de 7 días (semanal), 35 (mensual) o 100 (trimestral), aunque el número escrito sea menor. Al elegir la frecuencia, este número se ajusta solo al sugerido y no deja guardar uno menor que el mínimo de esa frecuencia (más alto sí) | 7–400 | 10 (semanal) · 35 (mensual) · 100 (trimestral) |
 
 La pantalla de **entrada** (antes de iniciar sesión) siempre dice «El Lobo»: todavía no hay sesión para leer la configuración.
 

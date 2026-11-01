@@ -149,7 +149,7 @@ def test_la_llave_publica_no_toca_la_configuracion(cluster, db):
     ("mesas", 12, "ok"), ("mesas", 61, "22023"), ("recargo_para_llevar", 1500, "ok"), ("recargo_para_llevar", -1, "22023"),
     ("negocio_nombre", "Café Lobo", "ok"), ("negocio_nombre", " Lobo", "22023"), ("negocio_emoji", "", "ok"),
     ("respaldo_dia_semana", 6, "ok"), ("respaldo_dia_semana", 7, "22023"),
-    ("respaldo_rojo_dias", 60, "ok"), ("respaldo_rojo_dias", 6, "22023"), ("respaldo_rojo_dias", 61, "22023"),   # el rango NO cambió
+    ("respaldo_rojo_dias", 60, "ok"), ("respaldo_rojo_dias", 400, "ok"), ("respaldo_rojo_dias", 6, "22023"), ("respaldo_rojo_dias", 401, "22023"),   # el tope sube de 60 a 400 (trimestral)
     ("cierre_comidas_familia", True, "ok"), ("cierre_comidas_familia", "true", "22023"),
     ("foo", 5, "22023"), ("respaldo_frecuencias", "mensual", "22023"), ("catalogo_extras", [], "ok"),
     ("menu_platos", PLATOS_BASE, "ok"), ("menu_platos", [], "22023"),

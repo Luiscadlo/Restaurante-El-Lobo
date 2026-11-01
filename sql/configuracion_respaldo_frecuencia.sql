@@ -11,6 +11,9 @@
 --                             mes; trimestral = desde el último día de marzo, junio, septiembre y diciembre. Sin nada guardado rige
 --                             'semanal'. (Es solo el AVISO de la pantalla: la base no obliga a hacer ningún respaldo.)
 --   Reglas que la base exige aunque alguien se salte la pantalla: el valor debe ser exactamente uno de esos tres textos.
+--   También AMPLÍA el tope de «respaldo_rojo_dias» (días sin respaldo para el aviso rojo) de 60 a 400 (el mínimo sigue en 7): con respaldo
+--   trimestral el rojo no puede salir antes de 100 días. Que el valor no baje del mínimo de cada frecuencia (semanal 7 · mensual 35 ·
+--   trimestral 100) lo exige la pantalla; la base solo cuida el rango. Los valores ya guardados no cambian.
 --   Un cambio rige desde que se guarda y NO toca el pasado. Cada guardado es una fila nueva (la anterior queda para siempre),
 --   igual que el resto de la configuración.
 --
@@ -56,7 +59,7 @@ begin
       ('recargo_para_llevar', 0, 50000, 'El recargo de «para llevar»'),
       ('empaque_domicilio', 0, 50000, 'El empaque de domicilio'),
       ('respaldo_dia_semana', 0, 6, 'El día del respaldo semanal'),
-      ('respaldo_rojo_dias', 7, 60, 'Los días para el aviso rojo del respaldo')
+      ('respaldo_rojo_dias', 7, 400, 'Los días para el aviso rojo del respaldo')
     ) as m(clave, minimo, maximo, nombre) where m.clave = p_clave;
     if v_tipo is distinct from 'number' then
       raise exception '% debe ser un número.', v_nombre using errcode = '22023', detail = 'configuracion_invalida';
