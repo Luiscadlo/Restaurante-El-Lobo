@@ -9,7 +9,8 @@
      (herramientas/generar_copia_pruebas.py) cambia las dos juntas. -->
 <meta http-equiv="Content-Security-Policy" content="connect-src https://arxyfcquvsmfoxmbifne.supabase.co; base-uri 'none'; object-src 'none';">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Librería de Excel (SheetJS xlsx 0.18.5): viaja DENTRO del sistema (carpeta librerias/, con su huella y licencia en librerias/LEEME.md), no se descarga de ningún sitio ajeno. La copia de pruebas la lleva incrustada en su archivo único. -->
+<script src="librerias/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #0f0e0c; --surface: #1a1915; --surface2: #222118;
@@ -149,6 +150,10 @@
   .btn-edit:hover { border-color: var(--accent); background: rgba(232,184,75,0.08); }
 
   .table-wrap { overflow-x: auto; }
+  /* Auditoría: cada lista en su propio recuadro de altura limitada (5-6 filas a la vista) con desplazamiento propio, para no tener que
+     bajar toda una sección para llegar a la siguiente (sobre todo en el celular). El encabezado de la tabla se queda fijo. */
+  .aud-scroll { max-height: 330px; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .aud-scroll thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; padding: 10px 14px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); font-family: 'Syne', sans-serif; font-weight: 600; border-bottom: 1px solid var(--border); }
   td { padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--text2); vertical-align: middle; }
@@ -505,6 +510,7 @@
   </div>
   <div class="header-right">
     <div id="syncBadge" style="border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid rgba(232,184,75,0.4);background:rgba(232,184,75,0.1);color:var(--accent);">🔄 Sincronizando…</div>
+    <button class="btn btn-outline" id="btn-actualizar" onclick="actualizarDatos()" style="font-size:11px;padding:6px 12px;" title="Volver a cargar los datos (lo que registraron otros equipos) sin recargar la página: no cierra tu sesión">↻ <span class="btn-label">Actualizar</span></button>
     <button class="btn-abrir-turno" id="btn-abrir-turno-header" onclick="abrirModalTurno()" title="Registrar caja inicial del turno">🔓 Abrir turno</button>
     <div id="rolBadge" style="display:none;border-radius:20px;padding:6px 14px;font-size:11px;font-family:'Syne',sans-serif;font-weight:700;border:1px solid var(--border2);background:var(--surface2);color:var(--text2);" title="Usuario con el que se inició sesión"></div>
     <button class="btn btn-outline" id="btn-salir" onclick="salirDelSistema()" style="font-size:11px;padding:6px 12px;display:none;" title="Cerrar la sesión de este equipo">🚪 <span class="btn-label">Salir</span></button>
@@ -566,7 +572,7 @@
     </div>
     <div id="alertZone" style="margin-bottom:16px;"></div>
 
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
       <div class="filter-bar" style="margin-bottom:0;">
         <button class="filter-btn" onclick="setFTablero('hoy',this)">Hoy</button>
         <button class="filter-btn" onclick="setFTablero('semana',this)">Esta semana</button>
@@ -1735,7 +1741,7 @@
         <div class="panel-title">📋 Ajustes manuales registrados en cierres</div>
         <button class="btn btn-outline" style="font-size:11px;" onclick="cerrarSesionAdmin()">🔒 Cerrar sesión</button>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap aud-scroll">
         <table>
           <thead><tr><th>Fecha</th><th>Turno</th><th>Ajuste</th><th>Explicación</th></tr></thead>
           <tbody id="auditoria-body"></tbody>
@@ -1746,7 +1752,7 @@
       <div class="panel-header">
         <div class="panel-title">🗑 Pedidos eliminados / cancelados</div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap aud-scroll">
         <table>
           <thead><tr><th>Eliminado el</th><th>Motivo</th><th>Pedido original</th><th>Ubicación</th><th>Detalle</th><th>Monto</th></tr></thead>
           <tbody id="auditoria-eliminados-body"></tbody>
@@ -1757,7 +1763,7 @@
       <div class="panel-header">
         <div class="panel-title">🏷 Descuentos aplicados</div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap aud-scroll">
         <table>
           <thead><tr><th>Cuándo</th><th>Pedido</th><th>Lista</th><th>Descuento</th><th>Motivo</th><th>Impacto en cierre</th><th>Gastos borrados</th></tr></thead>
           <tbody id="auditoria-descuentos-body"></tbody>
@@ -1832,7 +1838,7 @@
     <div class="panel" style="margin-bottom:20px;">
       <div class="panel-header"><div class="panel-title">💾 Respaldo completo (copia de seguridad)</div></div>
       <div class="panel-body">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Descarga un archivo <b>.json</b> con TODAS las tablas del sistema, completas (pedidos, egresos, cierres, caja, fiados, inventario, auditoría…). Es la copia que sirve para recuperar el sistema si algo falla (se restaura aquí mismo, con la tarjeta «Restaurar desde un respaldo» de abajo). Hazlo <b>cada domingo</b> y guarda el archivo <b>fuera del repositorio</b> (que es público). Solo se registra como hecho si bajaron todas las filas.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Descarga un archivo <b>.json</b> con TODAS las tablas del sistema, completas (pedidos, egresos, cierres, caja, fiados, inventario, auditoría…). Es la copia que sirve para recuperar el sistema si algo falla (se restaura aquí mismo, con la tarjeta «Restaurar desde un respaldo» de abajo). Hazlo con la frecuencia que elegiste en ⚙️ Configuración → Respaldo (el sistema te avisa cuando toca) y guarda el archivo <b>fuera del repositorio</b> (que es público). Solo se registra como hecho si bajaron todas las filas.</div>
         <div id="datos-respaldo-estado" style="font-size:12px;color:var(--text2);margin-bottom:14px;"></div>
         <button class="btn btn-primary" id="btn-respaldo-completo" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo completo (.json)</button>
       </div>
@@ -2566,9 +2572,15 @@ function fiadosConAntiguedad(minDias, hoy = diaNegocio()) {
 // REGLA DE ORO: un cambio rige desde el momento en que se guarda y NUNCA toca el pasado. Los pedidos y los cierres ya
 // guardan sus montos; lo único que mira la historia es editar un pedido viejo, que usa el valor que regía cuando se hizo.
 // Sin nada guardado (o si la tabla aún no existe) el sistema funciona exactamente como siempre: valores de El Lobo.
+// Cada cuánto se hace el respaldo completo (solo decide CUÁNDO avisa la pantalla; ver nivelAvisoRespaldoPorFrecuencia).
+const RESPALDO_FRECUENCIAS_LISTA = Object.freeze(['semanal', 'mensual', 'trimestral']);
+// Días sin respaldo para el aviso rojo: el mínimo que tiene sentido para cada frecuencia (más bajo saldría «rojo» con el respaldo al
+// día) y el valor que se pone solo al elegirla. La persona puede subirlo, nunca bajarlo de ese mínimo.
+const RESPALDO_ROJO_MINIMO = Object.freeze({ semanal: 7, mensual: 35, trimestral: 100 });
+const RESPALDO_ROJO_SUGERIDO = Object.freeze({ semanal: 10, mensual: 35, trimestral: 100 });
 const CFG_DEFECTOS = Object.freeze({
   mesas: 8, recargo_para_llevar: 1000, empaque_domicilio: 1000,
-  respaldo_dia_semana: 0, respaldo_rojo_dias: 10,
+  respaldo_dia_semana: 0, respaldo_rojo_dias: 35, respaldo_frecuencia: 'mensual',      // decisión del dueño (1-nov): mensual por defecto
   negocio_nombre: 'El Lobo', negocio_emoji: '🐺',
   catalogo_almuerzos: CATALOGO_ALMUERZOS_BASE, catalogo_rapidas: CATALOGO_RAPIDAS_BASE, catalogo_extras: CATALOGO_EXTRAS_BASE,
   categorias_egresos: CATEGORIAS_EGRESOS_BASE, nombres_cuentas: NOMBRES_CUENTAS_BASE,
@@ -2582,7 +2594,8 @@ const CFG_REGLAS = Object.freeze({
   recargo_para_llevar: { tipo: 'entero', min: 0, max: 50000, nombre: 'El recargo de «para llevar»' },
   empaque_domicilio:   { tipo: 'entero', min: 0, max: 50000, nombre: 'El empaque de domicilio' },
   respaldo_dia_semana: { tipo: 'entero', min: 0, max: 6,     nombre: 'El día del respaldo semanal' },
-  respaldo_rojo_dias:  { tipo: 'entero', min: 7, max: 60,    nombre: 'Los días para el aviso rojo del respaldo' },
+  respaldo_rojo_dias:  { tipo: 'entero', min: 7, max: 400,   nombre: 'Los días para el aviso rojo del respaldo' },
+  respaldo_frecuencia: { tipo: 'frecuencia', nombre: 'La frecuencia del respaldo' },
   negocio_nombre:      { tipo: 'nombre' },
   negocio_emoji:       { tipo: 'simbolo' },
   catalogo_almuerzos:  { tipo: 'catalogo' },
@@ -2602,6 +2615,7 @@ function cfgValidar(clave, valor) {
   if (r.tipo === 'cuentas') return cfgValidarCuentas(valor);
   if (r.tipo === 'platos') return cfgValidarPlatos(valor);
   if (r.tipo === 'booleano') return typeof valor === 'boolean' ? null : `${r.nombre} debe ser sí o no (verdadero o falso).`;
+  if (r.tipo === 'frecuencia') return RESPALDO_FRECUENCIAS_LISTA.includes(valor) ? null : `${r.nombre} debe ser semanal, mensual o trimestral.`;
   if (r.tipo === 'entero') {
     if (typeof valor !== 'number' || !Number.isFinite(valor)) return `${r.nombre} debe ser un número.`;
     if (!Number.isInteger(valor) || valor < r.min || valor > r.max) return `${r.nombre} debe ser un número entero entre ${r.min.toLocaleString('es-CO')} y ${r.max.toLocaleString('es-CO')}.`;
@@ -3711,6 +3725,7 @@ function cargaCompletaParaCerrar() {
 async function loadState() {
   setSyncBadge('syncing');
   tablasConFallaDeCarga = [];
+  let cargoBien = false;
   try {
     const [pedidos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, clientesFiado, abonosFiado, config, configuracion, tablasAdmin] = await Promise.all([
       sbGetAll('pedidos',     'order=created_at.desc'),
@@ -3743,6 +3758,7 @@ async function loadState() {
     ST.configuracion = configuracion;
     if (tablasAdmin) asignarTablasAdmin(tablasAdmin); else vaciarTablasAdmin();
 
+    cargoBien = true;
     setSyncBadge('ok');            // pasa a «Carga incompleta» sola si alguna tabla opcional falló (ver setSyncBadge)
   } catch (e) {
     console.error('Error al cargar datos:', e);
@@ -3752,6 +3768,25 @@ async function loadState() {
   actualizarAvisoCarga();
   document.getElementById('loadingOverlay').style.display = 'none';
   renderAll();
+  return cargoBien && !tablasConFallaDeCarga.length;
+}
+
+// Botón «↻ Actualizar» del encabezado (M4): vuelve a leer TODO de la base, igual que al abrir la página, pero sin recargarla: la
+// sesión (también la de administrador) y lo que se esté escribiendo en un formulario se quedan como están. Sirve para ver lo que
+// registraron otros equipos (p. ej. el mostrador mientras el administrador mira desde el celular).
+let actualizandoDatos = false;
+async function actualizarDatos() {
+  if (actualizandoDatos) return;
+  actualizandoDatos = true;
+  const b = document.getElementById('btn-actualizar');
+  if (b) b.disabled = true;
+  try {
+    const bien = await loadState();
+    if (bien) showToast(`✅ Datos actualizados (${nowTime()})`, 'ok');          // si algo falló, loadState ya avisó (banner / «Sin conexión»)
+  } finally {
+    actualizandoDatos = false;
+    if (b) b.disabled = false;
+  }
 }
 
 // ── Utilidades ────────────────────────────────────────────────────────
@@ -4580,6 +4615,7 @@ function diaDeLaSemana(fechaStr = today()) {
   const [y, m, d] = String(fechaStr).slice(0, 10).split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
+// (Regla SEMANAL en días; la pantalla usa nivelAvisoRespaldoPorFrecuencia, que con «semanal» da lo mismo y además entiende mensual y trimestral.)
 // null = sin aviso; 'ambar' o 'rojo'. dias null/NaN = nunca se ha hecho un respaldo.
 // `diaSemana` = día de la semana de HOY (0 = domingo). `diaRespaldo` = día elegido para el respaldo semanal (0 = domingo):
 // ese día cayó `(diaSemana − diaRespaldo) mod 7` días atrás, así que un respaldo de hace MÁS días que esos es anterior
@@ -4590,6 +4626,44 @@ function nivelAvisoRespaldo(dias, diaSemana = diaDeLaSemana(), diaRespaldo = CFG
   const desdeElDia = (((diaSemana - diaRespaldo) % 7) + 7) % 7;
   if (dias > desdeElDia) return 'ambar';
   return null;
+}
+// ── Frecuencia del respaldo (semanal · mensual · trimestral) ───────────────────────────────────────────────────────────────
+// «Vencimiento» = la fecha más reciente (hoy incluido) en la que TOCABA tener un respaldo hecho:
+//   · semanal    → el último día de la semana elegido en Configuración (como siempre: por defecto, el domingo);
+//   · mensual    → el último día de un mes (si hoy es el último día del mes, es hoy);
+//   · trimestral → el último día de marzo, junio, septiembre o diciembre.
+// Un respaldo cuya fecha es ANTERIOR al vencimiento ya no cubre el periodo → aviso ámbar. El rojo sale por días sin respaldo, pero
+// nunca antes de 7 (semanal), 35 (mensual) o 100 (trimestral): así no sale «rojo» cuando el respaldo todavía está al día.
+// Lo ideal (decisión del dueño, 31-oct): hacerlo el último día del periodo al cerrar la noche, o el primer día antes de abrir.
+const fechaIso = (y, m, d) => { const f = new Date(Date.UTC(y, m - 1, d)); return `${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, '0')}-${String(f.getUTCDate()).padStart(2, '0')}`; };
+function vencimientoRespaldo(frecuencia, hoyStr = today(), diaRespaldo = CFG.v('respaldo_dia_semana')) {
+  const [y, m, d] = String(hoyStr).slice(0, 10).split('-').map(Number);
+  if (frecuencia === 'mensual' || frecuencia === 'trimestral') {
+    for (let k = 0; k < 14; k++) {                                       // del mes de hoy hacia atrás, hasta encontrar un último día que ya llegó
+      const mes = m - k, ultimo = new Date(Date.UTC(y, mes, 0)).getUTCDate();
+      const esCierre = frecuencia === 'mensual' || (((mes % 3) + 3) % 3) === 0;
+      if (esCierre && (k > 0 || d === ultimo)) return fechaIso(y, mes, ultimo);
+    }
+  }
+  const atras = (((diaDeLaSemana(hoyStr) - diaRespaldo) % 7) + 7) % 7;
+  return fechaIso(y, m, d - atras);
+}
+// null = sin aviso; 'ambar' o 'rojo'. `fechaUltimo` = fecha (AAAA-MM-DD) del último respaldo completo; vacío = nunca se ha hecho.
+function nivelAvisoRespaldoPorFrecuencia(fechaUltimo, hoyStr = today(), frecuencia = CFG.v('respaldo_frecuencia'), diaRespaldo = CFG.v('respaldo_dia_semana'), rojoDias = CFG.v('respaldo_rojo_dias')) {
+  if (!RESPALDO_FRECUENCIAS_LISTA.includes(frecuencia)) frecuencia = CFG_DEFECTOS.respaldo_frecuencia;
+  if (!fechaUltimo) return 'ambar';
+  const dias = diasDesdeFecha(fechaUltimo, hoyStr);
+  if (Number.isNaN(dias)) return 'ambar';
+  if (dias >= Math.max(rojoDias, RESPALDO_ROJO_MINIMO[frecuencia])) return 'rojo';
+  return String(fechaUltimo).slice(0, 10) < vencimientoRespaldo(frecuencia, hoyStr, diaRespaldo) ? 'ambar' : null;
+}
+function textoAvisoRespaldo(nivel, dias, frecuencia = CFG.v('respaldo_frecuencia')) {
+  if (dias === null || Number.isNaN(dias)) return 'Todavía no se ha hecho ningún respaldo completo.';
+  if (nivel === 'rojo') return `Hace ${dias} días no se hace respaldo completo.`;
+  const hace = `el último fue hace ${dias} día${dias === 1 ? '' : 's'}`;
+  if (frecuencia === 'mensual') return `Toca el respaldo mensual (lo ideal: el último día del mes al cerrar la noche, o el primero antes de abrir) — ${hace}.`;
+  if (frecuencia === 'trimestral') return `Toca el respaldo trimestral (lo ideal: al cerrar marzo, junio, septiembre y diciembre) — ${hace}.`;
+  return `Toca el respaldo semanal — ${hace}.`;
 }
 function renderAvisoRespaldo() {
   const el = document.getElementById('aviso-respaldo');
@@ -4605,13 +4679,9 @@ function renderAvisoRespaldo() {
   const fila = ST.config.find(c => c.clave === 'ultimo_respaldo');
   const fecha = fila && fila.valor ? (fila.valor.fecha || String(fila.valor.generado_en || '').slice(0, 10)) : '';
   const dias = fecha ? diasDesdeFecha(fecha) : null;
-  const nivel = nivelAvisoRespaldo(dias);
+  const nivel = nivelAvisoRespaldoPorFrecuencia(fecha);
   if (!nivel) { el.style.display = 'none'; el.innerHTML = ''; return; }
-  const texto = (dias === null || Number.isNaN(dias))
-    ? 'Todavía no se ha hecho ningún respaldo completo.'
-    : nivel === 'rojo'
-      ? `Hace ${dias} días no se hace respaldo completo.`
-      : `Toca el respaldo semanal — el último fue hace ${dias} día${dias === 1 ? '' : 's'}.`;
+  const texto = textoAvisoRespaldo(nivel, dias);
   el.innerHTML = `<div class="alert ${nivel === 'rojo' ? 'warning' : 'info'}">
     <div style="flex:1;">${nivel === 'rojo' ? '🚨' : '⚠️'} ${texto}</div>
     <button class="btn btn-outline" style="font-size:11px;" onclick="pedirRespaldoCompleto()">💾 Hacer respaldo ahora</button>
@@ -4812,7 +4882,7 @@ function ajustarAltoHeaderSticky() {
 ajustarAltoHeaderSticky();
 window.addEventListener('resize', ajustarAltoHeaderSticky);
 
-['ing-fecha','egr-fecha','venta-fecha','dd-fecha','caja-mov-fecha'].forEach(id => {
+['ing-fecha','egr-fecha','venta-fecha','dd-fecha','caja-mov-fecha','ingext-fecha'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.value = today();
 });
@@ -6029,7 +6099,17 @@ async function agregarIngresoSinGuardia(estadoFinal = 'pendiente') {
   } catch (err) {
     console.error(err);
     if (intentoPedidoEnCurso) intentoPedidoEnCurso.fallido = true;   // no se sabe si llegó a guardarse: el próximo intento lo comprueba antes de insertar
-    showToast('⚠ No se pudo registrar el pedido: ' + err.message + ' — no se guardó a medias. Vuelve a pulsar «Registrar»: antes de guardar, el sistema comprueba que no se haya guardado ya.', 'warning');
+    // Ventana (no un aviso que se va solo): un pedido que no se guardó no puede pasar desapercibido en plena hora pico. Se pide
+    // al cajero que la cierre; la cola de almuerzos y extras sigue armada para reintentar. (Sin `await`: la ventana no frena el
+    // guardián de «un solo registro a la vez», que se libera al salir.)
+    avisarSistema({
+      titulo: 'El pedido NO se guardó',
+      cuerpo: 'No se pudo registrar el pedido y no quedó nada guardado a medias.\n\n' +
+        'Lo que armaste (almuerzos y extras) sigue en pantalla: revisa la señal de internet y vuelve a pulsar «Registrar». ' +
+        'Antes de guardar, el sistema comprueba que no se haya guardado ya, así que no se duplica.\n\n' +
+        'Motivo técnico: ' + (err && err.message ? String(err.message).slice(0, 200) : 'sin detalle'),
+      tono: 'peligro'
+    });
   }
 }
 
@@ -6161,10 +6241,214 @@ function cerrarModalDetalle(e) {
   }
 }
 
+// ── Borrar o cambiar pedidos: rastro en Auditoría y cierre del turno ───────────────────────────────────────────────────
+// Regla de seguridad (revisión final, M2): un pedido SOLO se borra o se cancela si antes quedó su rastro en Auditoría. Si ese
+// registro no se puede guardar (casi siempre, la señal de internet), NO se borra nada y sale una ventana que hay que cerrar.
+// Regla del cierre (M1): el cierre de un turno guarda sumas de efectivo y transferencia; si se borra, se devuelve a pendiente o
+// se cambia de método un pedido pagado de un turno ya cerrado, el cierre (y con él el Tablero y la Caja) quedaría con plata de
+// más o en la columna equivocada. Por eso el sistema avisa y ofrece corregir el cierre con la misma cuenta del pedido.
+function ubicacionParaAuditoria(p) {
+  return p.es_gratis ? 'Gratis' : p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
+}
+
+// Rastros ya guardados en esta sesión (motivo:id). Si el borrado falla DESPUÉS de dejar el rastro y el usuario reintenta, no se
+// vuelve a anotar el mismo pedido dos veces.
+const _rastroGuardado = new Set();
+
+// Deja el rastro de TODOS los pedidos en UNA sola petición (o se guardan todos o ninguno). Lanza el error si no se pudo.
+async function dejarRastroEliminados(pedidos, motivo) {
+  const nuevos = pedidos.filter(p => !_rastroGuardado.has(motivo + ':' + p.id));
+  if (!nuevos.length) return;
+  const filas = nuevos.map(p => ({
+    pedido_id: p.id, fecha: p.fecha, hora: p.hora || '', turno: p.turno,
+    pedido: p.pedido, detalle: p.detalle || '', ubicacion: ubicacionParaAuditoria(p), metodo: p.metodo,
+    monto_total: p.monto_total || 0, motivo
+  }));
+  const devueltas = await sbInsert('pedidos_eliminados', filas);
+  nuevos.forEach(p => _rastroGuardado.add(motivo + ':' + p.id));
+  // Caja agrega el rastro "a ciegas" (no lo puede leer): no devuelve filas. El administrador sí.
+  if (Array.isArray(devueltas)) devueltas.forEach(row => { if (row) ST.pedidosEliminados.unshift(row); });
+}
+
+function avisoRastroNoGuardado(participio, accion, cuerpoExtra = '') {
+  avisarSistema({
+    titulo: `No se ${participio} nada`,
+    cuerpo: `Por seguridad, un pedido solo se ${accion} si antes queda anotado en Auditoría, y esa anotación no se pudo guardar ` +
+      '(casi siempre es la señal de internet). El pedido sigue donde estaba.\n\n' +
+      'Revisa la conexión e inténtalo de nuevo. Si se repite, avisa al administrador.' + cuerpoExtra,
+    tono: 'peligro'
+  });
+}
+
+// ¿Cuántos de estos pedidos siguen en la base? (null = no se pudo comprobar). Se usa después de un borrado que «falló»: a veces
+// el servidor sí lo hizo y solo se perdió la respuesta.
+async function filasDePedidosEnBase(ids) {
+  try {
+    const filas = await sbGet('pedidos', `id=in.(${ids.join(',')})`);
+    return filas.filter(f => ids.includes(f.id));
+  } catch (e) { console.error(e); return null; }
+}
+
+// Borra los pedidos. Devuelve 'borrados' | 'siguen' (no se borró nada) | 'dudoso' (no se pudo comprobar).
+async function borrarPedidosComprobando(ids) {
+  try { await sbDelete('pedidos', `id=in.(${ids.join(',')})`); return 'borrados'; }
+  catch (e) {
+    console.error(e);
+    const quedan = await filasDePedidosEnBase(ids);
+    if (quedan === null) return 'dudoso';
+    return quedan.length === 0 ? 'borrados' : 'siguen';
+  }
+}
+const MSG_BORRADO_DUDOSO = 'No se pudo comprobar si el pedido quedó borrado (se cortó la conexión justo en ese momento).\n\n' +
+  'Recarga la página y revisa el pedido y el cierre del turno antes de repetir la acción.';
+
+// ── Cierre guardado del turno (M1) ──────────────────────────────────────────────────────────────────────────────────────
+const nombreTurnoCierre = t => t === 'cena' ? 'comidas rápidas' : 'almuerzo';
+
+// Qué le pasa al cierre guardado de cada turno si estos pedidos PAGADOS salen o cambian de método. `despues(p)` dice cuánto
+// aportaría el pedido después ({ efectivo, transferencia }); sin `despues`, el pedido sale del turno y aporta 0. Un pedido cuyo
+// turno no tiene cierre guardado no genera nada. Un fiado saldado con abonos aporta 0 (su plata entró con cada abono).
+function entradasDeCierre(pedidos, despues) {
+  const entradas = [];
+  for (const p of pedidos) {
+    if (!p || p.estado !== 'pagado') continue;
+    const cierre = ST.cierresDia.find(c => c.fecha === p.fecha && c.turno === p.turno);
+    if (!cierre) continue;
+    const nuevo = despues ? despues(p) : { efectivo: 0, transferencia: 0 };
+    const dEf = efectivoDe(p) - nuevo.efectivo, dTr = transferenciaDe(p) - nuevo.transferencia;
+    if (dEf !== 0 || dTr !== 0) entradas.push({ pedido: p, cierre, dEf, dTr });
+  }
+  return entradas;
+}
+// Junta las entradas por cierre: [{ cierre, dEf, dTr }] — cuánto SALE de cada cierre.
+function agruparAjustes(entradas) {
+  const grupos = [];
+  for (const e of entradas) {
+    let g = grupos.find(x => x.cierre === e.cierre);
+    if (!g) { g = { cierre: e.cierre, dEf: 0, dTr: 0 }; grupos.push(g); }
+    g.dEf += e.dEf; g.dTr += e.dTr;
+  }
+  return grupos.filter(g => g.dEf !== 0 || g.dTr !== 0);
+}
+// Cifras del cierre después de quitarle dEf de efectivo y dTr de transferencia (el resultado baja lo mismo).
+function valoresDeCierre(base, dEf, dTr) {
+  return { efectivo: (base.efectivo || 0) - dEf, transferencia: (base.transferencia || 0) - dTr, resultado: (base.resultado || 0) - dEf - dTr };
+}
+const consultaDeCierre = c => `fecha=eq.${c.fecha}&turno=eq.${c.turno}`;
+
+// Pregunta qué hacer con el cierre. Devuelve 'si' (hacer la acción y corregir el cierre) o 'no' (volver). No hay opción de dejar el cierre
+// sin tocar: con el turno cerrado no se pueden registrar pedidos, así que todo pedido pagado está dentro del cierre.
+async function preguntarPorCierres(ajustes, { titulo, accion, aceptar, sin, peligro, nota = '', sumar = false }) {
+  const lineas = ajustes.map(a => {
+    const n = valoresDeCierre(a.cierre, a.dEf, a.dTr);
+    return `• Turno de ${nombreTurnoCierre(a.cierre.turno)} del ${fechaCorta(a.cierre.fecha)}${a.cierre.manual ? ' (cierre cargado a mano)' : ''}:\n` +
+      `   efectivo ${fmt(a.cierre.efectivo || 0)} → ${fmt(n.efectivo)} · transferencia ${fmt(a.cierre.transferencia || 0)} → ${fmt(n.transferencia)} · resultado ${fmt(a.cierre.resultado || 0)} → ${fmt(n.resultado)}`;
+  });
+  if (sumar) {
+    // Pedido que se acaba de COBRAR (ya quedó pagado) en un turno cuyo cierre ya estaba guardado: el cierre no lo cuenta todavía.
+    return ventanaSistema({
+      titulo, tono: 'aviso', alEscape: 'no', foco: 'no',
+      cuerpo: `El turno de este pedido ya tiene su cierre guardado y ese cierre todavía NO cuenta este pedido. Para que el cobro quede registrado, el cierre tiene que sumarlo.\n\n` +
+        `Si cobras, el cierre quedaría así:\n${lineas.join('\n')}`,
+      opciones: [
+        { valor: 'no', texto: sin },
+        { valor: 'si', texto: aceptar, detalle: 'Recomendado.', clase: 'btn-primary' },
+      ]
+    });
+  }
+  return ventanaSistema({
+    titulo, tono: peligro ? 'peligro' : 'aviso', alEscape: 'no', foco: 'no',
+    cuerpo: `El turno de este pedido ya tiene su cierre guardado y el pedido está dentro de él. Si solo ${accion}, el cierre (y con él el Tablero y la Caja) se queda con plata que ya no corresponde.\n\n` +
+      `Si corriges el cierre quedaría así:\n${lineas.join('\n')}` + (nota ? `\n\n${nota}` : ''),
+    opciones: [
+      { valor: 'no', texto: 'Volver', detalle: 'No se hace nada.' },
+      { valor: 'si', texto: aceptar, detalle: 'Recomendado.', clase: peligro ? 'btn-danger' : 'btn-primary' },
+    ]
+  });
+}
+
+// ANTES de COBRAR pedidos pendientes: si el turno de alguno ya tiene su cierre guardado, ese cierre todavía no cuenta el pago (caso
+// «devolver a pendiente corrigiendo el cierre» y volver a cobrar). Se pregunta «cobrar y sumar al cierre» o «volver» (no hay cobrar a secas).
+// Devuelve null si no se cobra; si sí, { hechos, entradas } para poder dejar el cierre como estaba si el cobro falla.
+async function prepararCierreAntesDeCobrar(pedidos, parches) {
+  const entradas = [];
+  pedidos.forEach((p, i) => {
+    if (!p) return;
+    const cierre = ST.cierresDia.find(c => c.fecha === p.fecha && c.turno === p.turno);
+    if (!cierre) return;
+    const q = { ...p, ...parches[i], estado: 'pagado' };
+    const dEf = -efectivoDe(q), dTr = -transferenciaDe(q);
+    if (dEf !== 0 || dTr !== 0) entradas.push({ pedido: p, cierre, dEf, dTr });
+  });
+  const ajustes = agruparAjustes(entradas);
+  if (!ajustes.length) return { hechos: [], entradas: [] };
+  const decision = await preguntarPorCierres(ajustes, {
+    titulo: 'Este turno ya está cerrado: ¿cobrar y sumar al cierre?', sumar: true,
+    aceptar: 'Sí, cobrar y sumar al cierre', sin: 'Volver'
+  });
+  if (decision !== 'si') return null;
+  try { return { hechos: await aplicarAjustesCierre(ajustes), entradas }; }
+  catch (e) {
+    console.error(e);
+    avisarSistema({ titulo: 'No se cobró el pedido', cuerpo: 'No se pudo actualizar el cierre del turno, así que el pedido NO se cobró y todo sigue como estaba.\n\nRevisa la conexión e inténtalo de nuevo.' + textoCierresSinRestaurar(e.cierresSinRestaurar), tono: 'peligro' });
+    return null;
+  }
+}
+// Si el cobro falló después de sumar al cierre: se mira en la base cuáles quedaron pagados; el cierre se queda con esos y suelta el resto.
+async function restaurarCierreSiNoSeCobro(previo, ids) {
+  if (!previo || !previo.hechos.length) return;
+  const enBase = await filasDePedidosEnBase(ids);
+  if (enBase === null) {
+    avisarSistema({ titulo: 'Revisa el cierre del turno', cuerpo: 'Se cortó la conexión y no se pudo comprobar si el pedido quedó cobrado. El cierre ya lo suma. Recarga la página y revisa el pedido y el cierre antes de repetir la acción.', tono: 'peligro' });
+    return;
+  }
+  const pagados = new Set(enBase.filter(f => f.estado === 'pagado').map(f => f.id));
+  const fallos = await deshacerAjustesCierre(previo.hechos, previo.entradas.filter(e => pagados.has(e.pedido.id)));
+  if (fallos.length) avisarSistema({ titulo: 'Revisa el cierre del turno', cuerpo: 'El cobro no se completó y el cierre no se pudo dejar como estaba.' + textoCierresSinRestaurar(fallos), tono: 'peligro' });
+}
+
+// Deja de nuevo los cierres como estaban. `entradasHechas`: las entradas cuya acción SÍ se alcanzó a hacer (su plata sigue fuera
+// del cierre). Devuelve los cierres que NO se pudieron dejar bien (con las cifras que deben tener).
+async function deshacerAjustesCierre(hechos, entradasHechas = []) {
+  const siguenFuera = agruparAjustes(entradasHechas);
+  const fallos = [];
+  for (const h of [...hechos].reverse()) {
+    const g = siguenFuera.find(x => x.cierre === h.cierre);
+    const objetivo = g ? valoresDeCierre(h.antes, g.dEf, g.dTr) : { efectivo: h.antes.efectivo || 0, transferencia: h.antes.transferencia || 0, resultado: h.antes.resultado || 0 };
+    try {
+      await sbPatch('cierres_dia', consultaDeCierre(h.cierre), objetivo);
+      Object.assign(h.cierre, objetivo);
+    } catch (e) { console.error(e); fallos.push({ cierre: h.cierre, objetivo }); }
+  }
+  return fallos;
+}
+// Corrige los cierres (uno por turno). Si alguno falla, deja los ya corregidos como estaban y lanza el error.
+async function aplicarAjustesCierre(ajustes) {
+  const hechos = [];
+  try {
+    for (const a of ajustes) {
+      const antes = { efectivo: a.cierre.efectivo, transferencia: a.cierre.transferencia, resultado: a.cierre.resultado };
+      const nuevo = valoresDeCierre(a.cierre, a.dEf, a.dTr);
+      await sbPatch('cierres_dia', consultaDeCierre(a.cierre), nuevo);
+      Object.assign(a.cierre, nuevo);
+      hechos.push({ cierre: a.cierre, antes });
+    }
+  } catch (e) {
+    e.cierresSinRestaurar = await deshacerAjustesCierre(hechos);
+    throw e;
+  }
+  return hechos;
+}
+// Texto para cuando, además, un cierre no se pudo dejar como estaba (doble fallo: lo único que queda es avisar con las cifras).
+function textoCierresSinRestaurar(fallos) {
+  if (!fallos || !fallos.length) return '';
+  return '\n\n⚠ OJO: el cierre de ' + fallos.map(f => `${nombreTurnoCierre(f.cierre.turno)} del ${fechaCorta(f.cierre.fecha)} debe decir efectivo ${fmt(f.objetivo.efectivo)}, transferencia ${fmt(f.objetivo.transferencia)} y resultado ${fmt(f.objetivo.resultado)}`).join('; ') +
+    ', pero no se pudo dejar así. Avisa al administrador para corregirlo.';
+}
+
 // ── Eliminar ingreso(s) pagado(s) — un pedido completo puede ser varias filas ─
-// Antes de borrar de verdad, deja rastro en pedidos_eliminados (Auditoría)
-// con la hora exacta de eliminación. Si ese registro falla (ej. la tabla
-// todavía no existe en Supabase), NO bloquea la eliminación real — solo avisa.
+// Orden (cada paso solo corre si el anterior salió bien; si uno falla, lo anterior se deja como estaba):
+//   1) corregir el cierre del turno (si lo hay y el usuario lo acepta), 2) rastro en Auditoría, 3) borrar de verdad.
 // Un fiado saldado con abonos nuevos no se borra ni se le cambia el monto:
 // su plata ya entró a los cierres con cada abono y su monto es lo que
 // calcularSaldoFiado() descuenta de esos abonos — tocarlo dejaría plata en
@@ -6178,29 +6462,58 @@ async function eliminarGrupoIngreso(ids) {
   const idArr = Array.isArray(ids) ? ids : [ids];
   const saldadoConAbonos = idArr.map(id => ST.ingresos.find(i => i.id === id)).find(p => p && cobradoViaAbonos(p));
   if (saldadoConAbonos) { avisoBloqueoCobradoViaAbonos(saldadoConAbonos, 'eliminar este pedido'); return; }
-  if (!(await confirmarSistema({ titulo: idArr.length > 1 ? '¿Eliminar este pedido completo (todos sus ítems)?' : '¿Eliminar este ingreso?', aceptar: 'Sí, eliminar', peligro: true }))) return;
-  try {
-    const objetos = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
-    try {
-      for (const p of objetos) {
-        const ubicacion = p.es_gratis ? 'Gratis' : p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
-        const [row] = await sbInsert('pedidos_eliminados', {
-          pedido_id: p.id, fecha: p.fecha, hora: p.hora || '', turno: p.turno,
-          pedido: p.pedido, detalle: p.detalle || '', ubicacion, metodo: p.metodo,
-          monto_total: p.monto_total || 0, motivo: 'eliminado'
-        });
-        if (row) ST.pedidosEliminados.unshift(row);
-      }
-    } catch (e) {
-      console.error(e);
-      showToast('⚠ Se eliminó, pero no quedó registrado en Auditoría (falta crear la tabla pedidos_eliminados en Supabase)', 'warning');
-    }
+  const objetos = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
+  if (!objetos.length) return;
 
-    await sbDelete('pedidos', `id=in.(${idArr.join(',')})`);
-    ST.ingresos = ST.ingresos.filter(i => !idArr.includes(i.id));
-    renderAll();
-    showToast('Ingreso eliminado', 'info');
-  } catch(e) { showToast('⚠ Error al eliminar', 'warning'); }
+  // ¿Su turno ya tiene cierre guardado? Entonces la pregunta incluye qué hacer con el cierre (M1).
+  const entradas = entradasDeCierre(objetos);
+  const ajustes = agruparAjustes(entradas);
+  let decision;
+  if (ajustes.length) {
+    decision = await preguntarPorCierres(ajustes, {
+      titulo: idArr.length > 1 ? '¿Eliminar este pedido completo? Su turno ya está cerrado' : '¿Eliminar este ingreso? Su turno ya está cerrado',
+      accion: 'eliminas el pedido', aceptar: 'Sí, eliminar y corregir el cierre', sin: '', peligro: true
+    });
+  } else {
+    decision = (await confirmarSistema({ titulo: idArr.length > 1 ? '¿Eliminar este pedido completo (todos sus ítems)?' : '¿Eliminar este ingreso?', aceptar: 'Sí, eliminar', peligro: true })) ? 'sin' : 'no';
+  }
+  if (decision === 'no') return;
+
+  // 1) Corregir el cierre del turno (si se pidió). Si falla, no se hizo nada.
+  let hechos = [];
+  if (decision === 'si') {
+    try { hechos = await aplicarAjustesCierre(ajustes); }
+    catch (e) {
+      console.error(e);
+      avisarSistema({ titulo: 'No se eliminó nada', cuerpo: 'No se pudo corregir el cierre del turno, así que el pedido NO se eliminó y todo sigue como estaba.\n\nRevisa la conexión e inténtalo de nuevo.' + textoCierresSinRestaurar(e.cierresSinRestaurar), tono: 'peligro' });
+      return;
+    }
+  }
+
+  // 2) Rastro en Auditoría: sin rastro no se borra.
+  try { await dejarRastroEliminados(objetos, 'eliminado'); }
+  catch (e) {
+    console.error(e);
+    const fallos = await deshacerAjustesCierre(hechos);
+    avisoRastroNoGuardado('eliminó', 'elimina', textoCierresSinRestaurar(fallos));
+    return;
+  }
+
+  // 3) Borrar. Si no se borró, el cierre vuelve a como estaba.
+  const resultado = await borrarPedidosComprobando(idArr);
+  if (resultado === 'siguen') {
+    const fallos = await deshacerAjustesCierre(hechos);
+    avisarSistema({ titulo: 'No se pudo eliminar el pedido', cuerpo: 'El pedido sigue en el sistema y el cierre quedó como estaba.\n\nRevisa la conexión e inténtalo de nuevo.' + textoCierresSinRestaurar(fallos), tono: 'peligro' });
+    return;
+  }
+  if (resultado === 'dudoso') {
+    avisarSistema({ titulo: 'Revisa antes de repetir', cuerpo: MSG_BORRADO_DUDOSO, tono: 'peligro' });
+    return;
+  }
+  ST.ingresos = ST.ingresos.filter(i => !idArr.includes(i.id));
+  setSyncBadge('ok');
+  renderAll();
+  showToast(hechos.length ? 'Ingreso eliminado — el cierre del turno se corrigió' : 'Ingreso eliminado', 'info');
 }
 
 // ── Cambiar método de pago de un ingreso ya registrado como pagado ─────
@@ -6224,16 +6537,38 @@ async function guardarMetodoIngreso(ids) {
   const sel = document.getElementById(`metodo-edit-${groupKey}`);
   if (!sel) return;
   const metodo = sel.value;
+  const objetos = idArr.map(id => ST.ingresos.find(x => x.id === id)).filter(Boolean);
+
+  // Si el turno ya tiene cierre guardado, el pedido cambia de columna (efectivo ↔ transferencia) dentro de él (M1).
+  const aporteConMetodo = p => { const q = { ...p, metodo }; return { efectivo: efectivoDe(q), transferencia: transferenciaDe(q) }; };
+  const ajustes = agruparAjustes(entradasDeCierre(objetos, aporteConMetodo));
+  let hechos = [];
+  if (ajustes.length) {
+    const decision = await preguntarPorCierres(ajustes, {
+      titulo: '¿Cambiar el método de pago? Su turno ya está cerrado', accion: 'cambias el método de pago',
+      aceptar: 'Sí, cambiar y corregir el cierre', sin: '', peligro: false
+    });
+    if (decision === 'no') return;
+    if (decision === 'si') {
+      try { hechos = await aplicarAjustesCierre(ajustes); }
+      catch (e) {
+        console.error(e);
+        avisarSistema({ titulo: 'No se cambió el método de pago', cuerpo: 'No se pudo corregir el cierre del turno, así que el método de pago NO se cambió y todo sigue como estaba.\n\nRevisa la conexión e inténtalo de nuevo.' + textoCierresSinRestaurar(e.cierresSinRestaurar), tono: 'peligro' });
+        return;
+      }
+    }
+  }
   try {
     await sbPatch('pedidos', `id=in.(${idArr.join(',')})`, { metodo });
     idArr.forEach(id => { const i = ST.ingresos.find(x => x.id === id); if (i) i.metodo = metodo; });
     metodoEditGroupIds = null;
     setSyncBadge('ok');
     renderAll();
-    showToast('✅ Método de pago actualizado', 'ok');
+    showToast(hechos.length ? '✅ Método de pago actualizado — el cierre del turno se corrigió' : '✅ Método de pago actualizado', 'ok');
   } catch (e) {
     console.error(e);
-    showToast('⚠ Error al actualizar el método de pago', 'warning');
+    const fallos = await deshacerAjustesCierre(hechos);
+    avisarSistema({ titulo: 'No se cambió el método de pago', cuerpo: 'No se pudo guardar el cambio. El método de pago sigue como estaba' + (hechos.length ? ' y el cierre del turno se dejó como estaba' : '') + '.\n\nRevisa la conexión e inténtalo de nuevo.' + textoCierresSinRestaurar(fallos), tono: 'peligro' });
   }
 }
 
@@ -6274,15 +6609,6 @@ function irAPendientesConMesa(mesaNum) {
       setTimeout(() => el.classList.remove('highlighted'), 2000);
     }
   }, 150);
-}
-
-function scrollToMesa(mesaNum) {
-  const el = document.getElementById(`mesa-group-${mesaNum}-1`);
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth' });
-    el.classList.add('highlighted');
-    setTimeout(() => el.classList.remove('highlighted'), 2000);
-  }
 }
 
 // Arma el patch de "pago" para UN pedido — incluye el reparto exacto de pago
@@ -6326,6 +6652,8 @@ async function marcarGrupoMesaPagado(ids, mesaNum, key) {
   const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
+  const previo = await prepararCierreAntesDeCobrar(pedidosDelGrupo, pedidosDelGrupo.map((_, i) => armarPatchPago(metodo, dividido, i === 0)));
+  if (!previo) return;
   try {
     for (let i = 0; i < ids.length; i++) {
       const patch = await patchPagoConFallback(ids[i], armarPatchPago(metodo, dividido, i === 0));
@@ -6347,6 +6675,7 @@ async function marcarGrupoMesaPagado(ids, mesaNum, key) {
       ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
     renderAll();
   } catch (e) {
+    await restaurarCierreSiNoSeCobro(previo, ids);
     console.error(e);
     showToast('⚠ Error al procesar el pago', 'warning');
   }
@@ -6363,6 +6692,8 @@ async function marcarGrupoDomicilioPagado(ids, key) {
   const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
+  const previo = await prepararCierreAntesDeCobrar(pedidosDelGrupo, pedidosDelGrupo.map((_, i) => armarPatchPago(metodo, dividido, i === 0)));
+  if (!previo) return;
   try {
     for (let i = 0; i < ids.length; i++) {
       const patch = await patchPagoConFallback(ids[i], armarPatchPago(metodo, dividido, i === 0));
@@ -6376,6 +6707,7 @@ async function marcarGrupoDomicilioPagado(ids, key) {
       ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
     renderAll();
   } catch (e) {
+    await restaurarCierreSiNoSeCobro(previo, ids);
     console.error(e);
     showToast('⚠ Error al procesar el pago', 'warning');
   }
@@ -6392,6 +6724,8 @@ async function marcarGrupoSinMesaPagado(ids, key) {
   const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
+  const previo = await prepararCierreAntesDeCobrar(pedidosDelGrupo, pedidosDelGrupo.map((_, i) => armarPatchPago(metodo, dividido, i === 0)));
+  if (!previo) return;
   try {
     for (let i = 0; i < ids.length; i++) {
       const patch = await patchPagoConFallback(ids[i], armarPatchPago(metodo, dividido, i === 0));
@@ -6405,6 +6739,7 @@ async function marcarGrupoSinMesaPagado(ids, key) {
       ids.length ? { label: '↩ Deshacer', onClick: () => revertirPago(ids) } : null);
     renderAll();
   } catch (e) {
+    await restaurarCierreSiNoSeCobro(previo, ids);
     showToast('⚠ Error al procesar el pago', 'warning');
   }
 }
@@ -6486,81 +6821,62 @@ async function marcarGrupoGratisPagado(ids) {
 // ── Cancelar pedido pendiente ─────────────────────────────────────────
 async function cancelarPendiente(pedidoId) {
   if (!(await confirmarSistema({ titulo: '¿Cancelar este pedido pendiente?', aceptar: 'Sí, cancelar el pedido', peligro: true }))) return;
+  const ped = ST.pendientes.find(p => p.id === pedidoId);
+
+  // Rastro en Auditoría — distinto de eliminarGrupoIngreso(): este pedido nunca llegó a pagarse, así que queda con
+  // motivo:'cancelado'. Sin rastro no se cancela (M2): si no se pudo anotar, no se borra nada y sale una ventana.
+  if (ped) {
+    try { await dejarRastroEliminados([ped], 'cancelado'); }
+    catch (e) { console.error(e); avisoRastroNoGuardado('canceló', 'cancela'); return; }
+  }
+
+  const resultado = await borrarPedidosComprobando([pedidoId]);
+  if (resultado === 'siguen') { avisarSistema({ titulo: 'No se pudo cancelar el pedido', cuerpo: 'El pedido sigue en Pendientes.\n\nRevisa la conexión e inténtalo de nuevo.', tono: 'peligro' }); return; }
+  if (resultado === 'dudoso') { avisarSistema({ titulo: 'Revisa antes de repetir', cuerpo: MSG_BORRADO_DUDOSO, tono: 'peligro' }); return; }
+  ST.pendientes = ST.pendientes.filter(p => p.id !== pedidoId);
+
+  // Si no quedan más pendientes para esa mesa → liberarla. El pedido ya se canceló: si esto falla, solo se avisa.
+  if (ped && ped.mesa) {
+    const quedan = ST.pendientes.filter(p => p.mesa === ped.mesa).length;
+    if (quedan === 0) await liberarMesaTrasCancelar(ped.mesa);
+  }
+  showToast('Pedido cancelado', 'info');
+  renderAll();
+}
+
+// La mesa se libera DESPUÉS de cancelar. Si esa última parte falla, el pedido ya no existe: se avisa para que se libere a mano.
+async function liberarMesaTrasCancelar(mesaNum) {
   try {
-    const ped = ST.pendientes.find(p => p.id === pedidoId);
-
-    // Rastro en Auditoría — distinto de eliminarGrupoIngreso(): este pedido
-    // nunca llegó a pagarse, así que queda con motivo:'cancelado'. Si falla
-    // (ej. falta la columna motivo todavía), no bloquea la cancelación.
-    if (ped) {
-      try {
-        const ubicacion = ped.es_gratis ? 'Gratis' : ped.es_fiar ? 'Fiado' : ped.es_sin_mesa ? 'Sin mesa' : ped.es_domicilio ? 'Domicilio' : ped.mesa ? `Mesa ${ped.mesa}` : '—';
-        const [row] = await sbInsert('pedidos_eliminados', {
-          pedido_id: ped.id, fecha: ped.fecha, hora: ped.hora || '', turno: ped.turno,
-          pedido: ped.pedido, detalle: ped.detalle || '', ubicacion, metodo: ped.metodo,
-          monto_total: ped.monto_total || 0, motivo: 'cancelado'
-        });
-        if (row) ST.pedidosEliminados.unshift(row);
-      } catch (e) {
-        console.error(e);
-        showToast('⚠ Se canceló, pero no quedó registrado en Auditoría (falta la columna motivo en pedidos_eliminados)', 'warning');
-      }
-    }
-
-    await sbDelete('pedidos', `id=eq.${pedidoId}`);
-    ST.pendientes = ST.pendientes.filter(p => p.id !== pedidoId);
-
-    // Si no quedan más pendientes para esa mesa → liberarla
-    if (ped && ped.mesa) {
-      const quedan = ST.pendientes.filter(p => p.mesa === ped.mesa).length;
-      if (quedan === 0) {
-        await sbPatch('mesas', `numero=eq.${ped.mesa}`, { estado: 'libre' });
-        const mesa = ST.mesas.find(m => m.numero === ped.mesa);
-        if (mesa) mesa.estado = 'libre';
-      }
-    }
-    showToast('Pedido cancelado', 'info');
-    renderAll();
-  } catch(e) { showToast('⚠ Error al cancelar', 'warning'); }
+    await sbPatch('mesas', `numero=eq.${mesaNum}`, { estado: 'libre' });
+    const mesa = ST.mesas.find(m => m.numero === mesaNum);
+    if (mesa) mesa.estado = 'libre';
+  } catch (e) {
+    console.error(e);
+    showToast(`⚠ El pedido se canceló, pero la mesa ${mesaNum} no se pudo marcar como libre — recarga la página y revisa el mapa`, 'warning');
+  }
 }
 
 // Cancela TODO un pedido de una mesa de una vez (todos sus almuerzos + extras),
 // sin tocar los demás pedidos que pueda haber en esa misma mesa.
 async function cancelarGrupoPendiente(ids, mesaNum) {
   if (!(await confirmarSistema({ titulo: `¿Cancelar este pedido completo (${ids.length} ítem${ids.length > 1 ? 's' : ''})?`, aceptar: 'Sí, cancelar el pedido', peligro: true }))) return;
-  try {
-    // Mismo rastro en Auditoría que cancelarPendiente(), pero para TODOS los
-    // ids del grupo (nunca queda un pedido a medio registrar en Auditoría).
-    const objetos = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
-    try {
-      for (const p of objetos) {
-        const ubicacion = p.es_gratis ? 'Gratis' : p.es_fiar ? 'Fiado' : p.es_sin_mesa ? 'Sin mesa' : p.es_domicilio ? 'Domicilio' : p.mesa ? `Mesa ${p.mesa}` : '—';
-        const [row] = await sbInsert('pedidos_eliminados', {
-          pedido_id: p.id, fecha: p.fecha, hora: p.hora || '', turno: p.turno,
-          pedido: p.pedido, detalle: p.detalle || '', ubicacion, metodo: p.metodo,
-          monto_total: p.monto_total || 0, motivo: 'cancelado'
-        });
-        if (row) ST.pedidosEliminados.unshift(row);
-      }
-    } catch (e) {
-      console.error(e);
-      showToast('⚠ Se canceló, pero no quedó registrado en Auditoría (falta la columna motivo en pedidos_eliminados)', 'warning');
-    }
+  // Mismo rastro en Auditoría que cancelarPendiente(), pero para TODOS los ids del grupo en UNA sola petición (nunca queda un
+  // pedido a medio registrar en Auditoría). Sin rastro no se cancela nada (M2).
+  const objetos = ids.map(id => ST.pendientes.find(p => p.id === id)).filter(Boolean);
+  try { await dejarRastroEliminados(objetos, 'cancelado'); }
+  catch (e) { console.error(e); avisoRastroNoGuardado('canceló', 'cancela'); return; }
 
-    await sbDelete('pedidos', `id=in.(${ids.join(',')})`);
-    ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
+  const resultado = await borrarPedidosComprobando(ids);
+  if (resultado === 'siguen') { avisarSistema({ titulo: 'No se pudo cancelar el pedido', cuerpo: 'El pedido sigue en Pendientes.\n\nRevisa la conexión e inténtalo de nuevo.', tono: 'peligro' }); return; }
+  if (resultado === 'dudoso') { avisarSistema({ titulo: 'Revisa antes de repetir', cuerpo: MSG_BORRADO_DUDOSO, tono: 'peligro' }); return; }
+  ST.pendientes = ST.pendientes.filter(p => !ids.includes(p.id));
 
-    if (mesaNum) {
-      const quedan = ST.pendientes.filter(p => p.mesa === mesaNum).length;
-      if (quedan === 0) {
-        await sbPatch('mesas', `numero=eq.${mesaNum}`, { estado: 'libre' });
-        const mesa = ST.mesas.find(m => m.numero === mesaNum);
-        if (mesa) mesa.estado = 'libre';
-      }
-    }
-    showToast('Pedido cancelado', 'info');
-    renderAll();
-  } catch (e) { showToast('⚠ Error al cancelar', 'warning'); }
+  if (mesaNum) {
+    const quedan = ST.pendientes.filter(p => p.mesa === mesaNum).length;
+    if (quedan === 0) await liberarMesaTrasCancelar(mesaNum);
+  }
+  showToast('Pedido cancelado', 'info');
+  renderAll();
 }
 
 // Botón "🏷 Descuento" reutilizado en Pendientes (mesas/domicilios/sin mesa/
@@ -6951,7 +7267,12 @@ async function aplicarDescuentoGrupo() {
       if (row && Array.isArray(ST.pedidosDescuentos)) ST.pedidosDescuentos.unshift(row);
     } catch (e) {
       console.error(e);
-      showToast('⚠ El descuento se aplicó, pero no quedó registrado en Auditoría (falta crear la tabla pedidos_descuentos en Supabase)', 'warning');
+      avisarSistema({
+        titulo: 'El descuento se aplicó, pero falta anotarlo',
+        cuerpo: 'El descuento SÍ quedó aplicado, pero no se pudo anotar en Auditoría (casi siempre es la señal de internet).\n\n' +
+          'Avisa al administrador para que lo anote a mano: pedido ' + (primero.grupo_pedido || elegibles.map(p => p.id).join(', ')) + ', descuento ' + fmt(D) + (motivo ? ', motivo «' + motivo + '»' : '') + '.',
+        tono: 'aviso'
+      });
     }
 
     setSyncBadge('ok');
@@ -7949,6 +8270,17 @@ async function confirmarSistema({ titulo, cuerpo = '', aceptar = 'Aceptar', canc
     opciones: [{ valor: 'no', texto: cancelar }, { valor: 'si', texto: aceptar, clase: peligro ? 'btn-danger' : 'btn-primary' }],
   });
   return r === 'si';
+}
+
+// Aviso que NO se va solo: una ventana con un único botón «Entendido». Es para lo que no puede pasar desapercibido (algo que
+// no se guardó, un cierre que quedó por revisar). A diferencia de un toast, hay que cerrarla a propósito. No hace falta
+// esperarla con `await`: sirve para avisar y seguir (o salir) sin frenar el resto del flujo.
+//   avisarSistema({ titulo: 'No se guardó el pedido', cuerpo: '…' });
+function avisarSistema({ titulo, cuerpo = '', tono = 'peligro', boton = 'Entendido' }) {
+  return ventanaSistema({
+    titulo, cuerpo, tono, fila: true, alEscape: 'entendido', foco: 'entendido',
+    opciones: [{ valor: 'entendido', texto: boton, clase: 'btn-primary' }],
+  });
 }
 
 // Texto de usuario → HTML seguro (para nombres y notas que se pintan con innerHTML).
@@ -9151,6 +9483,8 @@ function htmlPagoDividido(key, total, prellenado) {
 
 // ── Revertir un pago (uno o varios pedidos) sin duplicar ni perder datos ─
 // Usa PATCH sobre el/los mismo(s) registro(s) — nunca borra ni reinserta.
+// Si el turno del pedido ya tiene cierre guardado, ese cierre incluye la plata de este pago: antes de devolverlo a pendiente se
+// pregunta qué hacer con el cierre (M1). El cierre se corrige PRIMERO; si la devolución falla, se deja como estaba.
 async function revertirPago(ids) {
   const idArr = Array.isArray(ids) ? ids : [ids];
   const objetos = idArr.map(id => ST.ingresos.find(i => i.id === id)).filter(Boolean);
@@ -9161,6 +9495,27 @@ async function revertirPago(ids) {
   // totalPagadoViaAbono, así que el sobrante sube y el saldo sigue cuadrando.
   const habiaViaAbono = objetos.some(p => p.pagado_via_abono === true);
 
+  const entradas = entradasDeCierre(objetos);          // se calcula ANTES de tocar nada: después el estado ya no es «pagado»
+  const ajustes = agruparAjustes(entradas);
+  let hechos = [];
+  if (ajustes.length) {
+    const decision = await preguntarPorCierres(ajustes, {
+      titulo: '¿Devolver este pago a pendiente? Su turno ya está cerrado', accion: 'devuelves el pago a pendiente',
+      aceptar: 'Sí, devolver y corregir el cierre', sin: '', peligro: false,
+      nota: 'El cierre se queda cerrado con esas cifras. Cuando vuelvas a cobrar el pedido, el sistema te preguntará si lo sumas otra vez al cierre.'
+    });
+    if (decision === 'no') return;
+    if (decision === 'si') {
+      try { hechos = await aplicarAjustesCierre(ajustes); }
+      catch (e) {
+        console.error(e);
+        avisarSistema({ titulo: 'No se devolvió el pago', cuerpo: 'No se pudo corregir el cierre del turno, así que el pago NO se devolvió a pendiente y todo sigue como estaba.\n\nRevisa la conexión e inténtalo de nuevo.' + textoCierresSinRestaurar(e.cierresSinRestaurar), tono: 'peligro' });
+        return;
+      }
+    }
+  }
+
+  const revertidos = [];
   try {
     for (const p of objetos) {
       const patch = { estado: 'pendiente' };
@@ -9181,6 +9536,7 @@ async function revertirPago(ids) {
       Object.assign(p, patch);
       if (patch.fecha_original === null) delete p.fecha_original;
       if (patch.fecha_pago === null) { delete p.fecha_pago; delete p.turno_pago; }
+      revertidos.push(p.id);
     }
 
     idArr.forEach(id => {
@@ -9201,11 +9557,31 @@ async function revertirPago(ids) {
     setSyncBadge('ok');
     showToast(habiaViaAbono
       ? '↩ Fiado devuelto a pendiente — el abono queda como saldo a favor del cliente (usa "Aplicar saldo a favor" en Fiados)'
-      : `↩ ${idArr.length > 1 ? 'Pagos revertidos' : 'Pago revertido'} — vuelve${idArr.length > 1 ? 'n' : ''} a pendientes`, 'info');
+      : `↩ ${idArr.length > 1 ? 'Pagos revertidos' : 'Pago revertido'} — vuelve${idArr.length > 1 ? 'n' : ''} a pendientes`
+        + (hechos.length ? ' · el cierre del turno se corrigió (al volver a cobrarlo se te preguntará si lo sumas)' : ''), 'info');
     renderAll();
   } catch (e) {
     console.error(e);
-    showToast('⚠ Error al revertir el pago', 'warning');
+    // ¿Cuáles se alcanzaron a devolver? Se mira en la base (una respuesta perdida puede haber guardado más de lo que la
+    // pantalla cree). Solo esos quedan fuera del cierre; el resto vuelve a contar.
+    let hechosIds = new Set(revertidos);
+    let fallos = [];
+    if (hechos.length) {
+      const enBase = await filasDePedidosEnBase(idArr);
+      if (enBase) hechosIds = new Set(enBase.filter(f => f.estado === 'pendiente').map(f => f.id));
+      fallos = await deshacerAjustesCierre(hechos, entradas.filter(en => hechosIds.has(en.pedido.id)));
+    }
+    const todosDevueltos = hechosIds.size === idArr.length;
+    const cuerpoFallo = todosDevueltos
+      ? 'El pago SÍ se devolvió a pendiente, pero no se pudo marcar la mesa como ocupada. Recarga la página y revisa el mapa de mesas.'
+      : hechosIds.size
+      ? `Se alcanzaron a devolver ${hechosIds.size} de ${idArr.length} pedido(s) y luego se cortó. Recarga la página para ver cómo quedó` + (hechos.length ? ' (el cierre del turno se dejó de acuerdo con lo que sí se devolvió)' : '') + '.'
+      : 'No se pudo devolver el pago. Todo sigue como estaba' + (hechos.length ? ' (el cierre del turno también)' : '') + '.\n\nRevisa la conexión e inténtalo de nuevo.';
+    avisarSistema({
+      titulo: todosDevueltos ? 'Revisa la mesa' : hechosIds.size ? 'El pago se devolvió solo en parte' : 'No se devolvió el pago',
+      cuerpo: cuerpoFallo + textoCierresSinRestaurar(fallos),
+      tono: 'peligro'
+    });
   }
 }
 
@@ -9220,6 +9596,8 @@ async function marcarPedidoIndividualPagado(pedidoId, key) {
   const metodoEl = document.getElementById(`metodo-${key}`);
   const metodo   = dividido ? 'dividido' : (metodoEl ? metodoEl.value : 'efectivo');
 
+  const previo = await prepararCierreAntesDeCobrar([ped], [armarPatchPago(metodo, dividido, true)]);
+  if (!previo) return;
   try {
     const patch = await patchPagoConFallback(pedidoId, armarPatchPago(metodo, dividido, true));
 
@@ -9247,6 +9625,7 @@ async function marcarPedidoIndividualPagado(pedidoId, key) {
       pedidoPagado ? { label: '↩ Deshacer', onClick: () => revertirPago(pedidoPagado.id) } : null);
     renderAll();
   } catch (e) {
+    await restaurarCierreSiNoSeCobro(previo, [pedidoId]);
     console.error(e);
     showToast('⚠ Error al procesar el pago', 'warning');
   }
@@ -10176,19 +10555,37 @@ async function registrarVenta() {
   if (!p) return;
   if (p.stock < cant) { showToast(`⚠ Stock insuficiente (hay ${p.stock} ${p.unidad})`, 'warning'); return; }
 
+  // Dos escrituras (el nuevo stock y el consumo). Si la segunda falla, la primera se deshace (el stock vuelve a lo que era): así nunca
+  // queda el stock más bajo sin un consumo que lo explique (M8). Se deshace con el stock, no borrando el consumo, porque caja puede
+  // cambiar el inventario pero no borrar consumos (solo el administrador).
   const nuevoStock = p.stock - cant;
+  try { await sbPatch('inventario', `id=eq.${id}`, { stock: nuevoStock }); }
+  catch(e) { console.error(e); showToast('⚠ No se registró el consumo. No se cambió nada', 'warning'); return; }
+  let cons;
   try {
-    await sbPatch('inventario', `id=eq.${id}`, { stock: nuevoStock });
-    const [cons] = await sbInsert('consumos', {
+    [cons] = await sbInsert('consumos', {
       producto_id: id, nombre: p.nombre, cantidad: cant, fecha, costo: p.costo * cant
     });
-    p.stock = nuevoStock;
-    ST.consumos.unshift(cons);
-    setSyncBadge('ok');
-    renderAll();
-    document.getElementById('venta-cantidad').value = '';
-    showToast(`✅ Consumo registrado — ${p.nombre}`, 'ok');
-  } catch(e) { showToast('⚠ Error al registrar consumo', 'warning'); }
+  } catch(e) {
+    console.error(e);
+    try {
+      await sbPatch('inventario', `id=eq.${id}`, { stock: p.stock });
+      showToast('⚠ No se registró el consumo. El stock quedó como estaba', 'warning');
+    } catch(e2) {
+      console.error(e2);
+      p.stock = nuevoStock;
+      renderAll();
+      avisarSistema({ titulo: 'Revisa el stock', tono: 'peligro',
+        cuerpo: `No se pudo guardar el consumo de ${cant} ${p.unidad} de ${p.nombre}, pero el stock ya había bajado y no se pudo devolver.\n\nRecarga la página y corrige el stock de ${p.nombre} a mano antes de seguir.` });
+    }
+    return;
+  }
+  p.stock = nuevoStock;
+  ST.consumos.unshift(cons);
+  setSyncBadge('ok');
+  renderAll();
+  document.getElementById('venta-cantidad').value = '';
+  showToast(`✅ Consumo registrado — ${p.nombre}`, 'ok');
 }
 
 function setFinv(f, btn) {
@@ -10519,20 +10916,21 @@ function renderTablero() {
   // suman junto con el nuevo (crearResolvedorPlatos). Ningún pedido se modifica.
   const nombreDePlato = crearResolvedorPlatos();
   const asadosHoy = new Set(platosEn().filter(p => p.lista === 'asado').map(p => p.nombre));       // también los retirados
-  function topCat(campo, max) {
+  // `incluir` filtra ANTES de cortar a `max`: con los asados mezclados entre las proteínas, cortar primero dejaba menos de 5 platos.
+  function topCat(campo, max, incluir = () => true) {
     const acc = {};
     alm.forEach(i => { if (i[campo]) { const n = nombreDePlato(campo, i[campo], instanteDePedido(i)); acc[n] = (acc[n]||0) + (i.cantidad||1); } });
-    return Object.entries(acc).sort((a,b)=>b[1]-a[1]).slice(0, max);
+    return Object.entries(acc).filter(([n]) => incluir(n)).sort((a,b)=>b[1]-a[1]).slice(0, max);
   }
   function renderTop(elId, entries) {
     document.getElementById(elId).innerHTML = entries.length
       ? entries.map(([n,c],i)=>`<div class="report-line"><span>${i+1}. ${escaparHtml(n)}</span><strong>${c} pedidos</strong></div>`).join('')
       : '<div style="color:var(--text3);font-size:12px;">Sin datos aún</div>';
   }
-  renderTop('rp-proteinas', topCat('proteina', 5).filter(([n]) => !asadosHoy.has(n)));
+  renderTop('rp-proteinas', topCat('proteina', 5, n => !asadosHoy.has(n)));
   renderTop('rp-sopas',     topCat('sopa',     5));
   renderTop('rp-arroces',   topCat('arroz',    5));
-  renderTop('rp-asados',    topCat('proteina', 3).filter(([n]) => asadosHoy.has(n)));
+  renderTop('rp-asados',    topCat('proteina', 3, n => asadosHoy.has(n)));
 
   // Desglose comidas rápidas por categoría
   const crIng = ings.filter(i => i.turno === 'cena');
@@ -11356,6 +11754,21 @@ async function eliminarGastoDia(id) {
   showToast('🗑 Gasto quitado', 'ok');
 }
 
+// Un gasto cambió de monto o de categoría: su turno (si ya tiene cierre) cambia en la diferencia. Los préstamos no cuentan.
+async function ajustarCierrePorGastoEditado(antes, despues) {
+  const aporte = g => (esCatExcluida(g.categoria) ? 0 : (g.monto || 0));
+  const delta = aporte(despues) - aporte(antes);
+  if (delta === 0) return;
+  const c = ST.cierresDia.find(x => x.fecha === despues.fecha && x.turno === despues.turno);
+  if (!c) return;
+  const gastos = Math.max(0, (c.gastos || 0) + delta);
+  const resultado = (c.resultado || 0) + ((c.gastos || 0) - gastos);
+  if (gastos === c.gastos && resultado === c.resultado) return;
+  await sbPatch('cierres_dia', `fecha=eq.${despues.fecha}&turno=eq.${despues.turno}`, { gastos, resultado });
+  c.gastos = gastos;
+  c.resultado = resultado;
+}
+
 // Si el turno del gasto quitado ya tiene cierre (normal o manual), sus «gastos» bajan en el monto del gasto y su
 // resultado sube en lo mismo (el cierre guarda sus totales; no los recalcula solo). Los préstamos no cuentan como
 // gasto del cierre, así que no lo tocan. Se usa la diferencia —no se recalcula desde las filas— para no alterar nada
@@ -11395,11 +11808,15 @@ async function guardarEdicionGastoDia(id) {
     const patch = categoria !== undefined ? { nombre, monto, categoria } : { nombre, monto };
     await sbPatch('gastos_dia', `id=eq.${id}`, patch);
     const g = ST.gastosDia.find(g => g.id === id);
+    const antes = g ? { ...g } : null;
     if (g) Object.assign(g, patch);
     ddEditId = null;
     setSyncBadge('ok');
-    renderDiaADia();
-    showToast('✅ Gasto actualizado', 'ok');
+    // Si el turno de este gasto ya tiene cierre guardado, el cierre cambia en la diferencia (igual que al quitar un gasto).
+    let avisoCierre = false;
+    if (g && antes) { try { await ajustarCierrePorGastoEditado(antes, g); } catch (e2) { console.error(e2); avisoCierre = true; } }
+    renderAll();
+    showToast(avisoCierre ? '⚠ El gasto se actualizó, pero no se pudo actualizar el cierre de ese turno: ábrelo con «Corregir cierre» y guárdalo' : '✅ Gasto actualizado', avisoCierre ? 'warning' : 'ok');
   } catch(e) { showToast('⚠ Error al actualizar', 'warning'); }
 }
 
@@ -12354,10 +12771,12 @@ const CFG_PANTALLA = [
     { clave: 'empaque_domicilio', titulo: 'Empaque de domicilio', entrada: 'dinero',
       ayuda: 'Pesos de empaque por cada almuerzo a domicilio (la comida rápida no lo cobra).' } ] },
   { titulo: '💾 Respaldo', campos: [
+    { clave: 'respaldo_frecuencia', titulo: 'Cada cuánto se hace el respaldo', entrada: 'frecuencia',
+      ayuda: 'Solo decide cuándo te avisa el sistema (el respaldo lo haces tú en Datos). Semanal: el aviso sale desde el día que elijas abajo. Mensual: desde el último día de cada mes (lo ideal: al cerrar la noche de ese día, o el primero del mes antes de abrir). Trimestral: desde el último día de marzo, junio, septiembre y diciembre.' },
     { clave: 'respaldo_dia_semana', titulo: 'Día del respaldo semanal', entrada: 'dia',
-      ayuda: 'El aviso aparece desde ese día y sigue hasta que haya un respaldo completo hecho desde entonces.' },
+      ayuda: 'Solo cuenta si la frecuencia es semanal. El aviso aparece desde ese día y sigue hasta que haya un respaldo completo hecho desde entonces.' },
     { clave: 'respaldo_rojo_dias', titulo: 'Días sin respaldo para el aviso rojo', entrada: 'numero', unidad: 'días',
-      ayuda: 'Si pasan estos días sin un respaldo completo, el aviso se pone rojo.' } ] },
+      ayuda: 'Si pasan estos días sin un respaldo completo, el aviso se pone rojo. Al elegir la frecuencia este número se ajusta solo (semanal 10 · mensual 35 · trimestral 100). No puede ser menor que el mínimo de esa frecuencia (semanal 7 · mensual 35 · trimestral 100, para que no salga rojo cuando el respaldo todavía está al día); más alto sí.' } ] },
   { titulo: '🍽️ Cierre del día', campos: [
     { clave: 'cierre_comidas_familia', titulo: 'Comidas de la familia al cerrar el almuerzo', entrada: 'si_no',
       ayuda: 'Sí: el cierre del almuerzo pide cuántas comidas comió la familia sin pagar (en el cierre manual es opcional) y el historial muestra la columna «Familia». No: ese campo y esa columna dejan de aparecer y los cierres nuevos quedan sin ese dato. Lo que ya está guardado no se borra ni se cambia.' } ] }
@@ -12371,6 +12790,7 @@ function cfgTexto(clave, valor) {
   if (!c) return String(valor);
   if (c.entrada === 'dinero') return fmt(valor);
   if (c.entrada === 'dia') return DIAS_SEMANA[valor] || String(valor);
+  if (c.entrada === 'frecuencia') return ({ semanal: 'Semanal', mensual: 'Mensual', trimestral: 'Trimestral' })[valor] || String(valor);
   if (c.entrada === 'si_no') return valor === true ? 'Sí' : valor === false ? 'No' : String(valor);
   if (c.entrada === 'simbolo') return valor === '' ? '(sin símbolo)' : String(valor);
   if (c.entrada === 'numero') return `${Number(valor).toLocaleString('es-CO')}${c.unidad ? ' ' + c.unidad : ''}`;
@@ -12397,6 +12817,7 @@ function cfgHtmlCampo(c) {
   let entrada;
   if (c.entrada === 'dia') entrada = `<select id="${id}" onchange="${marcar}">${DIAS_SEMANA.map((d, i) => `<option value="${i}">${d}</option>`).join('')}</select>`;
   else if (c.entrada === 'si_no') entrada = `<select id="${id}" onchange="${marcar}"><option value="true">Sí</option><option value="false">No</option></select>`;
+  else if (c.entrada === 'frecuencia') entrada = `<select id="${id}" onchange="${marcar};cfgAlCambiarFrecuencia()"><option value="semanal">Semanal</option><option value="mensual">Mensual</option><option value="trimestral">Trimestral</option></select>`;
   else if (c.entrada === 'dinero') entrada = `<input type="text" inputmode="numeric" id="${id}" autocomplete="off" oninput="formatMilesInput(this);${marcar}" ${enter}>`;
   else if (c.entrada === 'numero') entrada = `<input type="text" inputmode="numeric" id="${id}" autocomplete="off" maxlength="4" oninput="this.value=this.value.replace(/[^0-9]/g,'');${marcar}" ${enter}>`;
   else entrada = `<input type="text" id="${id}" autocomplete="off" spellcheck="false" maxlength="${c.entrada === 'simbolo' ? 16 : 60}" oninput="${marcar}" ${enter}>`;
@@ -12425,6 +12846,22 @@ function cfgLeer(clave) {
 function cfgActualizarBoton(clave) {
   const b = document.getElementById('cfg-guardar-' + clave);
   if (b) b.disabled = !CFG.disponible() || cfgLeer(clave) === CFG.v(clave);
+}
+// La frecuencia que la persona ve ahora mismo en la pantalla (si todavía no la guardó, esa; si no, la vigente).
+function cfgFrecuenciaEnPantalla() {
+  const el = document.getElementById('cfg-respaldo_frecuencia');
+  return el && RESPALDO_FRECUENCIAS_LISTA.includes(el.value) ? el.value : CFG.v('respaldo_frecuencia');
+}
+// Los días del aviso rojo no pueden bajar del mínimo de la frecuencia (null = sirve).
+const cfgRojoBajoElMinimo = (dias, frecuencia) => dias < RESPALDO_ROJO_MINIMO[frecuencia]
+  ? `Con respaldo ${frecuencia} los días para el aviso rojo no pueden ser menos de ${RESPALDO_ROJO_MINIMO[frecuencia]} (puedes poner más).` : null;
+// Al elegir otra frecuencia, los días del aviso rojo saltan solos al valor de esa frecuencia (y, si vuelve a la guardada, a lo guardado).
+function cfgAlCambiarFrecuencia() {
+  const f = document.getElementById('cfg-respaldo_frecuencia'), r = document.getElementById('cfg-respaldo_rojo_dias');
+  if (!f || !r) return;
+  if (f.value === CFG.v('respaldo_frecuencia')) { r.value = String(CFG.v('respaldo_rojo_dias')); delete r.dataset.sucio; }
+  else if (RESPALDO_ROJO_SUGERIDO[f.value]) { r.value = String(RESPALDO_ROJO_SUGERIDO[f.value]); r.dataset.sucio = '1'; }
+  cfgActualizarBoton('respaldo_rojo_dias');
 }
 function cfgMarcar(clave) {                       // la persona está escribiendo: no se le pisa lo escrito al redibujar
   const el = document.getElementById('cfg-' + clave);
@@ -12528,6 +12965,23 @@ async function cfgGuardar(clave) {
   if (mal) { showToast('⚠ ' + mal, 'warning'); return; }
   const antes = CFG.v(clave);
   if (valor === antes) { showToast('ℹ️ Ya está así: no hay nada que guardar', 'info'); cfgActualizarBoton(clave); return; }
+  // Respaldo: los días del aviso rojo no pueden bajar del mínimo de la frecuencia; y al guardar una frecuencia nueva se guardan
+  // también los días que la pantalla ya ajustó (una sola petición: o las dos filas o ninguna).
+  const filasPorGuardar = [{ clave, valor }];
+  let lineaRojo = '';
+  if (clave === 'respaldo_rojo_dias') {
+    const bajo = cfgRojoBajoElMinimo(valor, cfgFrecuenciaEnPantalla());
+    if (bajo) { showToast('⚠ ' + bajo, 'warning'); return; }
+  }
+  if (clave === 'respaldo_frecuencia') {
+    const rojo = cfgLeer('respaldo_rojo_dias');
+    const malRojo = cfgValidar('respaldo_rojo_dias', rojo) || cfgRojoBajoElMinimo(rojo, valor);
+    if (malRojo) { showToast('⚠ ' + malRojo, 'warning'); return; }
+    if (rojo !== CFG.v('respaldo_rojo_dias')) {
+      filasPorGuardar.push({ clave: 'respaldo_rojo_dias', valor: rojo });
+      lineaRojo = `\nDías para el aviso rojo: ${CFG.v('respaldo_rojo_dias')}  →  ${rojo}`;
+    }
+  }
   if (clave === 'mesas') {
     const tapadas = cfgMesasTapadas(valor);
     if (tapadas.length) {
@@ -12541,19 +12995,18 @@ async function cfgGuardar(clave) {
   }
   const ok = await confirmarSistema({
     titulo: '¿Guardar este cambio?',
-    cuerpo: `${c.titulo}\nHoy: ${cfgTexto(clave, antes)}  →  Nuevo: ${cfgTexto(clave, valor)}\n\nRige desde ahora. Lo que ya se vendió o se cerró no cambia.`,
+    cuerpo: `${c.titulo}\nHoy: ${cfgTexto(clave, antes)}  →  Nuevo: ${cfgTexto(clave, valor)}${lineaRojo}\n\nRige desde ahora. Lo que ya se vendió o se cerró no cambia.`,
     aceptar: 'Sí, guardar'
   });
   if (!ok) return;
   cfgGuardando = true;
   try {
     if (clave === 'mesas') await cfgAsegurarMesas(valor);
-    const filas = await sbInsert('configuracion', { clave, valor });
-    ST.configuracion = (filas && filas.length) ? ST.configuracion.concat(filas) : await sbGetAll('configuracion', 'order=id.asc');
-    const el = document.getElementById('cfg-' + clave);
-    if (el) delete el.dataset.sucio;
+    const filas = await sbInsert('configuracion', filasPorGuardar.length > 1 ? filasPorGuardar : filasPorGuardar[0]);
+    ST.configuracion = (filas && filas.length === filasPorGuardar.length) ? ST.configuracion.concat(filas) : await sbGetAll('configuracion', 'order=id.asc');
+    for (const f of filasPorGuardar) { const el = document.getElementById('cfg-' + f.clave); if (el) delete el.dataset.sucio; }
     if (clave === 'mesas') cfgSoltarMesaQueYaNoExiste(valor);
-    showToast(`✅ Guardado: ${c.titulo} = ${cfgTexto(clave, valor)} (rige desde ahora)`, 'ok');
+    showToast(`✅ Guardado: ${c.titulo} = ${cfgTexto(clave, valor)}${filasPorGuardar.length > 1 ? ` · aviso rojo a los ${filasPorGuardar[1].valor} días` : ''} (rige desde ahora)`, 'ok');
     renderAll();
   } catch (e) {
     console.error('No se pudo guardar la configuración:', e);

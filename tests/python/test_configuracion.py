@@ -349,7 +349,9 @@ MENSAJES_TEXTO = ["El nombre del negocio debe tener entre 1 y 40 caracteres, sin
 
 
 def test_los_rangos_son_los_mismos_en_la_base_la_pantalla_y_el_servidor_falso():
-    sql = CONFIG.read_text(encoding="utf-8")
+    # Lo que rige hoy es lo que dice el ÚLTIMO archivo de la cadena de configuración (sql/configuracion_respaldo_frecuencia.sql: ahí el
+    # tope de los días del aviso rojo del respaldo sube de 60 a 400); el de la etapa 1 queda como punto de partida.
+    sql = (CONFIG.parent / "configuracion_respaldo_frecuencia.sql").read_text(encoding="utf-8")
     html = HTML.read_text(encoding="utf-8")
     js = BACKEND_FALSO.read_text(encoding="utf-8")
     en_sql = {c: (int(a), int(b), n) for c, a, b, n in re.findall(r"\('([a-z_]+)', (\d+), (\d+), '([^']+)'\)", sql)}
@@ -370,7 +372,7 @@ def test_los_valores_de_siempre_de_la_pantalla_son_validos_y_cada_clave_tiene_su
     bloque = re.search(r"const CFG_DEFECTOS = Object\.freeze\(\{(.*?)\}\);", html, re.S).group(1)
     defectos = dict(re.findall(r"(\w+): ('[^']*'|\d+|(?:true|false)\b)", bloque))
     assert defectos["mesas"] == "8" and defectos["recargo_para_llevar"] == "1000" and defectos["empaque_domicilio"] == "1000"
-    assert defectos["respaldo_dia_semana"] == "0" and defectos["respaldo_rojo_dias"] == "10"
+    assert defectos["respaldo_dia_semana"] == "0" and defectos["respaldo_rojo_dias"] == "35"
     assert defectos["negocio_nombre"] == "'El Lobo'" and defectos["negocio_emoji"] == "'🐺'"
     en_sql = {c: (int(a), int(b)) for c, a, b, _ in re.findall(r"\('([a-z_]+)', (\d+), (\d+), '([^']+)'\)", CONFIG.read_text(encoding="utf-8"))}
     for clave, (minimo, maximo) in en_sql.items():
@@ -380,4 +382,7 @@ def test_los_valores_de_siempre_de_la_pantalla_son_validos_y_cada_clave_tiene_su
     # «negocio_*» son texto y «cierre_comidas_familia» es sí/no: no tienen rango numérico en la base. El valor de siempre de El Lobo
     # para las comidas de la familia es «sí» (como se cerraba antes de existir la opción).
     assert defectos["cierre_comidas_familia"] == "true"
-    assert en_pantalla == set(defectos) == set(en_sql) | {"negocio_nombre", "negocio_emoji", "cierre_comidas_familia"}
+    # «respaldo_frecuencia» (semanal / mensual / trimestral) es una lista de opciones, no un número: su regla en la base está en
+    # sql/configuracion_respaldo_frecuencia.sql (se prueba en test_configuracion_respaldo_frecuencia.py). El valor por defecto (desde el 1-nov) es «mensual».
+    assert defectos["respaldo_frecuencia"] == "'mensual'"
+    assert en_pantalla == set(defectos) == set(en_sql) | {"negocio_nombre", "negocio_emoji", "cierre_comidas_familia", "respaldo_frecuencia"}

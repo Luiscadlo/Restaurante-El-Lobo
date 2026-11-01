@@ -1,0 +1,87 @@
+{
+ "comentario": "Casos compartidos por las pruebas de Python (Postgres real), de la pantalla y del servidor falso para la frecuencia del respaldo (clave respaldo_frecuencia, sql/configuracion_respaldo_frecuencia.sql): las tres reglas deben dar el MISMO veredicto y el MISMO mensaje. «mensaje» null = válido.",
+ "casos": [
+  {
+   "id": "frecuencia: semanal (como siempre)",
+   "clave": "respaldo_frecuencia",
+   "valor": "semanal",
+   "mensaje": null
+  },
+  {
+   "id": "frecuencia: mensual",
+   "clave": "respaldo_frecuencia",
+   "valor": "mensual",
+   "mensaje": null
+  },
+  {
+   "id": "frecuencia: trimestral",
+   "clave": "respaldo_frecuencia",
+   "valor": "trimestral",
+   "mensaje": null
+  },
+  {
+   "id": "frecuencia: con mayúscula inicial no sirve",
+   "clave": "respaldo_frecuencia",
+   "valor": "Semanal",
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  },
+  {
+   "id": "frecuencia: «diario» no existe",
+   "clave": "respaldo_frecuencia",
+   "valor": "diario",
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  },
+  {
+   "id": "frecuencia: «anual» no existe",
+   "clave": "respaldo_frecuencia",
+   "valor": "anual",
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  },
+  {
+   "id": "frecuencia: con espacios no sirve",
+   "clave": "respaldo_frecuencia",
+   "valor": " mensual",
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  },
+  {
+   "id": "frecuencia: el texto vacío no sirve",
+   "clave": "respaldo_frecuencia",
+   "valor": "",
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  },
+  {
+   "id": "frecuencia: el número 7 no sirve",
+   "clave": "respaldo_frecuencia",
+   "valor": 7,
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  },
+  {
+   "id": "frecuencia: verdadero no sirve",
+   "clave": "respaldo_frecuencia",
+   "valor": true,
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  },
+  {
+   "id": "frecuencia: el JSON null no sirve",
+   "clave": "respaldo_frecuencia",
+   "valor": null,
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  },
+  {
+   "id": "frecuencia: una lista no sirve",
+   "clave": "respaldo_frecuencia",
+   "valor": [
+    "mensual"
+   ],
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  },
+  {
+   "id": "frecuencia: un objeto no sirve",
+   "clave": "respaldo_frecuencia",
+   "valor": {
+    "frecuencia": "mensual"
+   },
+   "mensaje": "La frecuencia del respaldo debe ser semanal, mensual o trimestral."
+  }
+ ]
+}

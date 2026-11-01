@@ -129,6 +129,29 @@ const fallosDeArchivos = page => {
   return fallos;
 };
 
+// ── El botón de Excel ─────────────────────────────────────────────────────────
+// La librería de Excel (Contabilidad/librerias/) también viaja dentro del archivo único; en la copia en carpeta se copia la carpeta entera.
+test.describe('exportar a Excel en la copia de pruebas', () => {
+  for (const [nombre, getUrl] of [['archivo único (suelto, sin carpeta librerias/ al lado)', () => URL_SUELTO], ['copia en carpeta', () => URL_COPIA]]) {
+    test(`${nombre}: el botón baja un .xlsx de verdad`, async ({ page }) => {
+      const reg = await abrirSistema(page, { url: getUrl(), usuario: 'admin' });
+      expect(await page.evaluate(() => [typeof XLSX, XLSX.version])).toEqual(['object', '0.18.5']);
+      await page.evaluate(() => showTab('datos', document.querySelector(`.tab[onclick*="showTab('datos'"]`)));
+      const [descarga] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Exportar datos a Excel/ }).click()]);
+      expect(descarga.suggestedFilename()).toMatch(/^ElLobo_datos_.*\.xlsx$/);
+      const XLSX = require(path.resolve(__dirname, '../Contabilidad/librerias/xlsx.full.min.js'));
+      expect(XLSX.read(fs.readFileSync(await descarga.path())).SheetNames).toEqual(expect.arrayContaining(['Pedidos_Pagados', 'Cierres_Dia', 'Info_Exportacion']));
+      expect(reg.errores).toEqual([]);
+    });
+  }
+  test('el archivo único no pide la librería a ningún sitio (ni a un archivo local que no existe)', async ({ page }) => {
+    const fallos = fallosDeArchivos(page);
+    const reg = await abrirSistema(page, { url: URL_SUELTO, usuario: 'admin' });
+    expect(fallos).toEqual([]);
+    expect([...reg.hosts]).toEqual([HOST_PRUEBAS]);
+  });
+});
+
 test.describe('la pestaña Menú de la copia de pruebas', () => {
   test('como archivo suelto (sin carpeta Menu/ al lado) la pestaña Menú carga: el Menú va adentro', async ({ page }) => {
     expect(fs.readdirSync(descargas)).toEqual(['ElLobo_PRUEBAS.html']);          // no hay nada más junto al archivo

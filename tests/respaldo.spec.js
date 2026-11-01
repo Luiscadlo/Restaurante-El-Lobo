@@ -2,11 +2,23 @@
 // Todo contra el backend falso: nada toca tu Supabase real.
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
-const { abrirSistema, URL_HTML, TABLAS_LOADSTATE } = require('./helpers/backend-falso');
+const { abrirSistema: abrirSistemaBase, URL_HTML, TABLAS_LOADSTATE } = require('./helpers/backend-falso');
 const { datos: DATOS_BASE } = require('./fixtures/datos');
 const { entrarComoAdmin } = require('./helpers/sesion');
 
 const copia = x => JSON.parse(JSON.stringify(x));
+// Estas pruebas son del aviso SEMANAL (lo de siempre antes de que el valor por defecto pasara a «mensual», 1-nov): se guarda la
+// configuración semanal y rojo a los 10 días. Las pruebas del valor por defecto y de las otras frecuencias están en
+// configuracion-respaldo.spec.js.
+const FILAS_SEMANAL = [
+  { id: 9001, clave: 'respaldo_frecuencia', valor: 'semanal', vigente_desde: '2026-01-01T00:00:00-05:00', creado_por: 'luis', creado_en: '2026-01-01T00:00:00-05:00' },
+  { id: 9002, clave: 'respaldo_rojo_dias', valor: 10, vigente_desde: '2026-01-01T00:00:00-05:00', creado_por: 'luis', creado_en: '2026-01-01T00:00:00-05:00' },
+];
+const abrirSistema = (page, opciones = {}) => {
+  const datos = opciones.datos || copia(DATOS_BASE);
+  datos.configuracion = [...(datos.configuracion || []), ...FILAS_SEMANAL];
+  return abrirSistemaBase(page, { ...opciones, datos });
+};
 const irA = (page, id) => page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
 const HTML_TEXTO = fs.readFileSync(decodeURIComponent(new URL(URL_HTML).pathname), 'utf-8');
 
@@ -269,7 +281,7 @@ test.describe('respaldoCompleto', () => {
   }
 
   test('baja las 16 tablas completas, con conteos que coinciden, y registra config.ultimo_respaldo', async ({ page }) => {
-    const reg = await abrirSistema(page, { usuario: 'admin' });
+    const reg = await abrirSistemaBase(page, { usuario: 'admin' });
     const archivo = await respaldar(page);
 
     expect(archivo.version).toBe(1);

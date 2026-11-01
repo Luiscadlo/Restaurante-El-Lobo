@@ -47,14 +47,14 @@ async function guardar(page, clave) {
 
 // ── 1. Sin configuración: todo como siempre ──────────────────────────────────────
 test.describe('sin configuración guardada: valores de siempre', () => {
-  test('8 mesas, +$1.000, empaque $1.000, «🐺 El Lobo», respaldo del domingo y rojo a los 10 días', async ({ page }) => {
+  test('8 mesas, +$1.000, empaque $1.000, «🐺 El Lobo», respaldo del domingo y rojo a los 35 días (mensual desde el 1-nov)', async ({ page }) => {
     const reg = await abrirSistema(page, { usuario: 'caja' });
-    expect(await hoy(page)).toEqual({ mesas: 8, recargo: 1000, empaque: 1000, nombre: 'El Lobo', emoji: '🐺', dia: 0, rojo: 10 });
+    expect(await hoy(page)).toEqual({ mesas: 8, recargo: 1000, empaque: 1000, nombre: 'El Lobo', emoji: '🐺', dia: 0, rojo: 35 });
     expect(await marca(page)).toBe('🐺 El Lobo');
     expect(await page.title()).toBe('El Lobo — Sistema Contable');
     await expect(page.locator('#ing-mesas-grid .mesa-btn')).toHaveCount(8);
     await expect(page.locator('[data-cfg="recargo-llevar"]').first()).toHaveText('+$1.000');
-    expect(await page.evaluate(() => [0, 1, 2, 7, 9, 10, 25].map(d => nivelAvisoRespaldo(d, 2)))).toEqual([null, null, null, 'ambar', 'ambar', 'rojo', 'rojo']);
+    expect(await page.evaluate(() => [0, 1, 2, 7, 9, 10, 25].map(d => nivelAvisoRespaldo(d, 2)))).toEqual([null, null, null, 'ambar', 'ambar', 'ambar', 'ambar']);   // con el rojo a los 35 días
     expect(reg.errores).toEqual([]);
   });
 
@@ -349,11 +349,11 @@ test.describe('guardar', () => {
   test('doble clic o Enter repetido: una sola fila', async ({ page }) => {
     const { reg } = await abrirAdmin(page);
     await page.evaluate(() => { window.__noAceptarAvisos = true; });
-    await escribir(page, 'respaldo_rojo_dias', '14');
+    await escribir(page, 'respaldo_rojo_dias', '40');
     await page.evaluate(() => { cfgGuardar('respaldo_rojo_dias'); cfgGuardar('respaldo_rojo_dias'); });
     await expect(page.locator('#modal-sistema')).toBeVisible();
     await page.click('#sis-opciones button[data-eleccion="si"]');
-    await expect(page.locator('#cfg-hoy-respaldo_rojo_dias')).toContainText('14 días');
+    await expect(page.locator('#cfg-hoy-respaldo_rojo_dias')).toContainText('40 días');
     expect(escrituras(reg, 'configuracion').length).toBe(1);
   });
 
@@ -393,7 +393,7 @@ test.describe('valores inválidos', () => {
     ['mesas', '0', 'entre 1 y 60'], ['mesas', '61', 'entre 1 y 60'], ['mesas', '', 'debe ser un número'],
     ['recargo_para_llevar', '50001', 'entre 0 y 50.000'], ['recargo_para_llevar', '', 'debe ser un número'],
     ['empaque_domicilio', '60000', 'entre 0 y 50.000'],
-    ['respaldo_rojo_dias', '6', 'entre 7 y 60'], ['respaldo_rojo_dias', '61', 'entre 7 y 60'],
+    ['respaldo_rojo_dias', '6', 'entre 7 y 400'], ['respaldo_rojo_dias', '401', 'entre 7 y 400'],
     ['negocio_nombre', '', 'entre 1 y 40 caracteres'], ['negocio_nombre', 'N'.repeat(41), 'entre 1 y 40 caracteres'],
     ['negocio_emoji', '🐺'.repeat(9), 'hasta 8 caracteres'],
   ];

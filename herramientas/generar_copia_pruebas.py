@@ -187,6 +187,11 @@ MARCO_MENU_UNICO = '<iframe id="menuFrame" title='
 CARGA_MENU = f"<script>document.getElementById('menuFrame').src='{RUTA_MENU}?v='+Date.now();</script>"
 PATRON_BLOQUE_MENU = re.compile(r'<script id="menu-incrustado">.*?</script>', re.S)
 
+# La librería de Excel también viaja adentro del archivo único (suelto no existe la carpeta Contabilidad/librerias/).
+REL_XLSX = Path("Contabilidad") / "librerias" / "xlsx.full.min.js"
+ETIQUETA_XLSX = '<script src="librerias/xlsx.full.min.js"></script>'
+PATRON_BLOQUE_XLSX = re.compile(r'<script id="xlsx-incrustado">.*?</script>', re.S)
+
 
 def _una_vez(texto, viejo, nuevo, que):
     if texto.count(viejo) != 1:
@@ -216,6 +221,30 @@ def _bloque_menu(menu):
             "  };\n"
             "})();\n"
             "</script>")
+
+
+def _bloque_xlsx(biblioteca):
+    # Va tal cual (sin escapar): una prueba confirma que no trae «<script» ni «</script» que pudieran cerrar o abrir el bloque.
+    return '<script id="xlsx-incrustado">\n' + biblioteca + '\n</script>'
+
+
+def incrustar_xlsx(copia, biblioteca):
+    low = biblioteca.lower()
+    if "</script" in low or "<script" in low:
+        raise rr.Rechazo("La librería de Excel trae una etiqueta de script: no se puede incrustar tal cual. No se escribe nada.")
+    return _una_vez(copia, ETIQUETA_XLSX, _bloque_xlsx(biblioteca), "la línea que carga la librería de Excel")
+
+
+def desincrustar_xlsx(unica):
+    """Inversa de incrustar_xlsx: devuelve (la copia con la etiqueta original, la librería recuperada)."""
+    bloques = PATRON_BLOQUE_XLSX.findall(unica)
+    if len(bloques) != 1:
+        raise rr.Rechazo(f"Esperaba un solo bloque de la librería de Excel incrustada y hay {len(bloques)}.")
+    bloque = bloques[0]
+    pre, post = '<script id="xlsx-incrustado">\n', '\n</script>'
+    if not (bloque.startswith(pre) and bloque.endswith(post)):
+        raise rr.Rechazo("No encuentro dónde empieza y termina la librería de Excel incrustada.")
+    return unica.replace(bloque, ETIQUETA_XLSX), bloque[len(pre):-len(post)]
 
 
 def incrustar_menu(copia, menu):
@@ -280,6 +309,15 @@ def generar(carpeta, url, llave, origen=None):
         d.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(fuente, d)
         escritos.append(d)
+    carpeta_libs = origen / REL_XLSX.parent
+    if not (origen / REL_XLSX).exists():
+        raise rr.Rechazo(f"Falta {REL_XLSX} en el sistema.")
+    for f in sorted(carpeta_libs.iterdir()):
+        if f.is_file():
+            d = carpeta / REL_XLSX.parent / f.name
+            d.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(f, d)
+            escritos.append(d)
     (carpeta / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
     (carpeta / "LEEME.md").write_text(LEEME, encoding="utf-8")
     escritos += [carpeta / "robots.txt", carpeta / "LEEME.md"]
@@ -309,10 +347,15 @@ def generar_archivo_unico(archivo, url, llave, origen=None):
                         (_constante(html, "SB_KEY"), "la llave de producción")):
         if rastro in menu:
             raise rr.Rechazo(f"El Menú menciona {que}: no debería. No se escribe nada.")
-    unica = incrustar_menu(copia, menu)
-    inv, menu_recuperado = desincrustar_menu(unica)
-    if inv != copia or menu_recuperado != menu:
-        raise rr.Rechazo("Al incrustar el Menú cambió algo más que lo previsto. No se escribe nada.")
+    fuente_xlsx = origen / REL_XLSX
+    if not fuente_xlsx.exists():
+        raise rr.Rechazo(f"Falta {REL_XLSX} en el sistema.")
+    biblioteca = fuente_xlsx.read_bytes().decode("utf-8")
+    unica = incrustar_xlsx(incrustar_menu(copia, menu), biblioteca)
+    sin_xlsx, biblioteca_recuperada = desincrustar_xlsx(unica)
+    inv, menu_recuperado = desincrustar_menu(sin_xlsx)
+    if inv != copia or menu_recuperado != menu or biblioteca_recuperada != biblioteca:
+        raise rr.Rechazo("Al incrustar el Menú y la librería de Excel cambió algo más que lo previsto. No se escribe nada.")
     archivo.parent.mkdir(parents=True, exist_ok=True)
     archivo.write_text(unica, encoding="utf-8", newline="")
     return archivo

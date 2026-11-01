@@ -290,10 +290,15 @@ def correr_unico(suelto, url=URL, llave=LLAVE, **kw):
     return gp.generar_archivo_unico(suelto, url, llave, **kw)
 
 
-def origen_falso(tmp_path, menu="menu", html=None):
+LIBRERIA_FALSA = "var XLSX = { falsa: true }; var re = /<!--(.*?)-->/g; // comentario HTML dentro de una expresión regular"
+
+
+def origen_falso(tmp_path, menu="menu", html=None, libreria=LIBRERIA_FALSA):
     falso = tmp_path / "falso"
-    (falso / "Contabilidad").mkdir(parents=True)
+    (falso / "Contabilidad" / "librerias").mkdir(parents=True)
     (falso / "Menu").mkdir()
+    if libreria is not None:
+        (falso / gp.REL_XLSX).write_text(libreria, encoding="utf-8")
     (falso / gp.REL_SISTEMA).write_text(html if html is not None else sistema(), encoding="utf-8")
     (falso / gp.REL_MENU).write_text(menu, encoding="utf-8")
     (falso / gp.REL_INDEX).write_text("index", encoding="utf-8")
@@ -314,10 +319,56 @@ def test_archivo_unico_solo_agrega_el_menu_y_lo_demas_es_identico_a_la_copia_nor
     correr(afuera)
     unica = suelto.read_text(encoding="utf-8")
     copia = (afuera / gp.REL_SISTEMA).read_text(encoding="utf-8")
-    sin_menu, menu = gp.desincrustar_menu(unica)
-    assert sin_menu == copia                                             # fuera del Menú, igual que la copia de la carpeta
+    sin_xlsx, libreria = gp.desincrustar_xlsx(unica)
+    sin_menu, menu = gp.desincrustar_menu(sin_xlsx)
+    assert libreria == (RAIZ / gp.REL_XLSX).read_text(encoding="utf-8")  # y la librería de Excel que lleva es la real, byte por byte
+    assert sin_menu == copia                                             # fuera del Menú y la librería, igual que la copia de la carpeta
     assert menu == MENU.read_text(encoding="utf-8")                      # y el Menú que lleva es el real, byte por byte
     assert gp.revertir(sin_menu, sistema()) == sistema()                 # y deshaciendo lo previsto vuelve a ser el sistema real
+
+
+def test_archivo_unico_lleva_la_libreria_de_excel_adentro_y_no_la_pide_a_nadie(suelto):
+    """Suelto no existe la carpeta Contabilidad/librerias/: sin esto el botón «Exportar a Excel» fallaría en la réplica."""
+    correr_unico(suelto)
+    unica = suelto.read_text(encoding="utf-8")
+    assert gp.ETIQUETA_XLSX not in unica and 'src="librerias/' not in unica and "jsdelivr" not in unica
+    assert unica.count('<script id="xlsx-incrustado">') == 1
+    assert "XLSX.utils.json_to_sheet" in unica and (RAIZ / gp.REL_XLSX).read_text(encoding="utf-8") in unica
+
+
+def test_la_copia_en_carpeta_lleva_la_carpeta_de_librerias(afuera):
+    escritos = correr(afuera)
+    nombres = {f.name for f in escritos}
+    assert {"xlsx.full.min.js", "xlsx-LICENCIA.txt", "LEEME.md"} <= nombres
+    assert (afuera / gp.REL_XLSX).read_bytes() == (RAIZ / gp.REL_XLSX).read_bytes()
+    assert 'src="librerias/xlsx.full.min.js"' in (afuera / gp.REL_SISTEMA).read_text(encoding="utf-8")
+
+
+def test_la_libreria_real_se_puede_incrustar_sin_escapar():
+    """La librería de Excel no trae «<script» ni «</script» (no puede cerrar ni abrir el bloque en el que viaja)."""
+    low = (RAIZ / gp.REL_XLSX).read_text(encoding="utf-8").lower()
+    assert "<script" not in low and "</script" not in low
+
+
+def test_archivo_unico_rechaza_una_libreria_con_etiqueta_de_script(tmp_path, suelto):
+    falso = origen_falso(tmp_path, libreria="var a = '</script>';")
+    with pytest.raises(rr.Rechazo, match="etiqueta de script"):
+        correr_unico(suelto, origen=falso)
+    assert not suelto.exists()
+
+
+def test_archivo_unico_rechaza_si_falta_la_libreria(tmp_path, suelto):
+    falso = origen_falso(tmp_path, libreria=None)
+    with pytest.raises(rr.Rechazo, match="Falta Contabilidad.librerias.xlsx"):
+        correr_unico(suelto, origen=falso)
+    assert not suelto.exists()
+
+
+def test_archivo_unico_rechaza_si_el_sistema_cambio_como_carga_la_libreria(tmp_path, suelto):
+    html = sistema().replace(gp.ETIQUETA_XLSX, '<script src="otra/ruta.js"></script>')
+    with pytest.raises(rr.Rechazo, match="librería de Excel"):
+        correr_unico(suelto, origen=origen_falso(tmp_path, html=html))
+    assert not suelto.exists()
 
 
 def test_archivo_unico_sigue_apuntando_solo_al_proyecto_de_pruebas(suelto):

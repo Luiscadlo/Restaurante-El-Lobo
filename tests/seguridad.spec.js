@@ -29,7 +29,8 @@ async function esperarCarga(page) {
   await page.waitForFunction(() => ['loginOverlay', 'loadingOverlay'].every(id => getComputedStyle(document.getElementById(id)).display === 'none'));
 }
 async function esperarEntrada(page) {
-  await page.waitForFunction(() => getComputedStyle(document.getElementById('loginOverlay')).display !== 'none');
+  // Si la página se está recargando justo en este instante el elemento aún no existe: se sigue esperando (antes daba error con el equipo cargado).
+  await page.waitForFunction(() => { const el = document.getElementById('loginOverlay'); return !!el && getComputedStyle(el).display !== 'none'; });
 }
 async function irA(page, id) {
   await page.evaluate(i => showTab(i, document.querySelector(`.tab[onclick*="showTab('${i}'"]`)), id);
