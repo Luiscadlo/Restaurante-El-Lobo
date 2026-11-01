@@ -16,7 +16,7 @@ Leyenda: 🗄 Supabase · 🖥 GitHub / Claude Code · 🌐 el sistema en el nav
 
 La página de la réplica **sale del mismo archivo** del sistema real: la fabrica `herramientas/generar_copia_pruebas.py`. Solo cambia esto, y la herramienta lo verifica (si algo más cambiara, no escribe nada):
 
-1. La dirección (`SB_URL`) y la llave **pública** (`SB_KEY`) del proyecto de pruebas.
+1. La dirección (`SB_URL`) y la llave **pública** (`SB_KEY`) del proyecto de pruebas, y la dirección que la política de seguridad de la página (`Content-Security-Policy`, `connect-src`) deja usar: la página solo puede hablar con el Supabase que lleva puesto, así que en la réplica esa línea también apunta al proyecto de pruebas.
 2. Los nombres con que el navegador recuerda cosas (la sesión de caja, los avisos vistos). Las dos páginas viven en el mismo dominio (`luiscadlo.github.io`) y, sin este cambio, se pisarían la sesión guardada.
 3. El título, los carteles de PRUEBAS y `noindex` (para que Google no la publique).
 4. *(Solo en el «archivo único», ver el paso 7 del montaje)* el **Menú viaja dentro del archivo**: la pestaña Menú carga el generador del menú desde una carpeta hermana (`../Menu/`) y un archivo suelto —p. ej. en Descargas— no la tiene. En ese modo el Menú real se incrusta tal cual (la herramienta comprueba que se recupera idéntico y que no menciona nada de producción) y el botón «Abrir en pestaña aparte» lo abre desde el mismo archivo.

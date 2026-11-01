@@ -145,6 +145,8 @@ def transformar(html, url, llave, ref_prod):
 
     salida = una_vez(salida, f"const SB_URL = '{_constante(html, 'SB_URL')}';", f"const SB_URL = '{url}';", "la línea de SB_URL")
     salida = una_vez(salida, f"const SB_KEY = '{llave_prod}';", f"const SB_KEY = '{llave}';", "la línea de SB_KEY")
+    # La política de seguridad de la página solo deja hablar con el Supabase del sistema: en la copia, con el de pruebas.
+    salida = una_vez(salida, f'content="connect-src {_constante(html, "SB_URL")};', f'content="connect-src {url};', "la política de seguridad (connect-src)")
     for viejo, nuevo in CLAVES_ALMACEN.items():
         salida = una_vez(salida, f"'{viejo}'", f"'{nuevo}'", f"el nombre de almacenamiento «{viejo}»")
     salida = una_vez(salida, TITULO, TITULO_PRUEBAS + "\n" + META_NOINDEX, "el título de la página")
@@ -170,6 +172,7 @@ def revertir(html, original):
         inv = inv.replace(f"'{nuevo}'", f"'{viejo}'")
     inv = re.sub(r"^const SB_URL = '[^']*';", lambda m: f"const SB_URL = '{_constante(original, 'SB_URL')}';", inv, flags=re.M)
     inv = re.sub(r"^const SB_KEY = '[^']*';", lambda m: f"const SB_KEY = '{_constante(original, 'SB_KEY')}';", inv, flags=re.M)
+    inv = re.sub(r'content="connect-src https://[a-z0-9]{20}\.supabase\.co;', lambda m: f'content="connect-src {_constante(original, "SB_URL")};', inv)
     return inv
 
 

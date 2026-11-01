@@ -4,7 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>El Lobo — Sistema Contable</title>
-<meta http-equiv="Content-Security-Policy" content="connect-src *;">
+<!-- Política de seguridad del navegador: la página SOLO puede hablar con el Supabase de El Lobo (aunque alguien lograra meter código,
+     no podría mandar datos a otro sitio), no admite etiquetas <base> ni <object>. Lleva la misma dirección que SB_URL: la copia de pruebas
+     (herramientas/generar_copia_pruebas.py) cambia las dos juntas. -->
+<meta http-equiv="Content-Security-Policy" content="connect-src https://arxyfcquvsmfoxmbifne.supabase.co; base-uri 'none'; object-src 'none';">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
@@ -509,6 +512,12 @@
     <div class="date-badge" id="currentDate"></div>
   </div>
 </header>
+
+<!-- Aviso de carga incompleta (ver actualizarAvisoCarga): se ve mientras alguna tabla no se haya podido leer. -->
+<div id="aviso-carga" role="alert" style="display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:rgba(224,92,92,0.14);border-bottom:2px solid var(--red);color:var(--red);font-size:13px;font-weight:600;text-align:center;">
+  <span id="aviso-carga-texto"></span>
+  <button class="btn btn-outline" id="aviso-carga-reintentar" onclick="loadState()" style="font-size:12px;padding:6px 12px;">🔄 Reintentar</button>
+</div>
 
 <nav>
   <!-- Operativas — acceso libre, para el día a día en el mostrador -->
@@ -2450,7 +2459,7 @@ const FIADO_ROJO_DIAS     = 25;
 // hora local). Se calcula con las partes de la fecha en UTC, así el cambio de hora o
 // la zona horaria no mueven el resultado. Devuelve null si alguna fecha está vacía,
 // mal escrita o no existe (p. ej. 2026-02-31). Fecha futura → número negativo.
-function antiguedadDias(fecha, hoy = today()) {
+function antiguedadDias(fecha, hoy = diaNegocio()) {
   const partes = txt => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof txt === 'string' ? txt : '');
     if (!m) return null;
@@ -2475,10 +2484,10 @@ function clasePorAntiguedad(dias) {
 
 // Un fiado de un MES ANTERIOR al actual rompe la regla "se paga dentro del mes":
 // va en rojo sin importar cuántos días lleve (p. ej. del 30-sep visto el 1-oct).
-function esDeMesAnterior(fecha, hoy = today()) {
+function esDeMesAnterior(fecha, hoy = diaNegocio()) {
   return antiguedadDias(fecha, hoy) !== null && fecha.slice(0, 7) < hoy.slice(0, 7);
 }
-function claseFiado(fecha, hoy = today()) {
+function claseFiado(fecha, hoy = diaNegocio()) {
   const dias = antiguedadDias(fecha, hoy);
   if (dias === null) return null;
   return esDeMesAnterior(fecha, hoy) ? 'rojo' : clasePorAntiguedad(dias);
@@ -2487,7 +2496,7 @@ function claseFiado(fecha, hoy = today()) {
 const BADGE_ANTIGUEDAD = { reciente: 'badge-green', amarillo: 'badge-accent', naranja: 'badge-orange', rojo: 'badge-red' };
 
 // Chip de un fiado: "⏱ hace 12 días" (+ "· mes anterior" si cruzó de mes).
-function chipFiadoHTML(fecha, hoy = today()) {
+function chipFiadoHTML(fecha, hoy = diaNegocio()) {
   const clase = claseFiado(fecha, hoy);
   if (!clase) return '';
   const dias = antiguedadDias(fecha, hoy);
@@ -2498,11 +2507,14 @@ function chipFiadoHTML(fecha, hoy = today()) {
 
 // Minutos que lleva abierto un pedido de HOY: de su hora (HH:MM) a la hora actual.
 // null si alguna hora no es válida; nunca negativo.
-function minutosAbierto(hora, ahora = nowTime()) {
+// cruzaMedianoche: el pedido es del día de negocio anterior al calendario (p. ej. 23:50 visto a las 00:30): se suman las 24 h.
+function minutosAbierto(hora, ahora = nowTime(), cruzaMedianoche = false) {
   const m1 = /^(\d{1,2}):(\d{2})$/.exec(typeof hora === 'string' ? hora : '');
   const m2 = /^(\d{1,2}):(\d{2})$/.exec(typeof ahora === 'string' ? ahora : '');
   if (!m1 || !m2) return null;
-  return Math.max((+m2[1] * 60 + +m2[2]) - (+m1[1] * 60 + +m1[2]), 0);
+  let dif = (+m2[1] * 60 + +m2[2]) - (+m1[1] * 60 + +m1[2]);
+  if (dif < 0 && cruzaMedianoche) dif += 24 * 60;
+  return Math.max(dif, 0);
 }
 function textoTiempoAbierto(min) {
   if (min < 60) return `${min} min`;
@@ -2513,7 +2525,7 @@ function textoTiempoAbierto(min) {
 // Chip de un grupo de Pendientes (mesa, domicilio, sin mesa o gratis).
 //   - de un día anterior → rojo: "de ayer" o "de DD-MM" (debió cerrarse el mismo día)
 //   - de hoy → gris: el tiempo que lleva abierto desde la hora del pedido
-function chipPendienteHTML(orders, hoy = today(), ahora = nowTime()) {
+function chipPendienteHTML(orders, hoy = diaNegocio(), ahora = nowTime()) {
   const validas = orders.map(o => o.fecha).filter(f => antiguedadDias(f, hoy) !== null).sort();
   if (!validas.length) return '';
   const fecha = validas[0];
@@ -2523,16 +2535,17 @@ function chipPendienteHTML(orders, hoy = today(), ahora = nowTime()) {
     return `<span class="badge badge-red" data-antiguedad="vieja" title="Pendiente del ${fecha}: debía cerrarse el mismo día">⚠ ${etiqueta}</span>`;
   }
   if (dias === 0) {
+    const cruza = hoy !== today();           // la cena que sigue abierta después de medianoche
     const horas = orders.filter(o => o.fecha === fecha).map(o => o.hora).filter(h => minutosAbierto(h, ahora) !== null).sort();
     if (!horas.length) return '';
-    return `<span class="badge badge-gray" data-antiguedad="hoy" title="Abierto desde las ${horas[0]}">⏱ ${textoTiempoAbierto(minutosAbierto(horas[0], ahora))}</span>`;
+    return `<span class="badge badge-gray" data-antiguedad="hoy" title="Abierto desde las ${horas[0]}">⏱ ${textoTiempoAbierto(minutosAbierto(horas[0], ahora, cruza))}</span>`;
   }
   return '';
 }
 
 // Fiados pendientes (con o sin cliente) cuyo pedido más viejo tiene `minDias` o más.
 // Cuenta un fiado por visita (grupo_pedido), igual que las tarjetas de la pestaña Fiados.
-function fiadosConAntiguedad(minDias, hoy = today()) {
+function fiadosConAntiguedad(minDias, hoy = diaNegocio()) {
   const porGrupo = {};
   ST.pendientes.filter(p => p.es_fiar === true).forEach(p => {
     const k = p.grupo_pedido || `legacy-${p.id}`;
@@ -3572,11 +3585,19 @@ let ST = {
   configuracion: undefined
 };
 
+// Tablas que no se pudieron leer en la última carga (ver «Carga incompleta» más abajo). Se declara aquí, antes que el badge que la usa.
+let tablasConFallaDeCarga = [];
+
 // ── Badge de sincronización ────────────────────────────────────────────
 function setSyncBadge(estado) {
   const el = document.getElementById('syncBadge');
   if (!el) return;
-  if (estado === 'ok') {
+  // Mientras alguna tabla no se haya podido leer, NUNCA se muestra «Sincronizado» (ni siquiera tras guardar algo).
+  if (estado === 'ok' && tablasConFallaDeCarga.length) estado = 'parcial';
+  if (estado === 'parcial') {
+    el.textContent = '⚠ Carga incompleta';
+    el.style.cssText = 'border-radius:20px;padding:6px 14px;font-size:11px;font-family:\'Syne\',sans-serif;font-weight:700;background:rgba(224,92,92,0.12);color:var(--red);border:1px solid rgba(224,92,92,0.4);';
+  } else if (estado === 'ok') {
     el.textContent = '☁ Sincronizado';
     el.style.cssText = 'border-radius:20px;padding:6px 14px;font-size:11px;font-family:\'Syne\',sans-serif;font-weight:700;background:rgba(76,175,125,0.15);color:var(--green);border:1px solid rgba(76,175,125,0.4);';
   } else if (estado === 'offline') {
@@ -3616,10 +3637,10 @@ function showToast(msg, tipo = 'info', accion = null) {
 function pedirTablasAdmin() {
   return Promise.all([
     sbGetAll('egresos',     'order=created_at.desc'),
-    sbGetAll('movimientos_caja', 'order=created_at.desc').catch(() => []),
-    sbGetAll('ingresos_extra', 'order=fecha.desc').catch(() => []),
-    sbGetAll('pedidos_eliminados', 'order=created_at.desc').catch(() => []),
-    sbGetAll('pedidos_descuentos', 'order=created_at.desc').catch(() => null)
+    leerOpcional('movimientos_caja', 'order=created_at.desc', []),
+    leerOpcional('ingresos_extra', 'order=fecha.desc', []),
+    leerOpcional('pedidos_eliminados', 'order=created_at.desc', []),
+    leerOpcional('pedidos_descuentos', 'order=created_at.desc', null)
   ]);
 }
 function asignarTablasAdmin([egresos, movimientosCaja, ingresosExtra, pedidosEliminados, pedidosDescuentos]) {
@@ -3641,11 +3662,55 @@ function vaciarTablasAdmin() {
 // Al autorizar a un administrador sobre una sesión de caja: trae lo que faltaba y redibuja.
 async function cargarTablasAdmin() {
   asignarTablasAdmin(await pedirTablasAdmin());
+  actualizarAvisoCarga();
   renderAll();
+}
+
+// ── Carga incompleta (revisión final, arreglo C) ──────────────────────
+// Antes, varias tablas se leían con `.catch(() => [])`: si una fallaba (mala señal, error del servidor) la pantalla seguía como
+// si esa tabla estuviera VACÍA —sin abonos, sin cierres, sin precios guardados— y la insignia decía «Sincronizado». Ahora solo se
+// tolera lo que de verdad puede faltar (que la tabla todavía no exista en esa base: se sigue sin ella, como siempre); cualquier otra
+// falla se anota en `tablasConFallaDeCarga` y se AVISA: banner rojo con «Reintentar», insignia «Carga incompleta», y no se deja
+// guardar un cierre con datos incompletos. Lo que sí se pudo leer sigue funcionando.
+const NOMBRES_TABLAS_CARGA = {
+  cierres_dia: 'cierres del día', aperturas_turno: 'aperturas de turno', notas_dia: 'notas del día', clientes_fiado: 'clientes de fiado',
+  abonos_fiado: 'abonos de fiado', config: 'ajustes del sistema', configuracion: 'configuración', movimientos_caja: 'movimientos de caja',
+  ingresos_extra: 'ingresos adicionales', pedidos_eliminados: 'auditoría de eliminados', pedidos_descuentos: 'descuentos'
+};
+// Tablas sin las cuales un CIERRE saldría mal (plata de abonos, ajustes, aperturas, precios...).
+const TABLAS_CRITICAS_CIERRE = ['cierres_dia', 'aperturas_turno', 'clientes_fiado', 'abonos_fiado', 'movimientos_caja', 'ingresos_extra', 'configuracion', 'pedidos_descuentos'];
+// ¿El error dice que la TABLA no existe en esa base? (PostgREST: PGRST205 / Postgres: 42P01). Cualquier otro error es una falla real.
+function tablaNoExiste(e) { return /PGRST205|42P01|does not exist|Could not find the table/i.test((e && e.message) || ''); }
+async function leerOpcional(tabla, qs, siNoExiste) {
+  try {
+    return await sbGetAll(tabla, qs);
+  } catch (e) {
+    if (tablaNoExiste(e)) return siNoExiste;            // aún no se creó en esta base: se sigue sin ella
+    console.error('No se pudo cargar ' + tabla + ':', e);
+    if (!tablasConFallaDeCarga.includes(tabla)) tablasConFallaDeCarga.push(tabla);
+    return siNoExiste;                                  // la pantalla sigue con lo que sí cargó, pero AVISA (ver actualizarAvisoCarga)
+  }
+}
+function actualizarAvisoCarga() {
+  const el = document.getElementById('aviso-carga');
+  if (!el) return;
+  if (!tablasConFallaDeCarga.length) { el.style.display = 'none'; return; }
+  const nombres = tablasConFallaDeCarga.map(t => NOMBRES_TABLAS_CARGA[t] || t).join(', ');
+  document.getElementById('aviso-carga-texto').textContent =
+    `⚠ No se pudo cargar: ${nombres}. Lo que ves puede estar incompleto — no cierres turnos hasta pulsar «Reintentar».`;
+  el.style.display = 'flex';
+}
+// Para los cierres: con datos incompletos los totales saldrían mal. Devuelve true si se puede seguir.
+function cargaCompletaParaCerrar() {
+  const faltan = tablasConFallaDeCarga.filter(t => TABLAS_CRITICAS_CIERRE.includes(t));
+  if (!faltan.length) return true;
+  showToast(`⚠ No se puede guardar el cierre: faltó cargar ${faltan.map(t => NOMBRES_TABLAS_CARGA[t] || t).join(', ')}. Pulsa «Reintentar» arriba.`, 'warning');
+  return false;
 }
 
 async function loadState() {
   setSyncBadge('syncing');
+  tablasConFallaDeCarga = [];
   try {
     const [pedidos, inventario, consumos, gastosDia, mesas, cierresDia, aperturasTurno, notasDia, clientesFiado, abonosFiado, config, configuracion, tablasAdmin] = await Promise.all([
       sbGetAll('pedidos',     'order=created_at.desc'),
@@ -3653,13 +3718,13 @@ async function loadState() {
       sbGetAll('consumos',    'order=fecha.desc'),
       sbGetAll('gastos_dia',  'order=fecha.desc'),
       sbGetAll('mesas',       'order=numero.asc'),
-      sbGetAll('cierres_dia', 'order=fecha.desc').catch(() => []),
-      sbGetAll('aperturas_turno', 'order=created_at.desc').catch(() => []),
-      sbGetAll('notas_dia',   'order=created_at.desc').catch(() => []),
-      sbGetAll('clientes_fiado', 'order=nombre.asc').catch(() => []),
-      sbGetAll('abonos_fiado', 'order=fecha.desc').catch(() => []),
-      sbGetAll('config', 'order=clave.asc').catch(() => null),
-      sbGetAll('configuracion', 'order=id.asc').catch(() => null),
+      leerOpcional('cierres_dia', 'order=fecha.desc', []),
+      leerOpcional('aperturas_turno', 'order=created_at.desc', []),
+      leerOpcional('notas_dia',   'order=created_at.desc', []),
+      leerOpcional('clientes_fiado', 'order=nombre.asc', []),
+      leerOpcional('abonos_fiado', 'order=fecha.desc', []),
+      leerOpcional('config', 'order=clave.asc', null),
+      leerOpcional('configuracion', 'order=id.asc', null),
       esAdminActivo() ? pedirTablasAdmin() : null
     ]);
 
@@ -3678,12 +3743,13 @@ async function loadState() {
     ST.configuracion = configuracion;
     if (tablasAdmin) asignarTablasAdmin(tablasAdmin); else vaciarTablasAdmin();
 
-    setSyncBadge('ok');
+    setSyncBadge('ok');            // pasa a «Carga incompleta» sola si alguna tabla opcional falló (ver setSyncBadge)
   } catch (e) {
     console.error('Error al cargar datos:', e);
     setSyncBadge('offline');
     showToast('⚠ Sin conexión con Supabase', 'warning');
   }
+  actualizarAvisoCarga();
   document.getElementById('loadingOverlay').style.display = 'none';
   renderAll();
 }
@@ -3718,6 +3784,23 @@ const today    = () => toLocalDateStr(new Date());
 // 9:00 a. m. (se le restan 9 horas al reloj del equipo). Así la cena (5 pm–2 am) sigue siendo del día en que empezó,
 // aunque ya pasara la medianoche. today() sigue siendo el día del calendario (lo usan los formularios de «hoy»).
 const diaNegocio = () => toLocalDateStr(new Date(Date.now() - 9 * 60 * 60 * 1000));
+// ── «Hoy» entre las 00:00 y las 8:59 (revisión final, arreglo B) ──────────────────────────────────────────────────────
+// La base ya cuenta el día por el día de negocio (cambia a las 9:00 a. m.), pero varias pantallas seguían usando el día del
+// calendario: pasada la medianoche, la cena que sigue abierta aparecía «de ayer» y los formularios nacían con la fecha equivocada.
+// Regla (por turno, NO un reemplazo ciego de today() por diaNegocio()):
+//   · la CENA que se trabaja ahora pertenece al día de negocio (a las 00:30 es la del día anterior);
+//   · el ALMUERZO que se trabaja ahora pertenece SIEMPRE al día del calendario (abrirlo a las 8:30 a. m. no puede quedar con la
+//     fecha de ayer: pisaría la apertura del almuerzo de ayer).
+const fechaDeTurnoAhora = turno => turno === 'cena' ? diaNegocio() : today();
+// ¿Es «de hoy» para las listas y filtros? Entre las 00:00 y las 8:59 «hoy» son las dos cosas a la vez (la cena que sigue abierta
+// y lo que ya se haya registrado del día nuevo): así nada recién registrado desaparece de la lista. Desde las 9:00 son iguales.
+const esHoy = fecha => fecha === today() || fecha === diaNegocio();
+// Si el campo de fecha trae una de las dos fechas «por defecto» (la del calendario o la de negocio) pasa a la que le toca a ESTE turno;
+// una fecha que alguien escogió a mano (otro día) no se toca.
+function ajustarFechaPorDefecto(idCampo, turno) {
+  const el = document.getElementById(idCampo);
+  if (el && (el.value === today() || el.value === diaNegocio())) el.value = fechaDeTurnoAhora(turno);
+}
 const nowTime  = () => { const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
 
 // ── Formato de miles en campos de dinero (100000 → 100.000 mientras se escribe) ─
@@ -3756,11 +3839,12 @@ function valMilesConSigno(id) {
 function formatearNumerosEnTexto(texto) {
   return String(texto ?? '').replace(/\d{4,}/g, m => parseInt(m, 10).toLocaleString('es-CO'));
 }
-const weekStart= () => { const d=new Date(); d.setDate(d.getDate()-d.getDay()); return toLocalDateStr(d); };
-const monthStart=()=> { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; };
+// Semana y mes se cuentan por día de negocio: a las 00:30 del 1-nov, tras cerrar la cena del 31-oct, «el mes» sigue siendo octubre.
+const weekStart= () => { const d=new Date(Date.now() - 9 * 60 * 60 * 1000); d.setDate(d.getDate()-d.getDay()); return toLocalDateStr(d); };
+const monthStart=()=> { const d=new Date(Date.now() - 9 * 60 * 60 * 1000); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; };
 
 function inP(fecha, p) {
-  if (p === 'hoy')    return fecha === today();
+  if (p === 'hoy')    return esHoy(fecha);
   if (p === 'semana') return fecha >= weekStart();
   if (p === 'mes')    return fecha >= monthStart();
   return true;
@@ -4732,6 +4816,8 @@ window.addEventListener('resize', ajustarAltoHeaderSticky);
   const el = document.getElementById(id);
   if (el) el.value = today();
 });
+// El formulario de pedidos nace con el turno que corresponde a la hora: pasada la medianoche es la cena, y es del día de negocio.
+document.getElementById('ing-fecha').value = fechaDeTurnoAhora(turnoFromHora(nowTime()));
 let ddTurno = 'almuerzo';
 document.getElementById('ing-hora').value = nowTime();
 
@@ -4786,6 +4872,11 @@ let extrasIngresoPendientes = [];
 // Almuerzos en cola: "Agregar almuerzo" NO inserta nada todavía — solo guarda
 // el almuerzo actual aquí y limpia el formulario para el siguiente. Todo se
 // inserta junto (mismo grupo de pedido) cuando se hace clic en Registrar/Pagado.
+// Un solo registro a la vez: un segundo toque (señal lenta, dedo impaciente) mientras el primero sigue en vuelo no registra nada.
+let registrandoPedido = false;
+// Último pedido que se intentó guardar: su grupo (para reutilizarlo en los reintentos), su «firma» (qué pedido era) y si falló sin saberse
+// si llegó a guardarse. null cuando no hay ninguno pendiente de comprobar.
+let intentoPedidoEnCurso = null;
 let almuerzosEnCola = [];
 
 function renderAlmuerzosEnColaLista() {
@@ -4794,7 +4885,7 @@ function renderAlmuerzosEnColaLista() {
   if (!almuerzosEnCola.length) { el.innerHTML = ''; return; }
   el.innerHTML = almuerzosEnCola.map((it, i) => `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:4px;font-size:12px;">
-      <span style="color:var(--text2);">${it.cantidad} × ${LABELS[it.pedido] || it.pedido}${it.detalle ? ' — ' + it.detalle : ''}</span>
+      <span style="color:var(--text2);">${it.cantidad} × ${escaparHtml(LABELS[it.pedido] || it.pedido)}${it.detalle ? ' — ' + escaparHtml(it.detalle) : ''}</span>
       <span style="display:flex;align-items:center;gap:8px;">
         <strong style="color:var(--green);">${fmt(it.monto_almuerzo)}</strong>
         <button type="button" class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="quitarAlmuerzoDeCola(${i})">✕</button>
@@ -4872,7 +4963,7 @@ function renderExtrasIngresoLista() {
   if (!extrasIngresoPendientes.length) { el.innerHTML = ''; return; }
   el.innerHTML = extrasIngresoPendientes.map((ex, i) => `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 10px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:4px;font-size:12px;">
-      <span style="color:var(--text2);">${ex.cantidad} × ${ex.descripcion}</span>
+      <span style="color:var(--text2);">${ex.cantidad} × ${escaparHtml(ex.descripcion)}</span>
       <span style="display:flex;align-items:center;gap:8px;">
         <strong style="color:var(--green);">${fmt(ex.cantidad * ex.valorUnitario)}</strong>
         <button type="button" class="btn btn-danger" style="padding:3px 8px;font-size:10px;" onclick="quitarExtraIngreso(${i})">✕</button>
@@ -5045,7 +5136,7 @@ function turnoAbierto(fecha, turno) {
 function actualizarBotonAbrirTurno() {
   const btn = document.getElementById('btn-abrir-turno-header');
   if (!btn) return;
-  const abiertoHoy = turnoAbierto(today(), turnoManual);
+  const abiertoHoy = turnoAbierto(fechaDeTurnoAhora(turnoManual), turnoManual);
   btn.textContent = abiertoHoy ? '🔒 Turno abierto — editar caja' : '🔓 Abrir turno';
   btn.classList.toggle('abierto', abiertoHoy);
 }
@@ -5084,7 +5175,7 @@ function validarRegistro() {
   // Registrar/Pagado inmediatamente puede ir con lo que ya está en cola,
   // aunque el formulario actual esté vacío (por eso no exige actualValido).
   const hayAlgoParaRegistrar = actualValido || almuerzosEnCola.length > 0 || extrasIngresoPendientes.length > 0;
-  const okRegistrar = !!(hayAlgoParaRegistrar && selectedUbicacion && abierto && clienteOk && descuentoOk);
+  const okRegistrar = !!(hayAlgoParaRegistrar && selectedUbicacion && abierto && clienteOk && descuentoOk) && !registrandoPedido;   // mientras se guarda, apagados
   btn.disabled = !okRegistrar;
   if (btnPagado) btnPagado.disabled = !okRegistrar;
 }
@@ -5197,6 +5288,7 @@ let turnoManual = turnoFromHora(nowTime());
 
 function seleccionarTurnoManual(t) {
   turnoManual = t;
+  ajustarFechaPorDefecto('ing-fecha', t);
   pintarTurnoManual();
   rebuildPedidoSelect();
   actualizarMontoDisplay();
@@ -5451,7 +5543,7 @@ function doAC(tipo) {
   if (!filtered.length) { list.style.display = 'none'; return; }
   acIdx[tipo] = -1;
   list.innerHTML = filtered.map(p =>
-    `<div class="autocomplete-item" data-v="${escaparHtml(p.n)}" onmousedown="pickAC(event,'${tipo}','${p.n.replace(/'/g,"\\'")}')"><span>${escaparHtml(p.n)}</span><span class="item-code">${escaparHtml(p.c)}</span></div>`
+    `<div class="autocomplete-item" data-v="${escaparHtml(p.n)}" onmousedown="pickAC(event,'${tipo}',${jsAttr(p.n)})"><span>${escaparHtml(p.n)}</span><span class="item-code">${escaparHtml(p.c)}</span></div>`
   ).join('');
   list.style.display = 'block';
 }
@@ -5634,7 +5726,19 @@ function hlACCliente(items) {
 // el que está armado en el formulario ahora mismo (si hay uno válido) + los
 // extras en cola — todos con el mismo grupo_pedido, para poder identificarlos
 // y moverlos/pagarlos juntos aunque compartan mesa con otro pedido distinto.
+// Filas que YA están guardadas en la base con ese grupo (se filtra también aquí: no se confía en que el filtro del servidor se aplique).
+async function filasGuardadasDelGrupo(grupo) {
+  const filas = await sbGet('pedidos', `grupo_pedido=eq.${encodeURIComponent(grupo)}&order=id.asc`);
+  return filas.filter(f => f.grupo_pedido === grupo);
+}
 async function agregarIngreso(estadoFinal = 'pendiente') {
+  if (registrandoPedido) return;
+  registrandoPedido = true;
+  validarRegistro();                                   // apaga los botones de registrar mientras se guarda
+  try { await agregarIngresoSinGuardia(estadoFinal); }
+  finally { registrandoPedido = false; validarRegistro(); }
+}
+async function agregarIngresoSinGuardia(estadoFinal = 'pendiente') {
   if (!selectedUbicacion) { showToast('⚠ Selecciona una mesa, domicilio, fiado o sin mesa', 'warning'); return; }
   const fecha  = document.getElementById('ing-fecha').value;
   const hora   = document.getElementById('ing-hora').value;
@@ -5696,7 +5800,15 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
   const mesa_numero = selectedUbicacion.startsWith('mesa_')
     ? parseInt(selectedUbicacion.split('_')[1])
     : null;
-  const grupoPedido = `g_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  // Mismo grupo en los reintentos del MISMO pedido (misma firma): así se puede comprobar si un intento que falló sin respuesta
+  // llegó a guardarse (ver «Guardado ATÓMICO» más abajo). Un pedido distinto estrena grupo.
+  const firmaPedido = JSON.stringify([estadoFinal, selectedUbicacion, fecha, turno, metodo, totalPedidoCompleto, clienteFiadoSeleccionadoId || null,
+    items.map(it => [it.pedido, it.sopa, it.arroz, it.proteina, it.acomp, it.detalle, it.cantidad, it.monto_almuerzo, it.para_llevar]),
+    extrasIngresoPendientes.map(ex => [ex.descripcion, ex.cantidad, ex.valorUnitario])]);
+  if (!intentoPedidoEnCurso || intentoPedidoEnCurso.firma !== firmaPedido) {
+    intentoPedidoEnCurso = { firma: firmaPedido, grupoPedido: `g_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, fallido: false };
+  }
+  const grupoPedido = intentoPedidoEnCurso.grupoPedido;
 
   // «Fiar» a nombre de un cliente con saldo a favor que alcanza para el pedido: se pregunta ANTES de guardar (ver
   // preguntarSaldoAlRegistrar). Si usa el saldo, el pedido se guarda como fiado de ese cliente y enseguida se salda con su
@@ -5712,7 +5824,13 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
 
   const mesaYaTienePendientes = mesa_numero !== null && ST.pendientes.some(p => p.mesa === mesa_numero);
   try {
-    const pedidosInsertados = [];
+    // ── Guardado ATÓMICO (revisión final, arreglo D) ──
+    // Antes cada ítem se guardaba en su propia petición: si la señal se cortaba a la mitad, los ítems ya guardados quedaban en la
+    // base y el formulario conservaba TODA la cola, así que al reintentar se guardaban otra vez (pedido duplicado). Ahora todas las
+    // filas del pedido (almuerzos y después extras) se arman primero y viajan JUNTAS en UNA sola petición: o se guarda el pedido
+    // completo o no se guarda nada. Además, si el intento anterior de este mismo pedido falló sin saber si llegó a guardarse
+    // (típico: la respuesta se perdió por mala señal), antes de insertar se busca el grupo en la base y, si ya está, se adopta.
+    const filas = [];
     // El valor del domicilio (envío) se cobra una sola vez, en el primer ítem
     // que se inserte del pedido completo — sea un almuerzo o, si el pedido es
     // solo de extras (ej. alguien que solo lleva una botella), el primer extra.
@@ -5735,7 +5853,7 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
       const esPrimeroDividido = divididoPendienteDeAsignar;
       if (divididoPendienteDeAsignar) divididoPendienteDeAsignar = false;
 
-      const pedidoData = {
+      filas.push({
         fecha, hora, turno, pedido: item.pedido,
         sopa: item.sopa, arroz: item.arroz, proteina: item.proteina, acomp: item.acomp,
         detalle: item.detalle, metodo, cantidad: item.cantidad,
@@ -5753,26 +5871,75 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
         // en Supabase ya es 0) — así los pedidos sin descuento, la gran
         // mayoría, nunca dependen de que la migración ya esté corrida.
         ...(descuentoFila > 0 ? { descuento: descuentoFila, motivo_descuento: motivoDescuentoPedido } : {})
-      };
+      });
+    }
 
-      let newPedido;
+    // Productos extra en cola (si hay), con el mismo grupo_pedido
+    for (let j = 0; j < extrasIngresoPendientes.length; j++) {
+      const ex = extrasIngresoPendientes[j];
+      // Si el pedido es solo de extras (sin almuerzo), el valor del domicilio
+      // se cobra aquí, en el primero — la bandera ya se apagó arriba si hubo
+      // ítems. Los extras (bebidas, botella de agua, etc.) NUNCA llevan
+      // empaque desechable, sin importar el turno.
+      const montoDomicilioExtra = domicilioPendienteDeCobrar
+        ? valMiles('ing-domicilio-valor')
+        : 0;
+      if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
+      const esPrimeroDividido = divididoPendienteDeAsignar;
+      if (divididoPendienteDeAsignar) divididoPendienteDeAsignar = false;
+      const descuentoFila = descuentoPorFila[items.length + j] || 0;
+      const valorExtra = ex.valorUnitario * ex.cantidad;
+      const valorExtraNeto = valorExtra - descuentoFila;
+      filas.push({
+        fecha, hora, turno, pedido: 'extra',
+        sopa: '', arroz: '', proteina: '', acomp: '',
+        detalle: ex.descripcion, metodo, cantidad: ex.cantidad,
+        monto_unit: ex.valorUnitario, monto_almuerzo: valorExtraNeto,
+        monto_domicilio: montoDomicilioExtra, monto_total: valorExtraNeto + montoDomicilioExtra,
+        monto_efectivo: esPrimeroDividido ? dividido.efectivo : 0,
+        monto_transferencia: esPrimeroDividido ? dividido.transferencia : 0,
+        estado: estadoFinal, es_domicilio: selectedUbicacion === 'domicilio',
+        mesa: mesa_numero, para_llevar: false,
+        es_fiar: selectedUbicacion === 'fiar', es_sin_mesa: selectedUbicacion === 'sinmesa',
+        es_gratis: esGratis,
+        cliente_fiado_id: selectedUbicacion === 'fiar' ? clienteFiadoSeleccionadoId : null,
+        direccion: '', grupo_pedido: grupoPedido,
+        ...(descuentoFila > 0 ? { descuento: descuentoFila, motivo_descuento: motivoDescuentoPedido } : {})
+      });
+    }
+
+    // Una petición con VARIAS filas exige que todas traigan las mismas columnas (a las que no se manden, el servidor les pondría
+    // NULL, y «descuento» es NOT NULL). Si alguna fila lleva descuento, todas llevan las dos columnas (0 / null en las demás).
+    if (filas.some(f => 'descuento' in f)) {
+      for (const f of filas) if (!('descuento' in f)) { f.descuento = 0; f.motivo_descuento = null; }
+    }
+    const hayDescuentoEnFilas = filas.some(f => f.descuento > 0);
+
+    // ¿El intento anterior de ESTE mismo pedido falló sin saberse si llegó a guardarse? Entonces se mira primero qué hay en la base.
+    let pedidosInsertados = [];
+    let yaEstabaGuardado = false;
+    if (intentoPedidoEnCurso.fallido) {
+      pedidosInsertados = await filasGuardadasDelGrupo(grupoPedido);
+      yaEstabaGuardado = pedidosInsertados.length > 0;
+    }
+
+    if (!yaEstabaGuardado) {
       try {
-        [newPedido] = await sbInsert('pedidos', pedidoData);
+        pedidosInsertados = await sbInsert('pedidos', filas);
       } catch (e) {
         const msg = e.message || '';
-        if (descuentoFila > 0 && (msg.includes('descuento') || msg.includes('motivo_descuento'))) {
+        if (hayDescuentoEnFilas && (msg.includes('descuento') || msg.includes('motivo_descuento'))) {
           // PROHIBIDO reintentar sin esta columna: perderla significaría
           // cobrar de más sin que quede registro de por qué. Se aborta del
           // todo en vez de guardar a medias.
           throw new Error('Falta correr el script SQL de descuentos en Supabase (migracion_supabase_descuentos.sql) — el pedido con descuento NO se guardó.');
         }
         if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia') || msg.includes('cliente_fiado_id')) {
-          // Columnas opcionales aún no existen en Supabase — reintenta sin ellas
-          const { es_fiar: esFiarVal, direccion: dirVal, es_sin_mesa: esSinMesaVal, es_gratis: esGratisVal, grupo_pedido: grupoVal, monto_efectivo: mEf, monto_transferencia: mTr, cliente_fiado_id: clienteVal, ...pedidoBase } = pedidoData;
-          [newPedido] = await sbInsert('pedidos', pedidoBase);
-          newPedido.es_fiar = esFiarVal; newPedido.direccion = dirVal;
-          newPedido.es_sin_mesa = esSinMesaVal; newPedido.es_gratis = esGratisVal; newPedido.grupo_pedido = grupoVal;
-          newPedido.cliente_fiado_id = clienteVal;
+          // Columnas opcionales aún no existen en Supabase — reintenta TODO el pedido (otra vez en una sola petición) sin ellas
+          const quitadas = filas.map(f => ({ es_fiar: f.es_fiar, direccion: f.direccion, es_sin_mesa: f.es_sin_mesa, es_gratis: f.es_gratis, grupo_pedido: f.grupo_pedido, cliente_fiado_id: f.cliente_fiado_id }));
+          const filasBase = filas.map(f => { const { es_fiar, direccion, es_sin_mesa, es_gratis, grupo_pedido, monto_efectivo, monto_transferencia, cliente_fiado_id, ...base } = f; return base; });
+          pedidosInsertados = await sbInsert('pedidos', filasBase);
+          pedidosInsertados.forEach((p, k) => Object.assign(p, quitadas[k]));
           if (dividido && (msg.includes('monto_efectivo') || msg.includes('monto_transferencia'))) {
             showToast('⚠ El reparto del pago dividido no se guardó — falta agregar esas columnas en Supabase (ver script SQL)', 'warning');
           }
@@ -5784,75 +5951,25 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
           }
         } else { throw e; }
       }
-
-      pedidosInsertados.push(newPedido);
-      if (estadoFinal === 'pagado') ST.ingresos.unshift(newPedido);
-      else ST.pendientes.unshift(newPedido);
     }
 
-    // Marcar mesa como ocupada solo si es la primera orden pendiente
+    // Ya está guardado (o se comprobó que ya lo estaba): este pedido terminó, el próximo intento será de un pedido nuevo.
+    intentoPedidoEnCurso = null;
+    for (const fila of pedidosInsertados) {
+      const lista = fila.estado === 'pagado' ? ST.ingresos : ST.pendientes;
+      if (!lista.some(x => x.id === fila.id)) lista.unshift(fila);
+    }
+
+    // Marcar mesa como ocupada solo si es la primera orden pendiente. El pedido YA quedó guardado: si esto falla no se
+    // reintenta todo (duplicaría el pedido), solo se avisa.
     if (estadoFinal !== 'pagado' && mesa_numero && !mesaYaTienePendientes) {
-      await sbPatch('mesas', `numero=eq.${mesa_numero}`, { estado: 'ocupada' });
-      const mesa = ST.mesas.find(m => m.numero === mesa_numero);
-      if (mesa) mesa.estado = 'ocupada';
-    }
-
-    // Insertar los productos extra en cola (si hay), con el mismo grupo_pedido
-    if (extrasIngresoPendientes.length) {
-      for (let j = 0; j < extrasIngresoPendientes.length; j++) {
-        const ex = extrasIngresoPendientes[j];
-        // Si el pedido es solo de extras (sin almuerzo), el valor del domicilio
-        // se cobra aquí, en el primero — la bandera ya se apagó arriba si hubo
-        // ítems. Los extras (bebidas, botella de agua, etc.) NUNCA llevan
-        // empaque desechable, sin importar el turno.
-        const montoDomicilioExtra = domicilioPendienteDeCobrar
-          ? valMiles('ing-domicilio-valor')
-          : 0;
-        if (domicilioPendienteDeCobrar) domicilioPendienteDeCobrar = false;
-        const esPrimeroDividido = divididoPendienteDeAsignar;
-        if (divididoPendienteDeAsignar) divididoPendienteDeAsignar = false;
-        const descuentoFila = descuentoPorFila[items.length + j] || 0;
-        const valorExtra = ex.valorUnitario * ex.cantidad;
-        const valorExtraNeto = valorExtra - descuentoFila;
-        const extraData = {
-          fecha, hora, turno, pedido: 'extra',
-          sopa: '', arroz: '', proteina: '', acomp: '',
-          detalle: ex.descripcion, metodo, cantidad: ex.cantidad,
-          monto_unit: ex.valorUnitario, monto_almuerzo: valorExtraNeto,
-          monto_domicilio: montoDomicilioExtra, monto_total: valorExtraNeto + montoDomicilioExtra,
-          monto_efectivo: esPrimeroDividido ? dividido.efectivo : 0,
-          monto_transferencia: esPrimeroDividido ? dividido.transferencia : 0,
-          estado: estadoFinal, es_domicilio: selectedUbicacion === 'domicilio',
-          mesa: mesa_numero, para_llevar: false,
-          es_fiar: selectedUbicacion === 'fiar', es_sin_mesa: selectedUbicacion === 'sinmesa',
-          es_gratis: esGratis,
-          cliente_fiado_id: selectedUbicacion === 'fiar' ? clienteFiadoSeleccionadoId : null,
-          direccion: '', grupo_pedido: grupoPedido,
-          ...(descuentoFila > 0 ? { descuento: descuentoFila, motivo_descuento: motivoDescuentoPedido } : {})
-        };
-        try {
-          let newExtra;
-          try {
-            [newExtra] = await sbInsert('pedidos', extraData);
-          } catch (e) {
-            const msg = e.message || '';
-            if (descuentoFila > 0 && (msg.includes('descuento') || msg.includes('motivo_descuento'))) {
-              throw new Error('Falta correr el script SQL de descuentos en Supabase (migracion_supabase_descuentos.sql) — el extra con descuento NO se guardó.');
-            }
-            if (msg.includes('es_fiar') || msg.includes('direccion') || msg.includes('es_sin_mesa') || msg.includes('es_gratis') || msg.includes('grupo_pedido') || msg.includes('monto_efectivo') || msg.includes('monto_transferencia') || msg.includes('cliente_fiado_id')) {
-              const { es_fiar: efV, direccion: dV, es_sin_mesa: esmV, es_gratis: egV, grupo_pedido: gV, monto_efectivo: mEf, monto_transferencia: mTr, cliente_fiado_id: clV, ...extraBase } = extraData;
-              [newExtra] = await sbInsert('pedidos', extraBase);
-              newExtra.es_fiar = efV; newExtra.direccion = dV; newExtra.es_sin_mesa = esmV; newExtra.es_gratis = egV; newExtra.grupo_pedido = gV;
-              newExtra.cliente_fiado_id = clV;
-            } else { throw e; }
-          }
-          pedidosInsertados.push(newExtra);
-          if (estadoFinal === 'pagado') ST.ingresos.unshift(newExtra);
-          else ST.pendientes.unshift(newExtra);
-        } catch (e) {
-          console.error(e);
-          showToast(`⚠ No se pudo agregar el extra "${ex.descripcion}"`, 'warning');
-        }
+      try {
+        await sbPatch('mesas', `numero=eq.${mesa_numero}`, { estado: 'ocupada' });
+        const mesa = ST.mesas.find(m => m.numero === mesa_numero);
+        if (mesa) mesa.estado = 'ocupada';
+      } catch (e) {
+        console.error(e);
+        showToast(`⚠ El pedido se guardó, pero no se pudo marcar la mesa ${mesa_numero} como ocupada`, 'warning');
       }
     }
 
@@ -5865,9 +5982,10 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
 
     setSyncBadge('ok');
     showToast(
-      estadoFinal === 'pagado'
+      (estadoFinal === 'pagado'
         ? `✅ Venta registrada (${pedidosInsertados.length} ítem${pedidosInsertados.length>1?'s':''}) — ${ubicLabel}`
-        : `✅ Pedido registrado (${pedidosInsertados.length} ítem${pedidosInsertados.length>1?'s':''}) — ${ubicLabel}`,
+        : `✅ Pedido registrado (${pedidosInsertados.length} ítem${pedidosInsertados.length>1?'s':''}) — ${ubicLabel}`)
+        + (yaEstabaGuardado ? ' · ya estaba guardado del intento anterior: no se duplicó' : ''),
       'ok',
       estadoFinal === 'pagado' ? { label: '↩ Deshacer', onClick: () => revertirPago(idsInsertados) } : null
     );
@@ -5910,7 +6028,8 @@ async function agregarIngreso(estadoFinal = 'pendiente') {
     else if (avisoSaldoAlPagar) showToast(avisoSaldoAlPagar, 'info');                                                         // pagado normal: solo avisa si no alcanzaba
   } catch (err) {
     console.error(err);
-    showToast('⚠ Error al registrar pedido: ' + err.message, 'warning');
+    if (intentoPedidoEnCurso) intentoPedidoEnCurso.fallido = true;   // no se sabe si llegó a guardarse: el próximo intento lo comprueba antes de insertar
+    showToast('⚠ No se pudo registrar el pedido: ' + err.message + ' — no se guardó a medias. Vuelve a pulsar «Registrar»: antes de guardar, el sistema comprueba que no se haya guardado ya.', 'warning');
   }
 }
 
@@ -5966,8 +6085,8 @@ function verDetalleGrupoIngreso(ids) {
   }
   html += orders.map(o => `
     <div class="modal-field">
-      <div class="modal-field-label">${LABELS[o.pedido]||o.pedido}${(o.cantidad||1) > 1 ? ' × ' + o.cantidad : ''}</div>
-      <div class="modal-field-value">${o.detalle ? o.detalle + ' — ' : ''}${fmt(o.monto_total||0)}</div>
+      <div class="modal-field-label">${escaparHtml(LABELS[o.pedido]||o.pedido)}${(o.cantidad||1) > 1 ? ' × ' + o.cantidad : ''}</div>
+      <div class="modal-field-value">${o.detalle ? escaparHtml(o.detalle) + ' — ' : ''}${fmt(o.monto_total||0)}</div>
     </div>`).join('');
   if (descuentoTotal > 0) {
     html += `<div class="modal-field">
@@ -5975,7 +6094,7 @@ function verDetalleGrupoIngreso(ids) {
         <div class="modal-field-value">${fmt(valorListaTotal)}</div>
       </div>
       <div class="modal-field">
-        <div class="modal-field-label">Descuento${primero.motivo_descuento ? ' (' + primero.motivo_descuento + ')' : ''}</div>
+        <div class="modal-field-label">Descuento${primero.motivo_descuento ? ' (' + escaparHtml(primero.motivo_descuento) + ')' : ''}</div>
         <div class="modal-field-value" style="color:var(--red);">−${fmt(descuentoTotal)}</div>
       </div>`;
   }
@@ -6000,28 +6119,28 @@ function mostrarDetallePedidoModal(i) {
   const esCR = !!crItem || i.turno === 'cena';
 
   let html = `<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:var(--accent);margin-bottom:20px;">
-    ${i.turno === 'cena' ? '🌙' : '☀️'} ${LABELS[i.pedido] || i.pedido}
+    ${i.turno === 'cena' ? '🌙' : '☀️'} ${escaparHtml(LABELS[i.pedido] || i.pedido)}
   </div>`;
 
   const campos = [
     ['Fecha',       i.fecha],
-    ['Hora',        i.hora || '—'],
+    ['Hora',        escaparHtml(i.hora || '—')],
     ['Turno',       i.turno === 'cena' ? 'Comida Rápida' : 'Almuerzo'],
     ['Ubicación',   i.es_gratis ? '🎁 Gratis' : i.es_fiar ? '📒 Fiado' : i.es_sin_mesa ? '🧍 Sin mesa' : i.es_domicilio ? '🛵 Domicilio' : i.mesa ? `Mesa ${i.mesa}` : '—'],
-    i.es_domicilio && i.direccion ? ['Dirección', '📍 ' + i.direccion] : null,
+    i.es_domicilio && i.direccion ? ['Dirección', '📍 ' + escaparHtml(i.direccion)] : null,
     ['Estado de pago', i.estado === 'pagado' ? '✅ Pagado' : '⏳ Pendiente de pago'],
     ['Método',      metodoLabel(i)],
     ['Cantidad',    i.cantidad || 1],
-    !esCR && i.sopa     ? ['Sopa',           i.sopa]     : null,
-    !esCR && i.arroz    ? ['Arroz',          i.arroz]    : null,
-    !esCR && i.proteina ? ['Proteína',       i.proteina] : null,
-    !esCR && i.acomp    ? ['Acompañamiento', i.acomp]    : null,
-    i.detalle           ? ['Detalle',        i.detalle]  : null,
+    !esCR && i.sopa     ? ['Sopa',           escaparHtml(i.sopa)]     : null,
+    !esCR && i.arroz    ? ['Arroz',          escaparHtml(i.arroz)]    : null,
+    !esCR && i.proteina ? ['Proteína',       escaparHtml(i.proteina)] : null,
+    !esCR && i.acomp    ? ['Acompañamiento', escaparHtml(i.acomp)]    : null,
+    i.detalle           ? ['Detalle',        escaparHtml(i.detalle)]  : null,
     i.para_llevar       ? ['Para llevar',    `✓ Sí (+${fmt(recargoParaLlevar(i.created_at))})`] : null,
     i.monto_almuerzo && i.es_domicilio ? ['Valor comida',    fmt(i.monto_almuerzo)] : null,
     i.monto_domicilio && i.es_domicilio ? ['Valor domicilio (incluye envío y/o empaque de este plato)', fmt(i.monto_domicilio)] : null,
     (i.descuento||0) > 0 ? ['Precio de lista', fmt(valorListaFila(i))] : null,
-    (i.descuento||0) > 0 ? [`Descuento${i.motivo_descuento ? ' (' + i.motivo_descuento + ')' : ''}`, `<span style="color:var(--red);">−${fmt(i.descuento)}</span>`] : null,
+    (i.descuento||0) > 0 ? [`Descuento${i.motivo_descuento ? ' (' + escaparHtml(i.motivo_descuento) + ')' : ''}`, `<span style="color:var(--red);">−${fmt(i.descuento)}</span>`] : null,
     [(i.descuento||0) > 0 ? 'Total cobrado' : 'Total', `<span style="color:var(--green);font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">${fmt(i.monto_total || 0)}</span>`],
   ].filter(Boolean);
 
@@ -6528,7 +6647,7 @@ function renderModalDescuento() {
   let html = avisoExcluidas;
   html += elegibles.map(p => `
     <div class="modal-field">
-      <div class="modal-field-label">${LABELS[p.pedido] || p.pedido}${(p.cantidad||1)>1 ? ' × ' + p.cantidad : ''}${p.detalle ? ' — ' + p.detalle : ''}</div>
+      <div class="modal-field-label">${escaparHtml(LABELS[p.pedido] || p.pedido)}${(p.cantidad||1)>1 ? ' × ' + p.cantidad : ''}${p.detalle ? ' — ' + escaparHtml(p.detalle) : ''}</div>
       <div class="modal-field-value">${fmt(valorListaFila(p))}${p.descuento > 0 ? ` <span style="color:var(--text3);font-size:11px;">(hoy: −${fmt(p.descuento)})</span>` : ''}</div>
     </div>`).join('');
   html += `<div class="modal-field" style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">
@@ -6543,7 +6662,7 @@ function renderModalDescuento() {
     </div>
     <div class="form-group mb">
       <label>Motivo</label>
-      <input type="text" id="descuento-modal-motivo" list="descuento-motivos" value="${(primero.motivo_descuento||'').replace(/"/g,'&quot;')}" placeholder="Obligatorio si hay descuento">
+      <input type="text" id="descuento-modal-motivo" list="descuento-motivos" value="${escaparHtml(primero.motivo_descuento||'')}" placeholder="Obligatorio si hay descuento">
     </div>
     <div class="monto-display" style="margin-bottom:14px;">
       <div class="monto-val" id="descuento-modal-cobra">${fmt(valorListaTotal - descuentoActual)}</div>
@@ -6596,7 +6715,7 @@ function renderModalDescuento() {
         ${gastosCandidatos.map(g => `
           <div class="para-llevar-row" style="margin-bottom:4px;">
             <input type="checkbox" class="descuento-modal-gasto-chk" data-tipo="${g.tipo}" data-id="${g.id}" data-monto="${g.monto}">
-            <label style="cursor:pointer;font-size:12px;">${(g.nombre||'(sin nombre)').replace(/</g,'&lt;')} — ${fmt(g.monto)}</label>
+            <label style="cursor:pointer;font-size:12px;">${escaparHtml(g.nombre||'(sin nombre)')} — ${fmt(g.monto)}</label>
           </div>`).join('')}
         <div style="font-size:11px;color:var(--red);margin-top:4px;">⚠ Si no borras ese gasto, el descuento quedará descontado dos veces.</div>
       </div>`;
@@ -6943,10 +7062,10 @@ function renderPendientes() {
           <thead><tr><th>Hora</th><th>Tipo</th><th>Detalle</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
           <tbody>${orders.map(p => `
             <tr>
-              <td>${p.hora||'—'}</td>
-              <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
+              <td>${escaparHtml(p.hora||'—')}</td>
+              <td style="color:var(--text);font-size:12px;">${escaparHtml(LABELS[p.pedido]||p.pedido)}</td>
               <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                ${p.detalle||'—'}${p.para_llevar ? ' <span style="color:var(--accent);">· Para llevar</span>' : ''}
+                ${escaparHtml(p.detalle||'—')}${p.para_llevar ? ' <span style="color:var(--accent);">· Para llevar</span>' : ''}
               </td>
               <td>${p.cantidad||1}</td>
               <td class="amount-pos">${fmt(p.monto_total||0)}</td>
@@ -6970,8 +7089,8 @@ function renderPendientes() {
         ${htmlPagoDividido(key, total, divididoPre)}
         <button class="btn btn-primary" onclick="marcarGrupoMesaPagado([${idsGrupo.join(',')}],${mn},'${key}')">✅ Marcar todo como pagado</button>
         ${botonDescuentoHTML(idsGrupo)}
-        <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${grupoPedidoVal}')">+ Agregar producto</button>
-        <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${grupoPedidoVal}')">🍽 Agregar comida</button>
+        <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],${jsAttr(grupoPedidoVal)})">+ Agregar producto</button>
+        <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],${jsAttr(grupoPedidoVal)})">🍽 Agregar comida</button>
         <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Mueve este pedido completo a otra mesa, sin mesa o a fiado">🔄 Cambiar de mesa</button>
         <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],${mn})" title="Cancela TODO este pedido (todos sus platos)">✕</button>
         <span style="font-size:11px;color:var(--text3);">Total: ${fmt(total)}</span>
@@ -6991,7 +7110,7 @@ function renderPendientes() {
       <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--blue);">🛵 Domicilios pendientes</span></div>
       ${gruposDomOrdenados.map((grupo, idx) => {
         const orders = grupo.orders;
-        const key = `dom-${orders[0].grupo_pedido || orders[0].id}`;
+        const key = `dom-${idSeguro(orders[0].grupo_pedido || orders[0].id)}`;
         const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
         const montoAlmuerzoTotal = orders.reduce((a,b) => a + (b.monto_almuerzo||0), 0);
         const montoDomicilioTotal = orders.reduce((a,b) => a + (b.monto_domicilio||0), 0);
@@ -7003,9 +7122,9 @@ function renderPendientes() {
       <div class="pending-group">
         <div class="pending-group-hdr">
           <div>
-            <div class="pending-group-title">Domicilio — ${primero.hora||'—'} ${chipPendienteHTML(orders)}</div>
+            <div class="pending-group-title">Domicilio — ${escaparHtml(primero.hora||'—')} ${chipPendienteHTML(orders)}</div>
             <div class="pending-group-sub">${orders.length} pedido(s)</div>
-            ${primero.direccion ? `<div style="font-size:11px;color:var(--blue);margin-top:2px;">📍 ${primero.direccion}</div>` : ''}
+            ${primero.direccion ? `<div style="font-size:11px;color:var(--blue);margin-top:2px;">📍 ${escaparHtml(primero.direccion)}</div>` : ''}
           </div>
           <div class="pending-group-total">${fmt(total)}</div>
         </div>
@@ -7014,9 +7133,9 @@ function renderPendientes() {
             <thead><tr><th>Hora</th><th>Tipo</th><th>Detalle</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
             <tbody>${orders.map(p => `
               <tr>
-                <td>${p.hora||'—'}</td>
-                <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
-                <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.detalle||'—'}</td>
+                <td>${escaparHtml(p.hora||'—')}</td>
+                <td style="color:var(--text);font-size:12px;">${escaparHtml(LABELS[p.pedido]||p.pedido)}</td>
+                <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escaparHtml(p.detalle||'—')}</td>
                 <td>${p.cantidad||1}</td>
                 <td class="amount-pos">${fmt(p.monto_total||0)}</td>
                 <td style="display:flex;gap:4px;white-space:nowrap;">
@@ -7039,8 +7158,8 @@ function renderPendientes() {
           <button class="btn btn-primary" onclick="marcarGrupoDomicilioPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
           <span class="pending-dom-detail">🍽 ${fmt(montoAlmuerzoTotal)} + 🛵 ${fmt(montoDomicilioTotal)}</span>
           ${botonDescuentoHTML(idsGrupo)}
-          <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
-          <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
+          <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],${jsAttr(primero.grupo_pedido||'')})">+ Agregar producto</button>
+          <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],${jsAttr(primero.grupo_pedido||'')})">🍽 Agregar comida</button>
           <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa, sin mesa o a fiado">🔄 Ubicar en mesa</button>
           <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancela TODO este pedido">✕ Cancelar</button>
           <span id="vuelto-${key}" class="vuelto-box"></span>
@@ -7063,7 +7182,7 @@ function renderPendientes() {
         <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--text2);">🧍 Sin mesa — esperando de pie</span></div>
         ${gruposSinMesaOrdenados.map(grupo => {
           const orders = grupo.orders;
-          const key = `sinmesa-${orders[0].grupo_pedido || orders[0].id}`;
+          const key = `sinmesa-${idSeguro(orders[0].grupo_pedido || orders[0].id)}`;
           const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
           const metodoInicial = orders[0].metodo === 'transferencia' ? 'transferencia' : 'efectivo';
           const divididoPre = prellenadoDividido(orders);
@@ -7073,7 +7192,7 @@ function renderPendientes() {
         <div class="pending-group">
           <div class="pending-group-hdr">
             <div>
-              <div class="pending-group-title" style="color:var(--text);">Sin mesa — ${primero.hora||'—'} ${chipPendienteHTML(orders)}</div>
+              <div class="pending-group-title" style="color:var(--text);">Sin mesa — ${escaparHtml(primero.hora||'—')} ${chipPendienteHTML(orders)}</div>
               <div class="pending-group-sub">${orders.length} pedido(s)</div>
             </div>
             <div class="pending-group-total">${fmt(total)}</div>
@@ -7083,10 +7202,10 @@ function renderPendientes() {
               <thead><tr><th>Hora</th><th>Tipo</th><th>Detalle</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
               <tbody>${orders.map(p => `
                 <tr>
-                  <td>${p.hora||'—'}</td>
-                  <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
+                  <td>${escaparHtml(p.hora||'—')}</td>
+                  <td style="color:var(--text);font-size:12px;">${escaparHtml(LABELS[p.pedido]||p.pedido)}</td>
                   <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                    ${p.detalle||'—'}${p.para_llevar ? ' <span style="color:var(--accent);">· Para llevar</span>' : ''}
+                    ${escaparHtml(p.detalle||'—')}${p.para_llevar ? ' <span style="color:var(--accent);">· Para llevar</span>' : ''}
                   </td>
                   <td>${p.cantidad||1}</td>
                   <td class="amount-pos">${fmt(p.monto_total||0)}</td>
@@ -7109,8 +7228,8 @@ function renderPendientes() {
             ${htmlPagoDividido(key, total, divididoPre)}
             <button class="btn btn-primary" onclick="marcarGrupoSinMesaPagado([${idsGrupo.join(',')}],'${key}')">✅ Marcar todo como pagado</button>
             ${botonDescuentoHTML(idsGrupo)}
-            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
-            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],${jsAttr(primero.grupo_pedido||'')})">+ Agregar producto</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],${jsAttr(primero.grupo_pedido||'')})">🍽 Agregar comida</button>
             <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa o a fiado">🔄 Ubicar en mesa</button>
             <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancela TODO este pedido">✕ Cancelar</button>
             <span id="vuelto-${key}" class="vuelto-box"></span>
@@ -7134,7 +7253,7 @@ function renderPendientes() {
         <div style="margin:24px 0 12px;"><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:var(--orange);">🎁 Gratis pendientes</span></div>
         ${gruposGratisOrdenados.map(grupo => {
           const orders = grupo.orders;
-          const key = `gratis-${orders[0].grupo_pedido || orders[0].id}`;
+          const key = `gratis-${idSeguro(orders[0].grupo_pedido || orders[0].id)}`;
           const total = orders.reduce((a,b) => a + (b.monto_total||0), 0);
           const idsGrupo = orders.map(o => o.id);
           const primero = orders[0];
@@ -7142,7 +7261,7 @@ function renderPendientes() {
         <div class="pending-group">
           <div class="pending-group-hdr">
             <div>
-              <div class="pending-group-title" style="color:var(--orange);">🎁 Gratis — ${primero.hora||'—'} ${chipPendienteHTML(orders)}</div>
+              <div class="pending-group-title" style="color:var(--orange);">🎁 Gratis — ${escaparHtml(primero.hora||'—')} ${chipPendienteHTML(orders)}</div>
               <div class="pending-group-sub">${orders.length} pedido(s) · no suma a los ingresos</div>
             </div>
             <div class="pending-group-total">${fmt(total)}</div>
@@ -7152,9 +7271,9 @@ function renderPendientes() {
               <thead><tr><th>Hora</th><th>Tipo</th><th>Detalle</th><th>Cant.</th><th>Monto</th><th></th></tr></thead>
               <tbody>${orders.map(p => `
                 <tr>
-                  <td>${p.hora||'—'}</td>
-                  <td style="color:var(--text);font-size:12px;">${LABELS[p.pedido]||p.pedido}</td>
-                  <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.detalle||'—'}</td>
+                  <td>${escaparHtml(p.hora||'—')}</td>
+                  <td style="color:var(--text);font-size:12px;">${escaparHtml(LABELS[p.pedido]||p.pedido)}</td>
+                  <td style="color:var(--text3);font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escaparHtml(p.detalle||'—')}</td>
                   <td>${p.cantidad||1}</td>
                   <td class="amount-pos">${fmt(p.monto_total||0)}</td>
                   <td style="display:flex;gap:4px;white-space:nowrap;">
@@ -7168,8 +7287,8 @@ function renderPendientes() {
           </div>
           <div class="pending-pay-bar">
             <button class="btn btn-primary" onclick="marcarGrupoGratisPagado([${idsGrupo.join(',')}])">✅ Marcar como entregado</button>
-            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">+ Agregar producto</button>
-            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],'${primero.grupo_pedido||''}')">🍽 Agregar comida</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarProducto([${idsGrupo.join(',')}],${jsAttr(primero.grupo_pedido||'')})">+ Agregar producto</button>
+            <button class="btn btn-outline" onclick="abrirModalAgregarComida([${idsGrupo.join(',')}],${jsAttr(primero.grupo_pedido||'')})">🍽 Agregar comida</button>
             <button class="btn btn-outline" onclick="abrirModalCambiarMesa([${idsGrupo.join(',')}])" title="Reubica este pedido en una mesa, sin mesa o a fiado">🔄 Ubicar en mesa</button>
             <button class="btn btn-danger" onclick="cancelarGrupoPendiente([${idsGrupo.join(',')}],null)" title="Cancela TODO este pedido">✕ Cancelar</button>
           </div>
@@ -7307,14 +7426,14 @@ function renderFiados() {
       const detalle = g.orders.map(p => `${LABELS[p.pedido]||p.pedido}${p.detalle ? ': ' + p.detalle : ''}`).join(' · ');
       const idsGrupo = g.orders.map(o => o.id);
       const primero = g.orders[0];
-      const key = primero.grupo_pedido || `id${primero.id}`;
-      const opciones = ST.clientesFiado.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+      const key = idSeguro(primero.grupo_pedido || `id${primero.id}`);
+      const opciones = ST.clientesFiado.map(c => `<option value="${c.id}">${escaparHtml(c.nombre)}</option>`).join('');
       return `
       <div class="report-block" style="padding:12px;">
         <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
           <div>
-            <div style="font-size:12px;color:var(--text);">${primero.fecha||'—'} ${primero.hora||''} ${chipFiadoHTML(primero.fecha)}</div>
-            <div style="font-size:11px;color:var(--text3);max-width:340px;">${detalle||'—'}</div>
+            <div style="font-size:12px;color:var(--text);">${escaparHtml(primero.fecha||'—')} ${escaparHtml(primero.hora||'')} ${chipFiadoHTML(primero.fecha)}</div>
+            <div style="font-size:11px;color:var(--text3);max-width:340px;">${escaparHtml(detalle||'—')}</div>
           </div>
           <div class="amount-pos" style="font-family:'Syne',sans-serif;font-weight:700;">${fmt(total)}</div>
         </div>
@@ -7353,8 +7472,8 @@ function renderFiados() {
           const idsGrupo = g.orders.map(o => o.id);
           const primero = g.orders[0];
           return `<tr>
-            <td>${primero.fecha||'—'} ${primero.hora||''} ${chipFiadoHTML(primero.fecha)}</td>
-            <td style="color:var(--text3);font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detalle||'—'}</td>
+            <td>${escaparHtml(primero.fecha||'—')} ${escaparHtml(primero.hora||'')} ${chipFiadoHTML(primero.fecha)}</td>
+            <td style="color:var(--text3);font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escaparHtml(detalle||'—')}</td>
             <td class="amount-pos">${fmt(total)}</td>
             <td style="display:flex;gap:4px;white-space:nowrap;">
               ${botonDescuentoHTML(idsGrupo)}
@@ -7372,7 +7491,7 @@ function renderFiados() {
           <td>${a.fecha}${a.turno ? ` · ${a.turno === 'cena' ? '🌙' : '☀️'}` : ''}</td>
           <td class="amount-pos">${fmt(a.monto)}</td>
           <td><span class="badge ${a.cuenta==='efectivo'?'badge-green':'badge-blue'}">${a.cuenta==='efectivo'?'💵 Efectivo':'📲 Transferencia'}</span></td>
-          <td style="color:var(--text3);font-size:11px;">${a.nota||'—'}</td>
+          <td style="color:var(--text3);font-size:11px;">${escaparHtml(a.nota||'—')}</td>
           ${adminAutenticado ? `<td><button class="btn btn-danger" onclick="eliminarAbonoFiado(${a.id})" title="Eliminar este abono (solo administrador)">🗑</button></td>` : ''}
         </tr>`).join('')
       : `<tr><td colspan="${adminAutenticado ? 5 : 4}"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin abonos registrados todavía.</div></td></tr>`;
@@ -7388,7 +7507,7 @@ function renderFiados() {
       ? pagadosViaAbono.map(p => `<tr>
           <td>${cobradoViaAbonos(p) ? p.fecha : (p.fecha_original || p.fecha || '—')}</td>
           <td>${p.fecha_pago || p.fecha || '—'}</td>
-          <td style="color:var(--text3);font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${LABELS[p.pedido]||p.pedido}${p.detalle ? ': ' + p.detalle : ''}</td>
+          <td style="color:var(--text3);font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escaparHtml(LABELS[p.pedido]||p.pedido)}${p.detalle ? ': ' + escaparHtml(p.detalle) : ''}</td>
           <td class="amount-pos">${fmt(p.monto_total||0)}</td>
         </tr>`).join('')
       : `<tr><td colspan="4"><div style="padding:10px 0;color:var(--text3);font-size:12px;">Sin pedidos pagados vía abono todavía.</div></td></tr>`;
@@ -7397,7 +7516,7 @@ function renderFiados() {
     <div class="pending-group">
       <div class="pending-group-hdr" style="cursor:pointer;" onclick="toggleFiadoCliente(${cliente.id})">
         <div>
-          <div class="pending-group-title" style="color:var(--purple);">📒 ${cliente.nombre}</div>
+          <div class="pending-group-title" style="color:var(--purple);">📒 ${escaparHtml(cliente.nombre)}</div>
           <div class="pending-group-sub">${grupos.length} pedido(s) pendiente(s) · ${abonos.length} abono(s)${sobrante > 0.5 ? ` · saldo a favor ${fmt(sobrante)}` : ''} — ${abierto ? 'clic para colapsar' : 'clic para ver detalle'}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -7685,7 +7804,7 @@ function renderSaldoAFavorForm() {
   if (!sel) return;
   const actual = sel.value;
   sel.innerHTML = '<option value="">— Elegir cliente —</option>' +
-    ST.clientesFiado.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+    ST.clientesFiado.map(c => `<option value="${c.id}">${escaparHtml(c.nombre)}</option>`).join('');
   if (actual && ST.clientesFiado.some(c => String(c.id) === actual)) sel.value = actual;
 }
 
@@ -7835,6 +7954,15 @@ async function confirmarSistema({ titulo, cuerpo = '', aceptar = 'Aceptar', canc
 // Texto de usuario → HTML seguro (para nombres y notas que se pintan con innerHTML).
 function escaparHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+// Para meter un texto DENTRO de un onclick="…('aquí')": lo convierte en un texto de JavaScript entre comillas (con sus
+// propios escapes) y luego lo escapa para HTML. Así un valor con comillas, \ o < no puede salirse del atributo ni del texto.
+function jsAttr(s) {
+  return escaparHtml(JSON.stringify(String(s == null ? '' : s)));
+}
+// Para armar ids de elementos y llaves que van dentro de un onclick: solo letras, números, guion y guion bajo.
+function idSeguro(s) {
+  return String(s == null ? '' : s).replace(/[^A-Za-z0-9_-]/g, '_');
 }
 
 // Clientes en orden alfabético (sin distinguir tildes ni mayúsculas): así sale en todas las listas.
@@ -8080,7 +8208,7 @@ function agruparPorPedido(list) {
 
 function renderIngresos() {
   // Esta pestaña ahora es "Pedidos" — siempre es el día actual, solo se filtra por turno.
-  const hoy = ST.ingresos.filter(i => i.fecha === today());
+  const hoy = ST.ingresos.filter(i => esHoy(i.fecha));
   let list = hoy.filter(i => {
     if (fI === 'almuerzo') return i.turno === 'almuerzo';
     if (fI === 'cena')     return i.turno === 'cena';
@@ -8102,11 +8230,11 @@ function renderIngresos() {
         const descuentoTotal = orders.reduce((a,o) => a + (o.descuento||0), 0);
         const editandoEsteGrupo = metodoEditGroupIds && metodoEditGroupIds.join('-') === groupKey;
         return `<tr>
-        <td>${hora}</td>
+        <td>${escaparHtml(hora)}</td>
         <td><span class="badge ${primero.turno==='cena'?'badge-purple':'badge-accent'}">${primero.turno==='cena'?'🌙 CR':'☀️ Alm'}</span></td>
         <td style="font-size:11px;color:var(--text3);">${primero.es_gratis?'🎁 Gratis':primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
-        <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${resumenPedido}">${resumenPedido}</td>
-        <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resumenDetalle}</td>
+        <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escaparHtml(resumenPedido)}">${escaparHtml(resumenPedido)}</td>
+        <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escaparHtml(resumenDetalle)}</td>
         <td>${editandoEsteGrupo ? `
           <div style="display:flex;gap:4px;align-items:center;">
             <select id="metodo-edit-${groupKey}" style="padding:4px 6px;width:auto;">
@@ -8595,6 +8723,7 @@ function renderGastosCierreManual() {
 async function guardarCierreManual() {
   const btnGuardar = document.getElementById('cm-btn-guardar');
   if (btnGuardar && btnGuardar.disabled) return;      // ya hay un guardado en curso: un segundo clic no repite nada
+  if (!cargaCompletaParaCerrar()) return;
   const fecha = document.getElementById('cm-fecha').value;
   const turno = cierreManualTurno;
   if (!fecha) { showToast('⚠ Selecciona una fecha', 'warning'); return; }
@@ -8749,8 +8878,9 @@ function pintarSeleccionTurnoApertura() {
   document.getElementById('apertura-btn-cena').classList.toggle('active', aperturaTurnoSel === 'cena');
   document.getElementById('apertura-desayuno-wrap').style.display = aperturaTurnoSel === 'almuerzo' ? 'block' : 'none';
 
-  const existente = ST.aperturasTurno.find(a => a.fecha === today() && a.turno === aperturaTurnoSel);
-  const yaCerrado = ST.cierresDia.some(c => c.fecha === today() && c.turno === aperturaTurnoSel);
+  const fechaApertura = fechaDeTurnoAhora(aperturaTurnoSel);
+  const existente = ST.aperturasTurno.find(a => a.fecha === fechaApertura && a.turno === aperturaTurnoSel);
+  const yaCerrado = ST.cierresDia.some(c => c.fecha === fechaApertura && c.turno === aperturaTurnoSel);
   const cajaEl = document.getElementById('apertura-caja-inicial');
   const desEl  = document.getElementById('apertura-venta-desayuno');
   const desTransEl = document.getElementById('apertura-venta-desayuno-transferencia');
@@ -8773,8 +8903,8 @@ function pintarSeleccionTurnoApertura() {
 }
 
 async function guardarAperturaTurno() {
-  const fecha = today();
   const turno = aperturaTurnoSel;
+  const fecha = fechaDeTurnoAhora(turno);              // la cena que se abre pasada la medianoche es del día anterior; el almuerzo, de hoy
   const cajaInicial = valMiles('apertura-caja-inicial');
   const ventaDesayuno = turno === 'almuerzo' ? valMiles('apertura-venta-desayuno') : 0;
   const ventaDesayunoTransferencia = turno === 'almuerzo' ? valMiles('apertura-venta-desayuno-transferencia') : 0;
@@ -8853,7 +8983,7 @@ async function agregarNotaDia() {
   const texto = input.value.trim();
   if (!texto) return;
   try {
-    const [row] = await sbInsert('notas_dia', { fecha: today(), texto });
+    const [row] = await sbInsert('notas_dia', { fecha: diaNegocio(), texto });     // la nota de la jornada: pasada la medianoche sigue siendo de la cena
     ST.notasDia.unshift(row);
     input.value = '';
     setSyncBadge('ok');
@@ -8878,12 +9008,12 @@ async function eliminarNotaDia(id) {
 }
 
 function renderNotasModal() {
-  const notas = ST.notasDia.filter(n => n.fecha === today());
+  const notas = ST.notasDia.filter(n => esHoy(n.fecha));
   const el = document.getElementById('notas-lista');
   if (!el) return;
   el.innerHTML = notas.length
     ? notas.map(n => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:12px;color:var(--text2);">${formatearNumerosEnTexto(n.texto)}</span>
+        <span style="font-size:12px;color:var(--text2);">${escaparHtml(formatearNumerosEnTexto(n.texto))}</span>
         <button class="btn btn-danger" onclick="eliminarNotaDia(${n.id})">✕</button>
       </div>`).join('')
     : `<div style="color:var(--text3);font-size:12px;">Sin notas para hoy.</div>`;
@@ -8892,7 +9022,7 @@ function renderNotasModal() {
 function renderPendientesNotasBadge() {
   const badge = document.getElementById('notas-badge');
   if (!badge) return;
-  const cnt = ST.notasDia.filter(n => n.fecha === today()).length;
+  const cnt = ST.notasDia.filter(n => esHoy(n.fecha)).length;
   badge.textContent = cnt > 0 ? cnt : '';
   badge.style.display = cnt > 0 ? 'inline' : 'none';
 }
@@ -9936,7 +10066,7 @@ function egresosCombinados() {
 function filaEgresoEdit(e) {
   return `<tr>
     <td><input type="date" id="egr-edit-fecha-${e.id}" value="${e.fecha}" style="width:100%;"></td>
-    <td><input type="text" id="egr-edit-desc-${e.id}" value="${(e.descripcion||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
+    <td><input type="text" id="egr-edit-desc-${e.id}" value="${escaparHtml(e.descripcion||'')}" style="width:100%;"></td>
     <td><select id="egr-edit-cat-${e.id}" style="width:100%;">${opcionesCategoriaHtml('egresos', e.cat, 'corto')}</select></td>
     <td><select id="egr-edit-cuenta-${e.id}" style="width:100%;">${opcionesCuentaHtml(e.cuenta)}</select></td>
     <td>
@@ -9976,7 +10106,7 @@ function renderEgresos() {
              <button class="btn btn-danger"  style="padding:5px 10px;font-size:11px;" onclick="eliminarGastoDia(${e.id})">✕</button>`;
         return `<tr>
         <td>${e.fecha}</td>
-        <td style="color:var(--text)">${e.descripcion||'—'}</td>
+        <td style="color:var(--text)">${escaparHtml(e.descripcion||'—')}</td>
         <td><span class="badge ${catC(e.cat)}">${catNombreHtml(e.cat)}</span></td>
         <td><span class="badge ${cuentaBadge(e.cuenta)}">${escaparHtml(cuentaEtiqueta(e.cuenta))}</span></td>
         <td style="font-size:11px;color:var(--text3);">${origenTxt}</td>
@@ -10070,7 +10200,7 @@ function setFinv(f, btn) {
 
 function renderInventario() {
   document.getElementById('venta-producto').innerHTML =
-    ST.inventario.map(p => `<option value="${p.id}">${p.nombre} (${p.stock} ${p.unidad})</option>`).join('');
+    ST.inventario.map(p => `<option value="${p.id}">${escaparHtml(p.nombre)} (${p.stock} ${escaparHtml(p.unidad)})</option>`).join('');
 
   let prods = fInv === 'bajo' ? ST.inventario.filter(p => p.stock <= p.minimo) : ST.inventario;
   const tbody = document.getElementById('inventario-body');
@@ -10083,17 +10213,17 @@ function renderInventario() {
     const bajo = p.stock <= p.minimo;
     const col  = bajo ? 'var(--red)' : p.stock <= p.minimo * 2 ? 'var(--accent)' : 'var(--green)';
     return `<tr>
-      <td style="color:var(--text)">${p.nombre}</td>
-      <td><div class="stock-row"><span style="color:${col};font-weight:500;">${p.stock} ${p.unidad}</span>
+      <td style="color:var(--text)">${escaparHtml(p.nombre)}</td>
+      <td><div class="stock-row"><span style="color:${col};font-weight:500;">${p.stock} ${escaparHtml(p.unidad)}</span>
       <div class="stock-bar-wrap"><div class="stock-bar" style="width:${pct}%;background:${col}"></div></div></div></td>
-      <td>${p.minimo} ${p.unidad}</td>
+      <td>${p.minimo} ${escaparHtml(p.unidad)}</td>
       <td><span class="badge ${bajo?'badge-red':'badge-green'}">${bajo?'⚠ Bajo':'OK'}</span></td>
       <td>${fmt(p.costo)}</td><td>${fmt(p.stock*p.costo)}</td>
       <td><button class="btn btn-danger" onclick="eliminarProducto(${p.id})">✕</button></td>
     </tr>`;
   }).join('');
 
-  const ch  = ST.consumos.filter(v => v.fecha === today());
+  const ch  = ST.consumos.filter(v => esHoy(v.fecha));
   const top = ch.reduce((acc,v) => { acc[v.nombre] = (acc[v.nombre]||0) + v.cantidad; return acc; }, {});
   const te  = Object.entries(top).sort((a,b) => b[1]-a[1])[0];
   document.getElementById('top-producto').textContent    = te ? `${te[0]} (${te[1]})` : '—';
@@ -10430,14 +10560,14 @@ function renderTablero() {
           const d = crPorCat[cat];
           const topItems = Object.entries(d.items).sort((a, b) => b[1] - a[1]).slice(0, 3);
           return `<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;">
-            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px;">${cat}</div>
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px;">${escaparHtml(cat)}</div>
             <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px;">
               <span style="color:var(--text3);">${d.count} pedido(s)</span>
               <span style="color:var(--green);font-weight:500;">${fmt(d.total)}</span>
             </div>
             ${topItems.map(([nombre, cnt], idx) =>
               `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2);">
-                <span>${idx + 1}. ${nombre}</span><span>${cnt}</span>
+                <span>${idx + 1}. ${escaparHtml(nombre)}</span><span>${cnt}</span>
               </div>`
             ).join('')}
           </div>`;
@@ -10470,7 +10600,7 @@ function renderTablero() {
     if (ventasTotales > 0 && crT/ventasTotales < 0.2 && crT > 0) drivers.push({tp:'neutral',ti:'🌙 Potencial en comidas rápidas',bo:`Turno nocturno solo representa el ${((crT/ventasTotales)*100).toFixed(0)}% de las ventas.`});
 
     const bajS = ST.inventario.filter(p=>p.stock<=p.minimo);
-    if (bajS.length > 0) drivers.push({tp:'negative',ti:'📦 Riesgo de quiebre de stock',bo:`${bajS.length} producto(s) bajo stock mínimo: ${bajS.map(p=>p.nombre).join(', ')}.`});
+    if (bajS.length > 0) drivers.push({tp:'negative',ti:'📦 Riesgo de quiebre de stock',bo:`${bajS.length} producto(s) bajo stock mínimo: ${bajS.map(p=>escaparHtml(p.nombre)).join(', ')}.`});
     if (ut > 0) drivers.push({tp:'positive',ti:'✅ Negocio rentable',bo:`Utilidad de ${fmt(ut)}. Buen momento para reinvertir.`});
   }
   document.getElementById('drivers-zone').innerHTML = drivers.map(d =>
@@ -10533,11 +10663,11 @@ function renderHistorialPedidosIngresos() {
         const descuentoTotal = orders.reduce((a,o) => a + (o.descuento||0), 0);
         return `<tr>
         <td>${primero.fecha}</td>
-        <td>${primero.hora||'—'}</td>
+        <td>${escaparHtml(primero.hora||'—')}</td>
         <td><span class="badge ${primero.turno==='cena'?'badge-purple':'badge-accent'}">${primero.turno==='cena'?'🌙 CR':'☀️ Alm'}</span></td>
         <td style="font-size:11px;color:var(--text3);">${primero.es_gratis?'🎁 Gratis':primero.es_fiar?'📒 Fiado':primero.es_sin_mesa?'🧍 Sin mesa':primero.es_domicilio?'🛵 Dom':primero.mesa?`Mesa ${primero.mesa}`:'—'}</td>
-        <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${resumenPedido}">${resumenPedido}</td>
-        <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${resumenDetalle}</td>
+        <td style="color:var(--text);font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escaparHtml(resumenPedido)}">${escaparHtml(resumenPedido)}</td>
+        <td style="color:var(--text3);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escaparHtml(resumenDetalle)}</td>
         <td>${cobradoViaAbonos(primero) ? etiquetaCobroAbonos(primero) : `<span class="badge ${metC(primero.metodo)}" title="${metodoLabel(primero)}">${primero.metodo}</span>`}</td>
         <td>${cantidadTotal}</td>
         <td class="amount-pos">${fmt(montoTotal)}${descuentoTotal > 0 ? `<br><span class="badge badge-orange" style="font-size:10px;" title="Descuento aplicado">🏷 −${fmt(descuentoTotal)}</span>` : ''}</td>
@@ -10717,7 +10847,7 @@ function renderIngresosFinanciero() {
         return `<tr>
         <td>${f.fecha}</td>
         <td style="font-size:11px;color:var(--text3);">${f.origen}</td>
-        <td style="color:var(--text);font-size:12px;">${f.detalle}</td>
+        <td style="color:var(--text);font-size:12px;">${escaparHtml(f.detalle)}</td>
         <td>${f.cuenta ? `<span class="badge ${cuentaBadge(f.cuenta)}">${escaparHtml(cuentaEtiqueta(f.cuenta))}</span>` : '—'}</td>
         <td>${f.efectivo !== null ? fmt(f.efectivo) : '—'}</td>
         <td>${f.transferencia !== null ? fmt(f.transferencia) : '—'}</td>
@@ -10773,6 +10903,7 @@ let viendoHistorialCierre = false;
 
 function setDDTurno(t, btn) {
   ddTurno = t;
+  ajustarFechaPorDefecto('dd-fecha', t);
   viendoHistorialCierre = false;
   resetearCamposAjusteCierre();
   limpiarPlatosFamiliaCierre();
@@ -10872,7 +11003,7 @@ function calcularConsumoGratisTurno(fecha, turno) {
 // gratis (solo comida rápida). Se llama desde renderDiaADia().
 function actualizarCamposFamiliaCierre() {
   const esAlmuerzo = ddTurno === 'almuerzo';
-  const fecha = document.getElementById('dd-fecha').value || today();
+  const fecha = document.getElementById('dd-fecha').value || fechaDeTurnoAhora(ddTurno);
 
   const wrap = document.getElementById('dd-platos-familia-wrap');
   if (wrap) wrap.style.display = esAlmuerzo && pedirComidasFamilia() ? '' : 'none';
@@ -10969,7 +11100,7 @@ function calcularGastosTurno(fecha, turno) {
 // transferencia son siempre la suma fija de los pedidos; solo el Ajuste
 // (efectivo y/o transferencia, por separado) es editable.
 function recalcularResultadoCierre() {
-  const fecha = document.getElementById('dd-fecha').value || today();
+  const fecha = document.getElementById('dd-fecha').value || fechaDeTurnoAhora(ddTurno);
   const { efectivo, transferencia, cajaInicial, ventaDesayuno, ventaDesayunoEfectivo, ventaDesayunoTransferencia, abonos, abonosEfectivo, abonosTransferencia, tieneApertura } = calcularVentasFijas(fecha, ddTurno);
   const total = efectivo + transferencia;
   const totalAbonos = abonosEfectivo + abonosTransferencia;
@@ -11048,13 +11179,13 @@ function recalcularResultadoCierre() {
 function renderDetalleAbonosCierre(fecha, turno, abonos) {
   const el = document.getElementById('dd-abonos-detalle');
   if (!el) return;
-  const nombreCliente = id => (ST.clientesFiado.find(c => c.id === id) || {}).nombre || 'Cliente';
+  const nombreCliente = id => escaparHtml((ST.clientesFiado.find(c => c.id === id) || {}).nombre || 'Cliente');
   const saldadosAqui = ST.ingresos.filter(p => cobradoViaAbonos(p) && p.fecha_pago === fecha && p.turno_pago === turno);
   const cobradosDespues = ST.ingresos.filter(p => cobradoViaAbonos(p) && p.fecha === fecha && p.turno === turno);
   const partes = [];
   if (abonos.length) {
     partes.push(`<div style="font-size:11px;color:var(--text2);margin:4px 0 6px;">${abonos.map(a =>
-      `📒 ${nombreCliente(a.cliente_fiado_id)} · ${a.cuenta === 'efectivo' ? '💵' : '📲'} ${fmt(a.monto)}${a.nota ? ` · ${a.nota}` : ''}`).join('<br>')}</div>`);
+      `📒 ${nombreCliente(a.cliente_fiado_id)} · ${a.cuenta === 'efectivo' ? '💵' : '📲'} ${fmt(a.monto)}${a.nota ? ` · ${escaparHtml(a.nota)}` : ''}`).join('<br>')}</div>`);
   }
   if (saldadosAqui.length) {
     const total = saldadosAqui.reduce((s,p) => s + (p.monto_total||0), 0);
@@ -11068,7 +11199,8 @@ function renderDetalleAbonosCierre(fecha, turno, abonos) {
 }
 
 async function guardarCierre() {
-  const fecha = document.getElementById('dd-fecha').value || today();
+  if (!cargaCompletaParaCerrar()) return;
+  const fecha = document.getElementById('dd-fecha').value || fechaDeTurnoAhora(ddTurno);
   const { efectivo, transferencia, abonosEfectivo, abonosTransferencia } = calcularVentasFijas(fecha, ddTurno);
   const { reales: gastos } = calcularGastosTurno(fecha, ddTurno);
 
@@ -11315,7 +11447,7 @@ function renderNotasCierre(fecha) {
   const notasBody  = document.getElementById('dd-notas-body');
   if (notasBody) {
     notasBody.innerHTML = notasFecha.length
-      ? notasFecha.map(n => `<div class="report-line"><span>${formatearNumerosEnTexto(n.texto)}</span></div>`).join('')
+      ? notasFecha.map(n => `<div class="report-line"><span>${escaparHtml(formatearNumerosEnTexto(n.texto))}</span></div>`).join('')
       : `<div style="color:var(--text3);font-size:12px;">Sin notas registradas para esta fecha.</div>`;
   }
 }
@@ -11352,7 +11484,7 @@ function renderHistorialCierres() {
 function renderDiaADia() {
   const fechaEl = document.getElementById('dd-fecha');
   if (!fechaEl) return;
-  const fecha = fechaEl.value || today();
+  const fecha = fechaEl.value || fechaDeTurnoAhora(ddTurno);
   aplicarLimiteFechaCierre();
 
   const cierreExistente = ST.cierresDia.find(c => c.fecha === fecha && c.turno === ddTurno);
@@ -11389,7 +11521,7 @@ function renderDiaADia() {
     // «Abrir turno» siempre actúa sobre el turno de HOY (día del calendario): no tiene sentido mientras se mira (o
     // edita) otro día, ni para caja ni para el administrador. Solo se ofrece cuando la fecha mostrada es la de hoy.
     const btnAbrir = document.getElementById('btn-abrir-turno-cierre');
-    if (btnAbrir) btnAbrir.style.display = fecha !== today() ? 'none' : '';
+    if (btnAbrir) btnAbrir.style.display = fecha !== fechaDeTurnoAhora(ddTurno) ? 'none' : '';
     if (msgEl) msgEl.textContent = puedeCorregir
       ? '🔒 Este turno ya está cerrado. Los valores quedaron guardados.'
       : '🔒 Este día ya pasó: Caja solo trabaja el día en curso. Para verlo o corregirlo, sal e ingresa como administrador.';
@@ -11423,7 +11555,7 @@ function renderDiaADia() {
     ? gastos.map(g => {
         if (ddEditId === g.id) {
           return `<tr>
-            <td><input type="text"   id="dd-edit-nombre-${g.id}" value="${(g.nombre||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
+            <td><input type="text"   id="dd-edit-nombre-${g.id}" value="${escaparHtml(g.nombre||'')}" style="width:100%;"></td>
             <td><select id="dd-edit-cat-${g.id}" style="width:100%;">${opcionesCategoriaHtml('cierre', g.categoria, 'corto')}</select></td>
             <td><input type="text" inputmode="numeric" id="dd-edit-monto-${g.id}" value="${Number(g.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
             <td style="white-space:nowrap;display:flex;gap:4px;">
@@ -11433,7 +11565,7 @@ function renderDiaADia() {
           </tr>`;
         }
         return `<tr>
-          <td style="color:var(--text)">${g.nombre || '—'}</td>
+          <td style="color:var(--text)">${escaparHtml(g.nombre || '—')}</td>
           <td>${g.categoria ? `<span class="badge ${catC(g.categoria)}">${catNombreHtml(g.categoria)}</span>` : '<span style="color:var(--text3);font-size:11px;">sin categoría</span>'}</td>
           <td class="amount-neg">${fmt(g.monto)}</td>
           <td style="white-space:nowrap;display:flex;gap:4px;">
@@ -11482,7 +11614,7 @@ function irADiaADia(fecha, turno) {
 // es parte del flujo normal del día). Para ver/editar OTROS días hace falta
 // sesión de administrador (el Historial completo de cierres solo se dibuja para él).
 function corregirCierreActual() {
-  const fecha = document.getElementById('dd-fecha').value || today();
+  const fecha = document.getElementById('dd-fecha').value || fechaDeTurnoAhora(ddTurno);
   if (fecha < diaNegocio() && !adminAutenticado) {
     showToast('🔒 Para corregir un cierre de un día anterior, sal e ingresa como administrador', 'warning');
     return;
@@ -11704,7 +11836,7 @@ function filaMovimientoCajaEdit(m) {
     </select></td>
     <td><select id="caja-edit-cuenta-${m.id}" style="width:100%;">${opcionesCuentaHtml(m.cuenta)}</select>
     <select id="caja-edit-cuenta-destino-${m.id}" style="width:100%;margin-top:4px;${m.tipo==='traspaso'?'':'display:none;'}">${opcionesCuentaHtml(m.cuenta_destino, '→ ')}</select></td>
-    <td><input type="text" id="caja-edit-desc-${m.id}" value="${(m.descripcion||'').replace(/"/g,'&quot;')}" style="width:100%;"></td>
+    <td><input type="text" id="caja-edit-desc-${m.id}" value="${escaparHtml(m.descripcion||'')}" style="width:100%;"></td>
     <td><input type="text" inputmode="numeric" id="caja-edit-monto-${m.id}" value="${Number(m.monto).toLocaleString('es-CO')}" oninput="formatMilesInput(this)" style="width:90px;"></td>
     <td style="white-space:nowrap;display:flex;gap:4px;">
       <button class="btn btn-primary" style="padding:5px 10px;font-size:11px;" onclick="guardarEdicionMovimientoCaja(${m.id})">✓</button>
@@ -11779,7 +11911,7 @@ function renderCaja() {
         <td>${m.fecha}</td>
         <td><span class="badge ${TIPO_BADGE_CAJA[m.tipo]||'badge-red'}">${TIPO_LABEL_CAJA[m.tipo]||'➖ Gasto'}</span></td>
         <td><span class="badge ${cuentaBadge(m.cuenta)}">${escaparHtml(cuentaEtiqueta(m.cuenta || 'efectivo'))}</span>${m.tipo==='traspaso' ? ` → <span class="badge ${cuentaBadge(m.cuenta_destino)}">${escaparHtml(cuentaEtiqueta(m.cuenta_destino || 'efectivo'))}</span>` : ''}</td>
-        <td style="color:var(--text)">${m.descripcion}</td>
+        <td style="color:var(--text)">${escaparHtml(m.descripcion)}</td>
         <td class="${m.tipo==='aporte'?'amount-pos':m.tipo==='traspaso'?'':'amount-neg'}">${fmt(m.monto)}</td>
         <td style="white-space:nowrap;display:flex;gap:4px;">
           <button class="btn btn-outline" style="padding:5px 10px;font-size:11px;" onclick="editarMovimientoCaja(${m.id})">✏️</button>
@@ -11915,7 +12047,7 @@ function renderAuditoria() {
         <td>${c.fecha}</td>
         <td><span class="badge ${c.turno==='cena'?'badge-purple':'badge-accent'}">${c.turno==='cena'?'🌙 Comidas rápidas':'☀️ Almuerzo'}</span></td>
         <td>${linea('💵', aj.efectivo)}${linea('💳', aj.transferencia)}</td>
-        <td style="color:var(--text2);">${c.ajuste_manual_nota || '—'}</td>
+        <td style="color:var(--text2);">${escaparHtml(c.ajuste_manual_nota || '—')}</td>
       </tr>`;
       }).join('')
     : `<tr><td colspan="4"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">${vacio(todosAjustes.length, 'Sin ajustes manuales registrados', 'Sin ajustes manuales en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
@@ -11927,9 +12059,9 @@ function renderAuditoria() {
       ? eliminados.map(e => `<tr>
           <td>${new Date(e.created_at).toLocaleString('es-CO')}</td>
           <td><span class="badge ${e.motivo==='cancelado'?'badge-gray':'badge-red'}">${e.motivo==='cancelado'?'Cancelado':'Eliminado'}</span></td>
-          <td>${e.fecha}${e.hora ? ' · ' + e.hora : ''}</td>
-          <td><span class="badge badge-gray">${e.ubicacion || '—'}</span></td>
-          <td style="color:var(--text2);">${LABELS[e.pedido]||e.pedido}${e.detalle ? ' — ' + e.detalle : ''}</td>
+          <td>${escaparHtml(e.fecha)}${e.hora ? ' · ' + escaparHtml(e.hora) : ''}</td>
+          <td><span class="badge badge-gray">${escaparHtml(e.ubicacion || '—')}</span></td>
+          <td style="color:var(--text2);">${escaparHtml(LABELS[e.pedido]||e.pedido)}${e.detalle ? ' — ' + escaparHtml(e.detalle) : ''}</td>
           <td class="amount-neg">${fmt(e.monto_total||0)}</td>
         </tr>`).join('')
       : `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗑</div><div class="empty-text">${vacio(ST.pedidosEliminados.length, 'Sin pedidos eliminados registrados', 'Sin pedidos eliminados en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
@@ -11941,12 +12073,12 @@ function renderAuditoria() {
     descBody.innerHTML = descuentos.length
       ? descuentos.map(d => `<tr>
           <td>${new Date(d.created_at).toLocaleString('es-CO')}</td>
-          <td>${d.fecha||'—'}${d.hora ? ' · ' + d.hora : ''} <span class="badge ${d.turno==='cena'?'badge-purple':'badge-accent'}">${d.turno==='cena'?'🌙':'☀️'}</span></td>
+          <td>${escaparHtml(d.fecha||'—')}${d.hora ? ' · ' + escaparHtml(d.hora) : ''} <span class="badge ${d.turno==='cena'?'badge-purple':'badge-accent'}">${d.turno==='cena'?'🌙':'☀️'}</span></td>
           <td>${fmt(d.valor_lista||0)}</td>
           <td class="amount-neg">${d.descuento_nuevo > d.descuento_anterior ? '+' : (d.descuento_nuevo < d.descuento_anterior ? '−' : '')}${fmt(Math.abs((d.descuento_nuevo||0)-(d.descuento_anterior||0)))} <span style="color:var(--text3);font-size:11px;">(total ${fmt(d.descuento_nuevo||0)})</span></td>
-          <td style="color:var(--text2);">${d.motivo || '—'}</td>
+          <td style="color:var(--text2);">${escaparHtml(d.motivo || '—')}</td>
           <td style="color:var(--text2);">${d.cierre_ajustado ? `💵 ${fmtAjuste(d.ajuste_efectivo||0)} · 💳 ${fmtAjuste(d.ajuste_transferencia||0)}` : '—'}</td>
-          <td style="color:var(--text3);font-size:11px;">${d.gastos_eliminados || '—'}</td>
+          <td style="color:var(--text3);font-size:11px;">${escaparHtml(d.gastos_eliminados || '—')}</td>
         </tr>`).join('')
       : `<tr><td colspan="7"><div class="empty"><div class="empty-icon">🏷</div><div class="empty-text">${vacio((ST.pedidosDescuentos || []).length, 'Sin descuentos aplicados todavía', 'Sin descuentos en ' + textoFiltroAuditoria())}</div></div></td></tr>`;
   }

@@ -38,3 +38,7 @@ node_modules/
 test-results/
 playwright-report/
 .pytest_cache/
+
+# Archivos de Word con códigos QR de pago u otros datos del negocio: no van en el repositorio (es público).
+QR*.docx
+*QR*.docx

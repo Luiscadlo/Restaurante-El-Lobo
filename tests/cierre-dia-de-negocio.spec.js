@@ -116,7 +116,7 @@ test.describe('el límite del calendario también se pone al cambiar de rol sin 
 });
 
 test.describe('caja a las 00:30 (la cena del 20-oct sigue en curso)', () => {
-  test('puede ver y corregir el cierre de la cena del 20-oct: «Corregir cierre», sin «Abrir turno» (que abriría el turno del 21)', async ({ page }) => {
+  test('puede ver y corregir el cierre de la cena del 20-oct: «Corregir cierre»; «Abrir turno» ahora abre la cena del 20 (no del 21)', async ({ page }) => {
     await abrirSistema(page, { fecha: A_LAS_00_30, datos: datosConCenaDel20() });
     await irA(page, 'diaadia');
     await verCierre(page, FECHA_HOY, 'cena');
@@ -124,7 +124,7 @@ test.describe('caja a las 00:30 (la cena del 20-oct sigue en curso)', () => {
     await expect(mensaje(page)).toContainText('Este turno ya está cerrado');
     await expect(corregir(page)).toBeVisible();
     await expect(corregir(page)).toHaveText(/Corregir cierre/);
-    await expect(abrir(page)).toBeHidden();
+    await expect(abrir(page)).toBeVisible();               // a las 00:30 la cena que se mira ES el turno en curso: «Abrir turno» la abriría con fecha 20-oct
     await corregir(page).click();                          // ya no la frena la pantalla (antes: «otro día» desde la medianoche)
     await expect(formulario(page)).toBeVisible();
     await expect(banner(page)).toBeHidden();

@@ -309,11 +309,17 @@ const b64url = obj => Buffer.from(JSON.stringify(obj)).toString('base64url');
  * @param opciones.authFalla       'red' | '500' | '429' → el servicio de acceso falla así
  * @param opciones.rechazarRefresh true → toda renovación de token es rechazada (sesión revocada)
  * @param opciones.tablasFaltantes  tablas que "no existen" en Supabase (responden 404), p. ej. ['config']
+ * @param opciones.tablasConFalla   { tabla: 'red' | 'servidor' } → LEER esa tabla falla así (sin red / error 500); a diferencia de `tablasFaltantes`, la tabla SÍ existe
  * @param opciones.totalesFalsos    { tabla: n } → el header Content-Range de esa tabla dice n (para simular filas que faltan)
  * @param opciones.rpcFalla         'red' | 'no-instalada' | 'servidor' | { status, cuerpo } → las funciones de restaurar fallan así
  * @param opciones.rpcRetraso       ms que tardan en responder las funciones de restaurar (para probar «en pleno proceso»)
  * @param opciones.rpcDespuesFalso  { tabla: n } → la función dice que quedaron n filas en esa tabla (para probar el aviso de diferencias)
- * (`reg.control.tablasFaltantes` se puede cambiar en plena prueba: las tablas listadas responden 404)
+ * (`reg.control.tablasFaltantes` y `reg.control.tablasConFalla` se pueden cambiar en plena prueba)
+ * `reg.control.fallasEscritura` = lista de { tabla, metodo, tipo }: la PRÓXIMA escritura que coincida falla y se saca de la lista.
+ *    tipo 'red'      → la petición no llega (no se guarda nada);
+ *    tipo 'perdida'  → el servidor SÍ guarda las filas pero la respuesta nunca llega (mala señal): el caso que duplica pedidos al reintentar.
+ *    tipo 'servidor' → el servidor responde 500 sin guardar nada;
+ *    tipo 'columna'  → el servidor dice que falta la columna opcional «es_gratis» (base vieja): la página debe reintentar sin las columnas opcionales.
  * @returns { errores, peticiones, escrituras, noManejadas, avisos, auth, rest, denegadas, intentos401, control, fijarReloj }
  */
 async function abrirSistema(page, opciones = {}) {
@@ -330,10 +336,11 @@ async function abrirSistema(page, opciones = {}) {
     logoutScopes: [], // 'local' = cierra solo esta sesión (no saca a otros equipos)
     hosts: new Set(), // direcciones de supabase.co con las que habló la página
     rpc: [],         // { fn, rol, cuerpo } de cada llamada a /rest/v1/rpc/...
+    lotes: [],       // { tabla, filas, rol } de cada POST con VARIAS filas (una petición = un lote)
     datos,           // los datos del servidor falso (las funciones de restaurar los cambian)
     tokens: {},      // lo último emitido por correo (para inspeccionar)
     // Interruptores que una prueba puede mover EN MEDIO de la prueba:
-    control: { rechazarRefresh: !!opciones.rechazarRefresh, authFalla: opciones.authFalla || null, ahora: fecha, rpcFalla: opciones.rpcFalla || null, rpcRetraso: opciones.rpcRetraso || 0, rpcDespuesFalso: opciones.rpcDespuesFalso || null, tablasFaltantes: opciones.tablasFaltantes || [] },
+    control: { rechazarRefresh: !!opciones.rechazarRefresh, authFalla: opciones.authFalla || null, ahora: fecha, rpcFalla: opciones.rpcFalla || null, rpcRetraso: opciones.rpcRetraso || 0, rpcDespuesFalso: opciones.rpcDespuesFalso || null, tablasFaltantes: opciones.tablasFaltantes || [], tablasConFalla: opciones.tablasConFalla || {}, fallasEscritura: [] },
   };
   // Estado de las tablas con candado tal como lo dejan las escrituras (el GET sigue devolviendo los datos de la prueba).
   const sombra = {};
@@ -507,6 +514,13 @@ async function abrirSistema(page, opciones = {}) {
         return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: '42P01', message: `relation "public.${tabla}" does not exist` }) });
       }
 
+      // La tabla existe, pero leerla falla (sin señal / error del servidor).
+      if (metodo === 'GET' && reg.control.tablasConFalla[tabla]) {
+        reg.peticiones.push(tabla);
+        if (reg.control.tablasConFalla[tabla] === 'red') return route.abort('failed');
+        return route.fulfill({ status: 500, contentType: 'application/json', headers: cors, body: JSON.stringify({ code: 'XX000', message: `fallo simulado leyendo ${tabla}` }) });
+      }
+
       // Permisos (como RLS).
       const op = OPERACION_HTTP[metodo];
       if (rol === null) {
@@ -573,7 +587,25 @@ async function abrirSistema(page, opciones = {}) {
           return route.fulfill({ status: 403, contentType: 'application/json', headers: cors, body: JSON.stringify(rechazo) });
         }
       }
-      reg.escrituras.push({ metodo, tabla, consulta: url.search, cuerpo, rol, prefer: cabeceras['prefer'] || '' });
+      // Fallas simuladas de escritura (reg.control.fallasEscritura): solo la PRÓXIMA que coincide.
+      let perderRespuesta = false;
+      const iFalla = reg.control.fallasEscritura.findIndex(f => f.tabla === tabla && f.metodo === metodo);
+      if (iFalla >= 0) {
+        const falla = reg.control.fallasEscritura.splice(iFalla, 1)[0];
+        if (falla.tipo === 'red') return route.abort('failed');
+        if (falla.tipo === 'servidor') return route.fulfill({ status: 500, contentType: 'application/json', headers: cors, body: JSON.stringify({ code: 'XX000', message: 'fallo simulado del servidor' }) });
+        if (falla.tipo === 'columna') return route.fulfill({ status: 400, contentType: 'application/json', headers: cors, body: JSON.stringify({ code: 'PGRST204', message: "Could not find the 'es_gratis' column of 'pedidos' in the schema cache" }) });
+        perderRespuesta = true;       // 'perdida': se guarda, pero la respuesta nunca llega
+      }
+      if (metodo === 'POST' && Array.isArray(cuerpo)) reg.lotes.push({ tabla, filas: cuerpo.length, rol });
+      if (metodo === 'POST' && Array.isArray(cuerpo) && tabla === 'pedidos') {
+        // Un pedido se guarda ahora en UNA petición con todas sus filas: `lotes` cuenta las PETICIONES y `escrituras` anota cada fila de
+        // «pedidos» por separado (con `lote`/`loteDe`), así las pruebas siguen contando filas como siempre. Las demás tablas
+        // (p. ej. las mesas que crea la configuración) quedan como una sola escritura con el arreglo completo.
+        cuerpo.forEach((fila, i) => reg.escrituras.push({ metodo, tabla, consulta: url.search, cuerpo: fila, rol, prefer: cabeceras['prefer'] || '', lote: i, loteDe: cuerpo.length }));
+      } else {
+        reg.escrituras.push({ metodo, tabla, consulta: url.search, cuerpo, rol, prefer: cabeceras['prefer'] || '' });
+      }
       if (metodo === 'DELETE') {
         if (conCandado) { const borrar = new Set(filasDe(tabla, url.search)); sombra[tabla] = sombra[tabla].filter(f => !borrar.has(f)); }
         return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
@@ -583,6 +615,11 @@ async function abrirSistema(page, opciones = {}) {
       if (conCandado) {
         if (metodo === 'POST') sombra[tabla].push(...conId.map(copiaProfunda));
         else for (const f of filasDe(tabla, url.search)) Object.assign(f, cuerpo);
+      }
+      if (perderRespuesta) {
+        // El servidor guardó de verdad: otra lectura de la tabla ya muestra estas filas, aunque la página no se enteró.
+        if (metodo === 'POST') (datos[tabla] = datos[tabla] || []).push(...conId.map(f => ({ created_at: reg.control.ahora.toISOString(), ...f })));
+        return route.abort('failed');
       }
       if (metodo === 'POST' && !pideFila) return route.fulfill({ status: 201, contentType: 'application/json', body: '' });
       return route.fulfill({ status: metodo === 'POST' ? 201 : 200, contentType: 'application/json', body: JSON.stringify(conId) });

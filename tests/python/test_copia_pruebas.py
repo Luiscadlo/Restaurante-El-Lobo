@@ -60,6 +60,30 @@ def test_la_copia_apunta_al_proyecto_de_pruebas_y_nada_mas_cambia(afuera):
     assert gp.revertir(copia, sistema()) == sistema()
 
 
+def test_la_politica_de_seguridad_de_la_copia_solo_deja_hablar_con_el_proyecto_de_pruebas(afuera):
+    """El sistema real solo puede hablar con SU Supabase (Content-Security-Policy); la copia, con el de pruebas y con nada más."""
+    correr(afuera)
+    copia = (afuera / gp.REL_SISTEMA).read_text(encoding="utf-8")
+    real = sistema()
+    assert f'content="connect-src {gp._constante(real, "SB_URL")};' in real          # el sistema real la lleva
+    assert f'content="connect-src {URL};' in copia and copia.count("connect-src") == 1
+    assert "connect-src *" not in real and "connect-src *" not in copia
+
+
+def test_rechaza_si_el_sistema_perdio_su_politica_de_seguridad(tmp_path, afuera):
+    """Si alguien quita o cambia la línea connect-src, la herramienta avisa en vez de generar una copia que no pueda hablar con su proyecto."""
+    falso = tmp_path / "falso"
+    (falso / "Contabilidad").mkdir(parents=True)
+    (falso / "Menu").mkdir()
+    html = sistema().replace('content="connect-src ', 'content="default-src ', 1)
+    (falso / gp.REL_SISTEMA).write_text(html, encoding="utf-8")
+    (falso / gp.REL_MENU).write_text("menu", encoding="utf-8")
+    (falso / gp.REL_INDEX).write_text("index", encoding="utf-8")
+    with pytest.raises(rr.Rechazo, match="connect-src"):
+        correr(afuera, origen=falso)
+    assert not afuera.exists()
+
+
 def test_no_queda_ningun_rastro_de_produccion(afuera):
     correr(afuera)
     copia = (afuera / gp.REL_SISTEMA).read_text(encoding="utf-8")
