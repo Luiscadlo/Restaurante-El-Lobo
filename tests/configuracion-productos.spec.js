@@ -766,3 +766,18 @@ test.describe('la pantalla, el servidor falso y la base dicen lo mismo', () => {
     reg.datos.configuracion.length = 0;
   });
 });
+
+test.describe('el código interno no se muestra en Configuración', () => {
+  test('ninguna tabla de productos, egresos o platos enseña la columna Código, pero cada fila sigue teniéndolo', async ({ page }) => {
+    aceptarAvisos(page);
+    await abrirSistema(page, { usuario: 'admin' });
+    await page.evaluate(() => showTab('config', document.querySelector(`.tab[onclick*="showTab('config'"]`)));
+    const r = await page.evaluate(() => {
+      const visibles = [...document.querySelectorAll('.cfgcat-sin-cod .cfgcat-cod, .cfgcat-sin-cod .cfgcat-cod-th')].filter(e => e.offsetParent !== null).length;
+      const total = document.querySelectorAll('.cfgcat-sin-cod .cfgcat-cod').length;
+      return { visibles, total };
+    });
+    expect(r.total).toBeGreaterThan(0);
+    expect(r.visibles).toBe(0);
+  });
+});
