@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>El Lobo — Sistema Contable</title>
 <!-- Política de seguridad del navegador: la página SOLO puede hablar con el Supabase de El Lobo (aunque alguien lograra meter código,
      no podría mandar datos a otro sitio), no admite etiquetas <base> ni <object>. Lleva la misma dirección que SB_URL: la copia de pruebas
@@ -34,7 +34,10 @@
   .turno-almuerzo { background: rgba(232,184,75,0.15); border: 1px solid rgba(232,184,75,0.4); color: var(--accent); }
   .turno-cena { background: rgba(155,127,212,0.15); border: 1px solid rgba(155,127,212,0.4); color: var(--purple); }
   @media(max-width:600px) {
-    header { flex-wrap: wrap; height: auto; padding: 10px 14px; row-gap: 8px; }
+    /* En celular el header (de 2 a 4 filas) se va con el scroll y solo la barra de secciones queda fija arriba. */
+    header { flex-wrap: wrap; height: auto; padding: 10px 14px; row-gap: 8px; position: static; }
+    /* A 16px iOS no hace zoom solo al tocar un campo. */
+    input, select, textarea { font-size: 16px !important; }
     .header-right { gap: 6px; flex-wrap: wrap; }
     .date-badge, .turno-badge { padding: 4px 10px; font-size: 10px; }
     .logo { font-size: 14px; }
@@ -369,6 +372,11 @@
   .pending-group-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; color: var(--orange); }
   .pending-group-sub  { font-size: 11px; color: var(--text3); margin-top: 2px; }
   .pending-group-total { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; color: var(--accent); }
+  .pending-group-hdr > * { min-width: 0; }
+  .pending-group-der { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px 10px; min-width: 0; max-width: 100%; }
+  @media(max-width:600px) { nav { top: 0; padding: 0 8px; } .pending-group-hdr { padding: 12px 14px; } .pending-group-der { width: 100%; justify-content: space-between; } }
+  /* Sin zoom por doble toque ni por pellizco. */
+  html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
   .pending-pay-bar {
     padding: 12px 20px; background: rgba(232,184,75,0.04);
     border-top: 1px solid var(--border);
@@ -4881,6 +4889,9 @@ function ajustarAltoHeaderSticky() {
 }
 ajustarAltoHeaderSticky();
 window.addEventListener('resize', ajustarAltoHeaderSticky);
+// iOS ignora user-scalable=no: el pellizco se frena a mano.
+['gesturestart','gesturechange','gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));
+document.addEventListener('touchmove', e => { if (e.touches && e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
 ['ing-fecha','egr-fecha','venta-fecha','dd-fecha','caja-mov-fecha','ingext-fecha'].forEach(id => {
   const el = document.getElementById(id);
@@ -7840,7 +7851,7 @@ function renderFiados() {
           <div class="pending-group-title" style="color:var(--purple);">📒 ${escaparHtml(cliente.nombre)}</div>
           <div class="pending-group-sub">${grupos.length} pedido(s) pendiente(s) · ${abonos.length} abono(s)${sobrante > 0.5 ? ` · saldo a favor ${fmt(sobrante)}` : ''} — ${abierto ? 'clic para colapsar' : 'clic para ver detalle'}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:10px;">
+        <div class="pending-group-der">
           ${grupos.length ? chipFiadoHTML(grupos[0].orders[0].fecha) : ''}
           <div style="text-align:right;">
             ${saldo < -0.5
