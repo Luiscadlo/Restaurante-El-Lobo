@@ -466,6 +466,8 @@
   .cfgcat-tabla input[type=text] { width: 100%; min-width: 120px; }
   .cfgcat-tabla .btn { padding: 4px 10px; font-size: 11px; }
   .cfgcat-cod { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); white-space: nowrap; }
+  /* El código es un identificador interno que no se edita: queda en la tabla pero no se muestra. */
+  .cfgcat-sin-cod .cfgcat-cod, .cfgcat-sin-cod .cfgcat-cod-th { display: none; }
   .cfgcat-estado { white-space: nowrap; }
   .cfgcat-retirado td { opacity: .6; }
   .cfgcat-cambio td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
@@ -13095,14 +13097,14 @@ function cfgCatConstruir() {
   if (!zona) return;
   zona.innerHTML = CFGCAT_CLAVES.map(k => {
     const d = CFGCAT[k];
-    const buscador = d.buscar ? `<input type="text" id="cfgcat-buscar-${k}" placeholder="Buscar por nombre, código o categoría…" autocomplete="off" oninput="cfgCatFiltrar('${k}', this.value)" style="max-width:340px;margin:8px 0;">` : '';
+    const buscador = d.buscar ? `<input type="text" id="cfgcat-buscar-${k}" placeholder="Buscar por nombre o categoría…" autocomplete="off" oninput="cfgCatFiltrar('${k}', this.value)" style="max-width:340px;margin:8px 0;">` : '';
     return `<div class="panel cfg-panel" id="cfgcat-${k}">
       <div class="panel-header"><div class="panel-title">${d.icono} ${d.titulo}</div></div>
       <div class="panel-body">
         <div class="cfg-ayuda">${d.ayuda}</div>
         <div class="cfg-hoy" id="cfgcat-hoy-${k}"></div>
         ${buscador}
-        <div class="table-wrap${k === 'rapidas' ? ' cfgcat-largo' : ''}"><table class="cfgcat-tabla"><thead><tr>${k === 'extras' ? '' : '<th>Código</th>'}<th>Nombre</th>${k === 'rapidas' ? '<th>Categoría</th>' : ''}<th>Precio</th><th>Estado</th></tr></thead><tbody id="cfgcat-cuerpo-${k}"></tbody></table></div>
+        <div class="table-wrap${k === 'rapidas' ? ' cfgcat-largo' : ''}"><table class="cfgcat-tabla cfgcat-sin-cod"><thead><tr>${k === 'extras' ? '' : '<th class="cfgcat-cod-th">Código</th>'}<th>Nombre</th>${k === 'rapidas' ? '<th>Categoría</th>' : ''}<th>Precio</th><th>Estado</th></tr></thead><tbody id="cfgcat-cuerpo-${k}"></tbody></table></div>
         <div class="cfgcat-barra">
           <div>${d.crear ? `<button type="button" class="btn btn-outline" id="cfgcat-agregar-${k}" onclick="cfgCatAgregar('${k}')">＋ Agregar producto</button>` : ''}</div>
           <div class="cfgcat-acciones">
@@ -13356,7 +13358,7 @@ function cfgEgrConstruir() {
       <div class="panel-body">
         <div class="cfg-ayuda">Las categorías con las que se clasifican los gastos del cierre y los egresos. Puedes cambiar el nombre, decidir dónde se usa, retirar una (deja de ofrecerse, pero los gastos viejos la siguen mostrando) o crear categorías nuevas. El <b>grupo</b> decide en qué casilla de los reportes y del modelo financiero se suma; se escoge al crear la categoría y ya no cambia, para que lo que ya registraste nunca se mueva de lugar. «No cuenta como egreso» es para plata que sale de la caja pero no es un gasto del negocio (como los préstamos).</div>
         <div class="cfg-hoy" id="cfgegr-hoy"></div>
-        <div class="table-wrap cfgcat-largo"><table class="cfgcat-tabla"><thead><tr><th>Código</th><th>Nombre</th><th>Grupo</th><th>Se usa</th><th>Estado</th></tr></thead><tbody id="cfgegr-cuerpo"></tbody></table></div>
+        <div class="table-wrap cfgcat-largo"><table class="cfgcat-tabla cfgcat-sin-cod"><thead><tr><th class="cfgcat-cod-th">Código</th><th>Nombre</th><th>Grupo</th><th>Se usa</th><th>Estado</th></tr></thead><tbody id="cfgegr-cuerpo"></tbody></table></div>
         <div class="cfgcat-barra">
           <div><button type="button" class="btn btn-outline" id="cfgegr-agregar" onclick="cfgEgrAgregar()">＋ Agregar categoría</button></div>
           <div class="cfgcat-acciones">
@@ -13676,7 +13678,7 @@ function cfgPlaRenderCuerpo() {
     const activos = propias.filter(x => x.f.activo).length;
     return `<div class="cfgpla-lista" id="cfgpla-lista-${l}">
       <div class="cfgpla-titulo">${PLATO_LISTA_ICONO[l]} ${PLATO_LISTA_NOMBRE[l]} <span class="badge badge-gray">${activos} activo${activos === 1 ? '' : 's'} de ${propias.length}</span></div>
-      <div class="table-wrap"><table class="cfgcat-tabla"><thead><tr><th>Código</th><th>Nombre</th><th>Estado</th></tr></thead><tbody>${propias.map(x => cfgPlaHtmlFila(x.f, x.i, ok)).join('')}</tbody></table></div>
+      <div class="table-wrap"><table class="cfgcat-tabla cfgcat-sin-cod"><thead><tr><th class="cfgcat-cod-th">Código</th><th>Nombre</th><th>Estado</th></tr></thead><tbody>${propias.map(x => cfgPlaHtmlFila(x.f, x.i, ok)).join('')}</tbody></table></div>
       <div style="margin:6px 0 14px;"><button type="button" class="btn btn-outline" id="cfgpla-agregar-${l}" onclick="cfgPlaAgregar('${l}')"${ok ? '' : ' disabled'}>＋ Agregar a ${PLATO_LISTA_NOMBRE[l].toLowerCase()}</button></div>
     </div>`;
   }).join('');
